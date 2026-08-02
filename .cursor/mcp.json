@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "NOWPayments": {
+      "url": "https://mcp.nowpayments.io/mcp",
+      "headers": {
+        "x-api-key": "${env:NOWPAYMENTS_API_KEY}"
+      }
+    }
+  }
+}
