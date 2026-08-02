@@ -1,0 +1,180 @@
+# V1 Scope Freeze – Comics Galore
+
+This document is the **authoritative split** between what we build first and what stays in the full vision docs as later work.
+
+Full product vision remains in `product.md`, `architecture.md`, and the ADRs.  
+**Builders and AI agents must treat this file as the scope gate for v1.**
+
+Labels:
+
+- **IN (v1)** — must ship for the first production-capable release  
+- **SOON (v1.1)** — start right after v1; hooks may exist in v1  
+- **LATER** — specified in architecture, not required for v1 exit  
+
+---
+
+## V1 goal (one sentence)
+
+A working web app where users can discover and read comics, uploaders can submit comics for review, admins can approve content and manage basic billing, and at least one paid crypto tier works end-to-end via NowPayments.
+
+---
+
+## IN — V1 (must ship)
+
+### Platform
+- Encore backend + **SvelteKit web** client  
+- Auth + roles: `user`, `uploader`, `moderator`, `admin`  
+- Bootstrap: refuse to start with zero admins  
+- PostgreSQL + Encore migrations + SQLC (or chosen ORM)  
+- Dark mode + basic accessibility on core flows  
+
+### Comics & media
+- Comic entity: metadata, status (`pending_review` → `published` / `rejected`)  
+- **Manual** create flow for uploaders  
+- Presigned **S3** uploads for archives/pages (no file body through API)  
+- Unified `POST /comics` with file keys in payload  
+- Covers: may live on S3 in v1 (Cloudflare Images path can wait)  
+- Image delivery: **`direct` only** (resolver stub OK; no imgproxy/CF mode UI required)  
+- Asset **kind** field on model (`cover` | `preview` | `page` | `original`) even if only S3 is used  
+- Public list + detail (published only)
+- Comic **content_language** field (default `en`); filter support on list API
+- UI i18n infrastructure with **English** catalogs; locale switcher optional if only `en` enabled  
+- Basic web reader (pages, keyboard, progress save, Continue Reading)  
+- View + download counters; download quota check server-side (simple tier limits)  
+
+### Social (minimal)
+- Like / unlike  
+- Favorite / unfavorite  
+- Optional: simple star rating **or** skip ratings if time-constrained (prefer keep like+favorite)  
+
+### Tiers & payments
+- Tiers table + seed (e.g. free + 1–2 paid)  
+- Intervals + plan matrix **schema** (may only configure a few plans)  
+- NowPayments **only** behind a `PaymentsProvider` interface  
+- One working paid checkout path (invoice/deposit/subscribe as already designed, simplified UI OK)  
+- Webhook ingest + raw payload storage + internal subscription activation  
+- Red banner in admin if configured plans are incomplete (can be simple)  
+
+### Moderation & admin (minimal viable control panel)
+- Pending comics queue: approve / reject with reason  
+- User list + role change + basic ban/suspend  
+- Comic list + status management  
+- Basic KPIs (users, comics, downloads, active subs) — charts nice-to-have  
+- Settings: maintenance flag, registration open/closed  
+- Audit log for critical actions (approve, reject, ban, role change, manual grant if any)  
+
+### Account & trust (minimal)
+- Email verification **or** documented Auth capability equivalent  
+- Password reset / recovery as supported by Encore Auth  
+- Static pages: Terms, Privacy (DMCA page can be a short stub)  
+- Simple age_rating field on comics (enum); simple gate or “hide mature” setting  
+
+### Quality bar for v1 exit
+- Happy paths work on web: register/login, browse, read, upload, approve, pay  
+- No desktop requirement  
+- No AI moderation requirement  
+- Docs updated if implementation diverges  
+
+---
+
+## SOON — V1.1 (immediately after v1)
+
+- Archive + `comic.json` path (libarchive.js) reusing same `POST /comics`  
+- Upload Session resume for large files (if not fully solid in v1)  
+- Cloudflare Images for cover/preview + admin `image_serving_mode`  
+- Comments + flagging + moderator queue  
+- Series entity + series pages + series follow  
+- Notification preferences + a few real emails (Resend)  
+- Admin: bulk actions, recycle bin, user detail drawer  
+- Reader: thumbnails/scrubber + fit modes  
+- Tag pages + “New this week” / “Popular this month” rails
+- Additional UI locales (ja, es, ko, fr, pt-BR, …) as translation packs land
+- Language facet polished on public browse  
+- Soft quota warning at ~80%  
+
+---
+
+## LATER — full vision (documented, not v1)
+
+### Desktop (Wails)
+- Shared `packages/ui` monorepo packaging  
+- Offline CBZ library, user folder, per-comic offline toggle  
+- System tray, native notifications, global hotkeys  
+- Drag-and-drop, Open with CBZ/CBR, Jump List  
+- Fullscreen dual-page, gamepad, Quick Look, local stats  
+- Multiple offline library profiles  
+
+### Billing & growth
+- Full Tier × Interval matrix UX polish  
+- Coupons, manual grant/extend UI polish, past-due tooling  
+- Second payment provider adapter  
+
+### Social & engagement
+- Internal DMs  
+- Full support ticket system  
+- Broadcast announcements  
+- AI moderation (configurable LLM) + decision log  
+- Shareable public shelves polish, “People also liked”  
+
+### Admin power tools
+- Impersonation, CSV export, saved datalist views  
+- Background job / dead-letter dashboard  
+- Staff Picks ordering UI polish  
+- Storage usage dashboard  
+
+### Other
+- imgproxy mode, advanced CDN strategy  
+- OPDS / advanced offline networking  
+- Creator payouts, remaining locale packs, native mobile  
+
+---
+
+## Explicit non-goals for v1
+
+- Building web and desktop in parallel as equal priority  
+- Feature-complete admin (as in the long product list)  
+- Perfect subscription matrix with all intervals live  
+- Client-side archive pipeline  
+- AI anything  
+- Messaging / full support desk  
+
+---
+
+## Phase mapping (aligned to roadmap)
+
+| Phase focus | Scope label |
+|-------------|-------------|
+| Foundation (auth, scaffold, admin bootstrap) | IN |
+| Core comics + public reader + manual upload + review | IN |
+| Basic tiers + NowPayments path | IN |
+| Archive JSON upload, CF Images, comments, series | SOON |
+| Full admin suite, AI, messaging, support | LATER |
+| Wails + offline + native polish | LATER |
+
+---
+
+## Rules for agents & developers
+
+1. Do **not** implement LATER features before the v1 exit criteria work on web.  
+2. Prefer **hooks** (kind enum, provider interface, status `pending_review`) over full UI for LATER items.  
+3. If a task is ambiguous, choose the **IN** interpretation.  
+4. When v1 ships, move items from SOON → IN in a new revision of this file—do not silently expand v1 mid-build.  
+5. Full vision docs stay valid as the north star; **this file wins on prioritization conflicts**.
+
+---
+
+## V1 exit checklist (demoable)
+
+- [ ] Fresh install requires an admin (or seeds one in dev only with clear docs)  
+- [ ] User can register/login  
+- [ ] Uploader submits a comic (manual) → appears as pending  
+- [ ] Admin/moderator publishes it  
+- [ ] Anonymous/user can open public detail + reader  
+- [ ] Progress/Continue Reading works when logged in  
+- [ ] Like/favorite work  
+- [ ] Free tier quota enforced on download  
+- [ ] At least one paid plan can be purchased via NowPayments and unlocks tier  
+- [ ] Webhook activates subscription; raw webhook stored  
+- [ ] Basic admin lists work (users, comics, payments/subs)  
+
+When all boxes are checked, v1 is done—then execute SOON.
