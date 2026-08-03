@@ -1,0 +1,3 @@
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'free';
+ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS provider_subscription_id TEXT;

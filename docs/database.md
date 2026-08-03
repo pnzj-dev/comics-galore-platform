@@ -39,7 +39,122 @@ updated_at      TIMESTAMPTZ
 ```
 
 ### Other existing tables
-users, tiers, intervals, plans, series, tags, likes, favorites, ratings, comments, flags, reading_progress, reading_lists, follows, download_logs, subscriptions, subscription_attempts, payments, webhook_events, settings, support_tickets, conversations, messages, audit_logs, notifications…
+users, tiers, plans, series, tags, likes, favorites, ratings, comments, flags, reading_progress, reading_lists, follows, download_logs, subscriptions, webhook_events, settings, support_tickets, conversations, messages, audit_logs, notifications, deposits…
+
+## Billing & Payments
+
+### tiers
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+name            TEXT NOT NULL                    -- Free / Bronze / Silver / Gold / Platinum
+description     TEXT NOT NULL DEFAULT ''
+sort_order      INT NOT NULL DEFAULT 0
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+Seed data (5 tiers):
+| Name | Sort | Description |
+|------|------|-------------|
+| Free | 0 | Limited access, browse and read comments |
+| Bronze | 1 | Entry-level paid tier |
+| Silver | 2 | Mid-range tier |
+| Gold | 3 | Premium tier |
+| Platinum | 4 | Top tier with full access |
+
+### plans
+```sql
+id                      UUID PRIMARY KEY DEFAULT gen_random_uuid()
+tier_id                 UUID NOT NULL REFERENCES tiers(id)
+name                    TEXT NOT NULL
+interval                TEXT NOT NULL
+                        CHECK (interval IN ('monthly', 'quarterly', 'yearly'))
+price_usd_cents         INT NOT NULL DEFAULT 0
+currency                TEXT NOT NULL DEFAULT 'USD'
+features                JSONB DEFAULT '[]'          -- cumulative string array
+quota_downloads         INT NOT NULL DEFAULT 0
+is_active               BOOLEAN NOT NULL DEFAULT true
+provider_plan_id        TEXT                        -- NowPayments plan ID
+provider_interval_days  INT DEFAULT 0               -- for NowPayments sync
+created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+Interval rules:
+- No `lifetime` interval.
+- Free tier: only `monthly` plan (price 0).
+- Paid tiers: `monthly`, `quarterly`, `yearly` plans each.
+- Interval pricing multipliers: quarterly (0.9×), yearly (0.8×).
+
+Seed plans (3 intervals × 4 paid tiers = 12 paid plans + 1 free):
+
+| Tier | Monthly | Quarterly (0.9×) | Yearly (0.8×) |
+|------|---------|-----------------|---------------|
+| Free | $0 | — | — |
+| Bronze | $3.99 | $10.77 | $38.84 |
+| Silver | $6.99 | $18.87 | $68.06 |
+| Gold | $9.99 | $26.97 | $97.22 |
+| Platinum | $19.99 | $53.97 | $193.90 |
+
+Features are cumulative per tier (higher tiers inherit all lower-tier features):
+
+| Tier | Features |
+|------|----------|
+| Free | Browse comics, Read comments, 1 GB download quota |
+| Bronze | + Write comments, Download archives, Web reader, Full preview gallery, 10 GB download quota |
+| Silver | + 50 GB download quota |
+| Gold | + Premium & exclusive posts, 200 GB download quota |
+| Platinum | + 1 TB download quota |
+
+### subscriptions
+```sql
+id                        UUID PRIMARY KEY DEFAULT gen_random_uuid()
+user_id                   UUID NOT NULL
+plan_id                   UUID NOT NULL
+provider                  TEXT NOT NULL DEFAULT 'nowpayments'
+provider_subscription_id  TEXT
+provider_invoice_id       TEXT
+status                    TEXT NOT NULL DEFAULT 'pending'
+                          CHECK (status IN ('pending', 'active', 'expired', 'cancelled', 'failed'))
+active                    BOOLEAN NOT NULL DEFAULT false   -- set to true only on confirmed webhook
+tier                      TEXT NOT NULL                    -- the tier this subscription grants
+activated_at              TIMESTAMPTZ
+expires_at                TIMESTAMPTZ
+created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### deposits
+```sql
+id                  UUID PRIMARY KEY DEFAULT gen_random_uuid()
+user_id             UUID NOT NULL
+provider            TEXT NOT NULL DEFAULT 'nowpayments'
+provider_deposit_id TEXT
+amount_crypto       TEXT
+currency_crypto     TEXT NOT NULL
+amount_usd_cents    INT
+status              TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'completed', 'expired', 'failed'))
+pay_address         TEXT
+qr_code_url         TEXT
+created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+completed_at        TIMESTAMPTZ
+```
+
+### webhook_events
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+provider        TEXT NOT NULL DEFAULT 'nowpayments'
+event_type      TEXT NOT NULL                        -- subscription | deposit
+external_id     TEXT                                 -- NowPayments subscription/deposit ID
+payload         JSONB NOT NULL                       -- full raw webhook body
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### users (billing additions)
+```sql
+sub_partner_id  TEXT                        -- NowPayments sub-partner account ID
+tier            TEXT NOT NULL DEFAULT 'free'
+                CHECK (tier IN ('free', 'bronze', 'silver', 'gold', 'platinum'))
+```
 
 ## Status Rules
 

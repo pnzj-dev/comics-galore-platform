@@ -1,0 +1,1 @@
+Implement v1 NowPayments path behind PaymentsProvider (ADR 0013). Minimal paid tier activation via webhooks. No second provider. No coupon system.

@@ -196,15 +196,78 @@ Admin setting `image_serving_mode` (default: `direct`):
 - Backend stores `comics.content_language` and `users.ui_locale`; list endpoints support language filters.
 - Enabled locales are configurable in admin settings.
 
-## Payments: single provider (v1), multi-provider-ready
+## Payments: NowPayments (v1)
 
-- **v1 production**: NowPayments only (crypto).
-- Subscription / deposit / webhook flows go through a **PaymentsProvider** interface.
-- Sole implementation in v1: `NowPaymentsProvider`.
-- DB stores `provider` + provider-specific external IDs; `webhook_events` keeps full raw payloads.
-- Plan matrix (tiers × intervals) is owned by the app; the provider only executes payment operations.
-- Admin can show a provider setting (one option today) without redesign later.
-- User-facing copy: “Pay with crypto” rather than hard-wiring a single brand in every screen.
+### Payment Flow (all screens render in a modal, closable via X button or Esc only)
+
+**Step 1 — Plan Selection**
+User browses tier × interval grid on `/pricing`. Each card shows tier name, interval, price, and cumulative features. User picks a plan.
+
+**Step 2 — Crypto Currency Selection**
+A grid of crypto currency options (BTC, ETH, USDT, LTC, etc.) is displayed with icons. User selects a currency — selecting one deactivates the others; unselecting clears the estimated price. Backend calls NowPayments live price estimate API for the selected plan + crypto, and the estimated amount is displayed.
+
+**Step 3 — Balance Check**
+Backend checks the user's NowPayments balance using `sub_partner_id` (stored on the `users` table).
+
+**Step 4A — User Has Enough Balance**
+1. Backend calls NowPayments to create the subscription.
+2. **Atomic**: only if NowPayments succeeds, save the subscription locally (rollback on failure).
+3. Frontend transitions to "Processing subscription..." screen.
+4. **Poll for webhook**: frontend polls the local subscription by ID every few seconds, waiting for the subscription webhook to update status.
+5. When subscription is confirmed → re-sign JWT cookie with the new tier and refresh the page.
+6. Polling timeout: 5 minutes, then show error with retry.
+
+**Step 4B — User Has NOT Enough Balance**
+1. Backend calls NowPayments `deposit with payment`:
+   - `ipn_callback_url` = deposit webhook URL with local deposit ID as query parameter.
+2. Frontend shows QR code + deposit address (from NowPayments response), plus the amount to send in the selected crypto.
+3. **Poll for webhook**: frontend polls the local deposit by ID every few seconds, waiting for the deposit webhook.
+4. When deposit is confirmed → transition to Step 4A screen (Processing subscription).
+5. Polling timeout: 30 minutes for crypto confirmations, then "Transaction not detected yet" with retry.
+
+### Webhooks
+
+**Subscription Webhook** (`POST /webhooks/nowpayments/subscription`)
+- Verify signature (`x-nowpayments-sig` header).
+- Store raw payload in `webhook_events`.
+- If `payment_status == "finished"`:
+  - Set `subscriptions.active = true` for the matching subscription.
+  - Update `users.tier` to the tier from the subscription's plan.
+
+**Deposit Webhook** (`POST /webhooks/nowpayments/deposit`)
+- Verify signature.
+- Store raw payload in `webhook_events`.
+- If `payment_status == "finished"`:
+  - Update `deposits` table with status = `completed`.
+
+### Provider Abstraction
+- `PaymentsProvider` interface with single v1 implementation: `NowPaymentsProvider`.
+- Methods: `EstimatePrice`, `CheckBalance`, `CreateSubscription`, `CreateDeposit`.
+- `provider` field on relevant tables (`nowpayments`).
+
+### NowPayments API Reference
+
+Full API spec: `backend/billing/nowpayments-openapi.yaml`
+
+Key endpoints used in v1:
+
+| Endpoint | Method | Purpose | Auth |
+|----------|--------|---------|------|
+| `/v1/status` | GET | API availability check | — |
+| `/v1/estimate` | GET | Live crypto price estimate | API key |
+| `/v1/payment` | POST | Create payment (returns pay_address + pay_amount) | API key |
+| `/v1/payment/{id}` | GET | Get payment status (polling) | API key |
+| `/v1/invoice` | POST | Create invoice (returns invoice_url) | API key |
+| `/v1/sub-partner/balance` | POST | Create customer account → `sub_partner_id` | JWT |
+| `/v1/sub-partner/balance/{id}` | GET | Check customer balance | API key |
+| `/v1/sub-partner/payment` | POST | Deposit with payment (top-up) | JWT + API key |
+| `/v1/subscriptions` | POST | Create recurring payment (subscription) | JWT + API key |
+| `/v1/subscriptions/plans` | POST/GET | Create/list subscription plans | JWT / API key |
+| `/v1/subscriptions/{id}` | GET/DELETE | Get/delete recurring payment | API key / JWT |
+
+### All polling has timeouts
+- Subscription polling: 5 minutes max.
+- Deposit polling: 30 minutes max.
 
 ## Security & Consistency
 

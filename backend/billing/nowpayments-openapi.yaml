@@ -1,0 +1,186 @@
+openapi: 3.0.0
+info:
+  title: NOWPayments API
+  version: 1.0.0
+  description: |
+    NOWPayments is a cryptocurrency payment processing platform.
+    Accept payments in a wide range of cryptos and get them instantly
+    converted into a coin of your choice.
+
+    Authentication: Sign up at nowpayments.io, set up Primary balance,
+    and generate an IPN secret key.
+
+    Integration Guide: https://nowpayments.notion.site/NOWPayments-Integration-Guide-40c516d0d940489d903b61efc002ba47
+
+    IPN (Instant Payment Notifications):
+    - Generate IPN Secret key in Payment Settings
+    - Provide ipn_callback_url in create_payment request
+    - Verify webhook signatures with HMAC-SHA512 sorted-keys method
+    - Whitelist NOWPayments IPs if behind Cloudflare
+
+    Key endpoints used in v1:
+    - GET  /v1/status          - API availability check
+    - GET  /v1/estimate        - Live crypto price estimate
+    - POST /v1/payment         - Create payment (returns pay_address)
+    - POST /v1/invoice         - Create invoice payment link
+    - GET  /v1/payment/{id}    - Get payment status
+    - POST /v1/sub-partner/balance  - Create customer account -> sub_partner_id
+    - GET  /v1/sub-partner/balance/{id} - Check customer balance
+    - POST /v1/sub-partner/payment     - Deposit with payment (top-up)
+    - POST /v1/subscriptions           - Create recurring payment (subscription)
+    - POST /v1/subscriptions/plans     - Create/manage subscription plans
+    - GET  /v1/subscriptions/plans     - List subscription plans
+    - GET  /v1/subscriptions/{sub_id}  - Get recurring payment status
+    - DELETE /v1/subscriptions/{sub_id} - Delete recurring payment
+    - GET  /v1/balance         - Get master account balance
+
+    Webhook IPN body example (payments):
+    {
+      "payment_id": 123456789,
+      "parent_payment_id": 987654321,
+      "invoice_id": null,
+      "payment_status": "finished",
+      "pay_address": "address",
+      "price_amount": 1,
+      "price_currency": "usd",
+      "pay_amount": 15,
+      "actually_paid": 15,
+      "pay_currency": "trx",
+      "order_id": null,
+      "purchase_id": "123456789",
+      "outcome_amount": 14.8106,
+      "outcome_currency": "trx"
+    }
+
+    Webhook IPN body example (recurring payments):
+    {
+      "id": "1234567890",
+      "status": "FINISHED",
+      "currency": "trx",
+      "amount": "12.171365564140688",
+      "ipn_callback_url": "callback_url",
+      "created_at": "2023-07-26T14:20:11.531Z",
+      "updated_at": "2023-07-26T14:20:21.079Z"
+    }
+servers:
+  - url: https://api.nowpayments.io
+paths:
+  /v1/status:
+    get:
+      summary: Get API status
+      tags: [Auth and API status]
+  /v1/estimate:
+    get:
+      summary: Get estimated price in crypto
+      tags: [Payments]
+      parameters:
+        - name: amount
+          in: query
+          schema: { type: number }
+        - name: currency_from
+          in: query
+          schema: { type: string }
+        - name: currency_to
+          in: query
+          schema: { type: string }
+        - name: x-api-key
+          in: header
+          schema: { type: string }
+  /v1/payment:
+    post:
+      summary: Create payment (returns pay_address + pay_amount)
+      tags: [Payments]
+      parameters:
+        - name: x-api-key
+          in: header
+          schema: { type: string }
+  /v1/payment/{payment_id}:
+    get:
+      summary: Get payment status
+      tags: [Payments]
+      parameters:
+        - name: payment_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: x-api-key
+          in: header
+          schema: { type: string }
+  /v1/invoice:
+    post:
+      summary: Create invoice (returns invoice_url)
+      tags: [Payments]
+      parameters:
+        - name: x-api-key
+          in: header
+          schema: { type: string }
+  /v1/balance:
+    get:
+      summary: Get master account balances
+      tags: [Mass payouts]
+      parameters:
+        - name: x-api-key
+          in: header
+          schema: { type: string }
+  /v1/sub-partner/balance:
+    post:
+      summary: Create customer account (returns sub_partner_id)
+      tags: [Customer management]
+  /v1/sub-partner/balance/{id}:
+    get:
+      summary: Get customer balance
+      tags: [Customer management]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: x-api-key
+          in: header
+          schema: { type: string }
+  /v1/sub-partner/payment:
+    post:
+      summary: Deposit with payment (top-up customer account)
+      tags: [Customer management]
+      parameters:
+        - name: x-api-key
+          in: header
+          schema: { type: string }
+  /v1/subscriptions:
+    post:
+      summary: Create recurring payment (subscription)
+      tags: [Customer management]
+      parameters:
+        - name: x-api-key
+          in: header
+          schema: { type: string }
+    get:
+      summary: List recurring payments
+      tags: [Recurring Payments]
+      parameters:
+        - name: x-api-key
+          in: header
+          schema: { type: string }
+  /v1/subscriptions/plans:
+    post:
+      summary: Create subscription plan
+      tags: [Recurring Payments]
+    get:
+      summary: List subscription plans
+      tags: [Recurring Payments]
+      parameters:
+        - name: x-api-key
+          in: header
+          schema: { type: string }
+  /v1/subscriptions/{sub_id}:
+    get:
+      summary: Get recurring payment status
+      tags: [Recurring Payments]
+      parameters:
+        - name: sub_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: x-api-key
+          in: header
+          schema: { type: string }

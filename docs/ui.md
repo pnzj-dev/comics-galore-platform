@@ -63,13 +63,245 @@
 **Moderator**: Moderation queue + pending comic reviews.  
 **Admin**: Full control panel with red banner, datalists, settings, plan matrix, charts, etc.
 
+### Pricing & Checkout Flow
+
+Route: `/pricing` — all screens render in a modal, closable via X button or Esc only.
+
+**Screen A — Plan Grid**
+- Responsive grid of tier × interval cards.
+- Each card shows: tier name, interval badge, price in USD, cumulative features list (higher tiers inherit all lower-tier features).
+- "Select" button on each card → advances the modal to Screen B.
+
+**Screen B — Crypto Currency Selector**
+- Grid of crypto options with icons: BTC, ETH, USDT, LTC.
+- **Single-select**: selecting one deactivates the others. User must unselect to reactivate, which also clears the estimated price.
+- Backend calls NowPayments live price estimate API for the selected plan + crypto.
+- Displays estimated amount in the chosen crypto.
+- "Continue" button → triggers balance check → routes to Screen C or D.
+
+**Screen C — Processing (Step 4A: funded)**
+- Spinner + "Processing subscription..." message.
+- Backend created the subscription atomically (saved locally only if NowPayments succeeded).
+- **Polling**: frontend polls the local subscription by ID every 3 seconds, waiting for the subscription webhook to set `active = true`.
+- On success → re-sign JWT cookie with new tier → page refresh (user sees upgraded tier).
+- On timeout (5 minutes) → error message + retry button.
+
+**Screen D — Deposit QR (Step 4B: needs funds)**
+- QR code image (from NowPayments response) + deposit address with copy button.
+- Amount to send displayed in the selected crypto.
+- **Polling**: frontend polls the local deposit by ID every 5 seconds, waiting for the deposit webhook to set status to `completed`.
+- On success → transition to Screen C (Processing subscription).
+- On timeout (30 minutes) → "Transaction not detected yet" + retry button.
+
+### Crypto Icon Library
+- Use `lucide-svelte` or inline SVG for crypto currency icons (BTC, ETH, USDT, LTC).
+- Icons should be visually distinct, 32×32 minimum in the selection grid.
+
 ## Component Guidelines
 
 - Prefer shadcn-svelte.
-- Comic cards reusable.
+- Comic cards reusable; see detailed spec in "Comic Card Components" below.
 - Skeletons + optimistic UI where appropriate.
 - Reader: ← → Space Esc + touch swipe.
 - All uploads show determinate progress when possible.
+
+## Comic Card Components
+
+### ComicCard (primary public card)
+
+The main card used in public grids, search results, and series pages. Rich, content-first, hover-interactive.
+
+**Layout (top to bottom):**
+
+```
+┌─────────────────────────────┐
+│  Cover image (aspect-3/4)   │ ← hover: scale-105 transition, lazy load, fallback SVG on error
+│  ░░ gradient overlay (bot)  │ ← black/30 gradient 40px from bottom
+│  ░░ hover description       │ ← black/70 overlay, centered description text, z-20
+│  [Premium] badge (top-right)│ ← gold pill, z-10, icon-only on compact view
+├─────────────────────────────┤
+│  AUTHOR NAME                 │ ← text-xs, bold, uppercase, purple-500
+│  Title (2-line clamp)        │ ← text-sm, font-semibold, hover:purple-500
+│  [tag1] [tag2] [+N]         │ ← text-[10px], rounded, flex-wrap, overflow tooltip
+│  Date · Favorite ★ toggle   │ ← text-xs, reactive Datastar signal toggle
+├─────────────────────────────┤
+│  Stats bar (border-top)     │ ← text-xs, muted-foreground, Lucide icons
+│  👁 1.2k  ⬇ 456  💬 23  📖 32│ ← compactNum() formatting (k/M)
+│                      👤 →   │ ← user popover trigger (hover to show)
+└─────────────────────────────┘
+```
+
+**Cover image rules:**
+- Real `<img>` with `loading="lazy"`, `object-cover`, 3:4 aspect ratio container
+- `onerror` fallback to SVG placeholder (book icon)
+- Hover zoom via `group-hover:scale-105 transition-transform duration-300`
+- S3 keys → resolved via presigned download URL from media helper
+
+**Hover overlay:**
+- Black/70 background, full-card opacity transition
+- Shows `comic.description` centered, `line-clamp-4`, text-xs
+- `opacity-0 group-hover:opacity-100` with transition
+
+**Premium badge:**
+- Only renders when `comic.is_premium === true`
+- Gold background (`bg-yellow-400` / `bg-yellow-500`), white text
+- Crown icon (Lucide) or "Premium" text
+- Position: `absolute top-2 right-2`, z-10
+
+**Author:**
+- Only renders when `comic.author` is non-empty
+- `text-xs font-bold uppercase tracking-wide text-purple-500`
+
+**Title:**
+- `<a>` wrapping the comic detail link (`/comics/{slug}`)
+- `text-sm font-semibold`, `line-clamp-2`, `min-h-[2.5rem]`
+- `hover:text-purple-500 transition-colors`
+
+**Tags:**
+- Show first 2 tags as rounded pills (`text-[10px]`)
+- If >2 tags, show "+N" pill with full tag list as `title` attribute tooltip
+- Wrap with `flex items-center gap-1 flex-wrap`
+
+**Date:**
+- Format: `Jan 2, 2006` (when `published_at` is set)
+- `text-xs text-gray-500`
+
+**Favorite toggle:**
+- Star icon (Lucide), inside card row (not separate component)
+- Reactive: Datastar `data-on:click @post` with signal `$_isFav_{id}`
+- Active: `text-yellow-500`, Inactive: `text-gray-400 hover:text-yellow-500`
+- Only rendered when `isAuthenticated === true`
+
+**Stats bar:**
+- Border-top separator (`border-t border-gray-100`)
+- Row of icons + formatted numbers:
+  - 👁 Views (`Eye` icon) → `compactNum(viewCount)` → "1.2k", "3.4M"
+  - ⬇ Downloads (`Download` icon)
+  - 💬 Comments (`MessageCircle` icon)
+  - 📖 Pages (`BookOpen` icon) → raw number
+- `text-xs`, muted-foreground
+
+**User popover (right-aligned in stats bar):**
+- Trigger: `User` icon button, hover to show popover
+- Content: avatar (first-letter circle), display name, email, role badge, tier badge
+- Only rendered when `comic.user.display_name` is non-empty
+- See `Popover` component for implementation
+
+**Card chrome:**
+- Border: `border border-gray-200 dark:border-gray-700`
+- Background: `bg-white dark:bg-gray-800`
+- Hover: `hover:border-purple-300 dark:hover:border-purple-700 hover:shadow-lg`
+- Radius: `rounded-xl`
+- Transition: `transition-all`
+
+**Stats number formatting (`compactNum` / `cardNumStr`):**
+```
+0       → "0"
+1 - 999 → raw number
+1,000+  → "1.2k"
+1,000,000+ → "1.5M"
+```
+
+### CompactCard (admin / uploader workspace)
+
+Minimal variant for admin lists, uploader "My Comics" tab, and moderation queues.
+
+**Layout:**
+
+```
+┌─────────────────────┐
+│ Cover (aspect-2/3)  │
+│ [Premium ★]         │
+├─────────────────────┤
+│ Title (1-line clamp)│ ← hover:text-purple-500
+│ [status] author     │ ← status badge + truncated author
+│              👁 1.2k │ ← view count only
+└─────────────────────┘
+```
+
+**Differences from ComicCard:**
+- Aspect ratio: 2:3 (taller, narrower)
+- No hover description overlay
+- No stats bar — only view count in footer
+- Status badge replaces full stats: color-coded pills
+  - `published` → green (`bg-green-100`, `text-green-600 dark:text-green-400`)
+  - `pending` / `pending_review` → yellow (`bg-yellow-100`, `text-yellow-600 dark:text-yellow-400`)
+  - `draft` → gray (`bg-gray-100`, `text-gray-500 dark:text-gray-400`)
+- No favorite toggle
+- No tags
+- No user popover
+- Premium badge: icon-only (smaller, crown SVG)
+
+### ComicGrid
+
+Responsive grid container for ComicCard components.
+
+**Breakpoints:**
+```
+xs:   grid-cols-1  (mobile)
+sm:   grid-cols-2  (640px+)
+lg:   grid-cols-3  (1024px+)
+xl:   grid-cols-4  (1280px+)
+```
+
+**Spacing:** `gap-6` between cards.
+
+**Props:**
+- `posts: Comic[]` — comic list to render
+- `total: number` — total count for pagination
+- `page: number` — current page
+- `pageSize: number` — items per page
+- `favoriteIDs: Map<UUID, boolean>` — which comics the user has favorited
+- `isAuthenticated: boolean` — controls favorite toggle visibility
+- `gridID: string` — DOM id for pagination swap target
+
+**Empty state:**
+- When `posts.length === 0`: show empty state with title "No posts found" and guidance text
+- Use `EmptyState` component
+
+**Pagination:**
+- Bottom of grid, `mt-auto pt-4`
+- Server-driven via Datastar SSE: `@get('/api/posts/grid?page=...&selector={gridID}')`
+- See `Pagination` component
+
+### RelatedGrid
+
+Grid for related/similar comics on detail pages. Identical card rendering to ComicCard, different layout.
+
+**Differences from ComicGrid:**
+- Fixed 4 columns on `lg:` (`grid-cols-4`)
+- Manual page buttons (not SSE-driven like ComicGrid)
+- `gap-4` spacing (tighter)
+
+**Props:**
+- `posts: Comic[]`, `total: number`, `page: number`
+- `favoriteIDs: Map<UUID, boolean>`, `isAuthenticated: boolean`
+
+### Dark Mode Reference
+
+Every ComicCard element must have explicit `dark:` variants:
+
+| Element | Light | Dark |
+|---------|-------|------|
+| Card bg | `bg-white` | `dark:bg-gray-800` |
+| Card border | `border-gray-200` | `dark:border-gray-700` |
+| Card hover border | `hover:border-purple-300` | `dark:hover:border-purple-700` |
+| Separator | `border-gray-100` | `dark:border-gray-700/50` |
+| Tags bg | `bg-gray-100` | `dark:bg-gray-700` |
+| Tags text | `text-gray-500` | `dark:text-gray-400` |
+| Premium gold | `bg-yellow-400` | no change |
+| Cover placeholder | `text-gray-400` | `dark:text-gray-500` |
+| Cover bg | `bg-gray-100` | `dark:bg-gray-700` |
+| Popover bg | `bg-white` | `dark:bg-gray-800` |
+| Popover text | `text-gray-900` | `dark:text-gray-100` |
+
+### Skeleton States
+
+When loading, show skeleton cards matching the ComicCard layout:
+- Skeleton `aspect-[3/4]` cover block
+- Skeleton text lines for author, title (2 lines), tags, stats
+- Use `animate-pulse` with `bg-gray-200 dark:bg-gray-700`
+- Match the grid columns of the target layout
 
 
 ## Desktop-only UI (Wails)
