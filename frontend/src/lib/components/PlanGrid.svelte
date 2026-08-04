@@ -82,11 +82,11 @@
 		{#each tiers as tier, idx}
 			{@const isFree = tier.name === 'Free'}
 			{@const tp = tierPlans(tier.id)}
-			{@const selInterval = selectedIntervals[tier.id] || (isFree ? 'monthly' : tp[0]?.interval || 'monthly')}
-			{@const price = priceForInterval(tier.id, selInterval)}
-			{@const planId = planIdFor(tier.id, selInterval)}
 			{@const allFeatures = tierFeatures(tier.id)}
 			{@const prevFeatures = previousFeatures(idx)}
+			{@const interval = selectedIntervals[tier.id] || (isFree ? 'monthly' : tp[0]?.interval || 'monthly')}
+			{@const price = priceForInterval(tier.id, interval)}
+			{@const planId = planIdFor(tier.id, interval)}
 
 			<Card class="flex flex-col {isFree ? 'opacity-80' : ''}">
 				<CardHeader>
@@ -99,8 +99,7 @@
 							class="w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
 						>
 							{#each tp as plan}
-								{@const intv = plan.interval}
-								<option value={intv}>{intervalLabels[intv] || intv}</option>
+								<option value={plan.interval}>{intervalLabels[plan.interval] || plan.interval}</option>
 							{/each}
 						</select>
 					{/if}
