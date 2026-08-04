@@ -5,55 +5,23 @@ import (
 	"errors"
 	"testing"
 
-	myauth "comics-galore/backend/auth"
+	"comics-galore/backend/fixtures"
 
-	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/et"
 )
 
-func uploaderCtx() context.Context {
-	ctx := context.Background()
-	return auth.WithContext(ctx, auth.UID("550e8400-e29b-41d4-a716-446655440001"), &myauth.AuthData{
-		UserID: "550e8400-e29b-41d4-a716-446655440001",
-		Email:  "uploader@example.com",
-		Role:   "uploader",
-		Tier:   "free",
-	})
-}
+var uploaderCtx, adminCtx, moderatorCtx, userCtx context.Context
 
-func adminCtx() context.Context {
-	ctx := context.Background()
-	return auth.WithContext(ctx, auth.UID("550e8400-e29b-41d4-a716-446655440002"), &myauth.AuthData{
-		UserID: "550e8400-e29b-41d4-a716-446655440002",
-		Email:  "admin@example.com",
-		Role:   "admin",
-		Tier:   "free",
-	})
-}
-
-func moderatorCtx() context.Context {
-	ctx := context.Background()
-	return auth.WithContext(ctx, auth.UID("550e8400-e29b-41d4-a716-446655440003"), &myauth.AuthData{
-		UserID: "550e8400-e29b-41d4-a716-446655440003",
-		Email:  "mod@example.com",
-		Role:   "moderator",
-		Tier:   "free",
-	})
-}
-
-func userCtx() context.Context {
-	ctx := context.Background()
-	return auth.WithContext(ctx, auth.UID("550e8400-e29b-41d4-a716-446655440004"), &myauth.AuthData{
-		UserID: "550e8400-e29b-41d4-a716-446655440004",
-		Email:  "user@example.com",
-		Role:   "user",
-		Tier:   "free",
-	})
+func init() {
+	uploaderCtx = fixtures.UploaderCtx()
+	adminCtx = fixtures.AdminCtx()
+	moderatorCtx = fixtures.ModeratorCtx()
+	userCtx = fixtures.UserCtx()
 }
 
 func TestCreateComic_Valid(t *testing.T) {
-	ctx := uploaderCtx()
+	ctx := uploaderCtx
 
 	comic, err := CreateComic(ctx, &CreateComicParams{
 		Title:           "Test Comic",
@@ -85,7 +53,7 @@ func TestCreateComic_Valid(t *testing.T) {
 }
 
 func TestCreateComic_MissingTitle(t *testing.T) {
-	ctx := uploaderCtx()
+	ctx := uploaderCtx
 
 	_, err := CreateComic(ctx, &CreateComicParams{
 		Title:    "",
@@ -105,7 +73,7 @@ func TestCreateComic_MissingTitle(t *testing.T) {
 }
 
 func TestCreateComic_MissingCoverKey(t *testing.T) {
-	ctx := uploaderCtx()
+	ctx := uploaderCtx
 
 	_, err := CreateComic(ctx, &CreateComicParams{
 		Title:   "No Cover",
@@ -124,7 +92,7 @@ func TestCreateComic_MissingCoverKey(t *testing.T) {
 }
 
 func TestCreateComic_NotUploader(t *testing.T) {
-	ctx := userCtx()
+	ctx := userCtx
 
 	_, err := CreateComic(ctx, &CreateComicParams{
 		Title:    "User Comic",
@@ -144,7 +112,7 @@ func TestCreateComic_NotUploader(t *testing.T) {
 }
 
 func TestCreateComic_DefaultsLanguageAndAge(t *testing.T) {
-	ctx := uploaderCtx()
+	ctx := uploaderCtx
 
 	comic, err := CreateComic(ctx, &CreateComicParams{
 		Title:    "Defaults Comic",
@@ -165,7 +133,7 @@ func TestCreateComic_DefaultsLanguageAndAge(t *testing.T) {
 func TestListComics_ReturnsOnlyPublished(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
-	ctx := uploaderCtx()
+	ctx := uploaderCtx
 	c1, err := CreateComic(ctx, &CreateComicParams{
 		Title:    "Published Comic",
 		CoverKey: "covers/pub.jpg",
@@ -184,7 +152,7 @@ func TestListComics_ReturnsOnlyPublished(t *testing.T) {
 		t.Fatalf("create error: %v", err)
 	}
 
-	modCtx := moderatorCtx()
+	modCtx := moderatorCtx
 	if err := ApproveComic(modCtx, c1.ID); err != nil {
 		t.Fatalf("approve error: %v", err)
 	}
@@ -216,7 +184,7 @@ func TestListComics_ReturnsOnlyPublished(t *testing.T) {
 func TestGetComic_IncrementsViewCount(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
-	ctx := uploaderCtx()
+	ctx := uploaderCtx
 	comic, err := CreateComic(ctx, &CreateComicParams{
 		Title:    "View Comic",
 		CoverKey: "covers/view.jpg",
@@ -226,7 +194,7 @@ func TestGetComic_IncrementsViewCount(t *testing.T) {
 		t.Fatalf("create error: %v", err)
 	}
 
-	modCtx := moderatorCtx()
+	modCtx := moderatorCtx
 	if err := ApproveComic(modCtx, comic.ID); err != nil {
 		t.Fatalf("approve error: %v", err)
 	}
@@ -267,7 +235,7 @@ func TestGetComic_NotFound(t *testing.T) {
 func TestToggleLike(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
-	upCtx := uploaderCtx()
+	upCtx := uploaderCtx
 	comic, err := CreateComic(upCtx, &CreateComicParams{
 		Title:    "Like Comic",
 		CoverKey: "covers/like.jpg",
@@ -277,7 +245,7 @@ func TestToggleLike(t *testing.T) {
 		t.Fatalf("create error: %v", err)
 	}
 
-	uCtx := userCtx()
+	uCtx := userCtx
 
 	resp1, err := ToggleLike(uCtx, comic.ID)
 	if err != nil {
@@ -305,7 +273,7 @@ func TestToggleLike(t *testing.T) {
 func TestToggleFavorite(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
-	upCtx := uploaderCtx()
+	upCtx := uploaderCtx
 	comic, err := CreateComic(upCtx, &CreateComicParams{
 		Title:    "Fav Comic",
 		CoverKey: "covers/fav.jpg",
@@ -315,7 +283,7 @@ func TestToggleFavorite(t *testing.T) {
 		t.Fatalf("create error: %v", err)
 	}
 
-	uCtx := userCtx()
+	uCtx := userCtx
 
 	resp1, err := ToggleFavorite(uCtx, comic.ID)
 	if err != nil {
@@ -343,7 +311,7 @@ func TestToggleFavorite(t *testing.T) {
 func TestApproveComic_ChangesStatusToPublished(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
-	upCtx := uploaderCtx()
+	upCtx := uploaderCtx
 	comic, err := CreateComic(upCtx, &CreateComicParams{
 		Title:    "Approve Comic",
 		CoverKey: "covers/approve.jpg",
@@ -356,7 +324,7 @@ func TestApproveComic_ChangesStatusToPublished(t *testing.T) {
 		t.Fatalf("expected pending_review, got %s", comic.Status)
 	}
 
-	modCtx := moderatorCtx()
+	modCtx := moderatorCtx
 	if err := ApproveComic(modCtx, comic.ID); err != nil {
 		t.Fatalf("approve error: %v", err)
 	}
@@ -374,7 +342,7 @@ func TestApproveComic_ChangesStatusToPublished(t *testing.T) {
 func TestApproveComic_RequiresModeratorOrAdmin(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
-	upCtx := uploaderCtx()
+	upCtx := uploaderCtx
 	comic, err := CreateComic(upCtx, &CreateComicParams{
 		Title:    "NoPerm Comic",
 		CoverKey: "covers/noperm.jpg",
@@ -384,7 +352,7 @@ func TestApproveComic_RequiresModeratorOrAdmin(t *testing.T) {
 		t.Fatalf("create error: %v", err)
 	}
 
-	uCtx := userCtx()
+	uCtx := userCtx
 	err = ApproveComic(uCtx, comic.ID)
 	if err == nil {
 		t.Fatal("expected permission error, got nil")
@@ -394,7 +362,7 @@ func TestApproveComic_RequiresModeratorOrAdmin(t *testing.T) {
 func TestRejectComic_ChangesStatusToRejected(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
-	upCtx := uploaderCtx()
+	upCtx := uploaderCtx
 	comic, err := CreateComic(upCtx, &CreateComicParams{
 		Title:    "Reject Comic",
 		CoverKey: "covers/reject.jpg",
@@ -404,12 +372,12 @@ func TestRejectComic_ChangesStatusToRejected(t *testing.T) {
 		t.Fatalf("create error: %v", err)
 	}
 
-	modCtx := moderatorCtx()
+	modCtx := moderatorCtx
 	if err := RejectComic(modCtx, comic.ID, &RejectParams{Reason: "low quality"}); err != nil {
 		t.Fatalf("reject error: %v", err)
 	}
 
-	fetched, err := GetComic(uploaderCtx(), comic.ID)
+	fetched, err := GetComic(uploaderCtx, comic.ID)
 	if err != nil {
 		t.Fatalf("get error: %v", err)
 	}
@@ -424,7 +392,7 @@ func TestRejectComic_ChangesStatusToRejected(t *testing.T) {
 func TestAdminListComics_ReturnsAllComics(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
-	upCtx := uploaderCtx()
+	upCtx := uploaderCtx
 	_, err := CreateComic(upCtx, &CreateComicParams{
 		Title:    "Admin Comic 1",
 		CoverKey: "covers/admin1.jpg",
@@ -442,10 +410,10 @@ func TestAdminListComics_ReturnsAllComics(t *testing.T) {
 		t.Fatalf("create error: %v", err)
 	}
 
-	modCtx := moderatorCtx()
+	modCtx := moderatorCtx
 	_ = ApproveComic(modCtx, "550e8400-e29b-41d4-a716-446655440000")
 
-	admCtx := adminCtx()
+	admCtx := adminCtx
 	resp, err := AdminListComics(admCtx)
 	if err != nil {
 		t.Fatalf("admin list error: %v", err)
@@ -458,7 +426,7 @@ func TestAdminListComics_ReturnsAllComics(t *testing.T) {
 func TestAdminListComics_RequiresAdmin(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
-	uCtx := userCtx()
+	uCtx := userCtx
 	_, err := AdminListComics(uCtx)
 	if err == nil {
 		t.Fatal("expected permission error, got nil")
@@ -468,7 +436,7 @@ func TestAdminListComics_RequiresAdmin(t *testing.T) {
 func TestGetLikeStatus(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
-	upCtx := uploaderCtx()
+	upCtx := uploaderCtx
 	comic, err := CreateComic(upCtx, &CreateComicParams{
 		Title:    "Status Comic",
 		CoverKey: "covers/status.jpg",
@@ -478,7 +446,7 @@ func TestGetLikeStatus(t *testing.T) {
 		t.Fatalf("create error: %v", err)
 	}
 
-	uCtx := userCtx()
+	uCtx := userCtx
 	status, err := GetLikeStatus(uCtx, comic.ID)
 	if err != nil {
 		t.Fatalf("status error: %v", err)
