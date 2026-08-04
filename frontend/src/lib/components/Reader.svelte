@@ -15,7 +15,7 @@
 	let savedProgress = $state(false);
 	let autosaveTimer: ReturnType<typeof setTimeout>;
 
-	const pageCount = totalPages || pageKeys.length || 1;
+	const pageCount = $derived(totalPages || pageKeys.length || 1);
 
 	function getPageLabel(page: number, total: number): string {
 		return `Page ${page + 1} of ${total}`;
@@ -76,7 +76,7 @@
 			</Button>
 		</div>
 
-		<div class="flex-1 flex items-center justify-center overflow-hidden bg-black" onclick={nextPage} role="img" aria-label={getPageLabel(currentPage, pageCount)} onkeydown={(e) => { if (e.key === 'Enter') nextPage(); }}>
+		<div class="flex-1 flex items-center justify-center overflow-hidden bg-black" onclick={nextPage} role="button" tabindex="0" aria-label={getPageLabel(currentPage, pageCount)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nextPage(); } }}>
 			<div class="max-h-full max-w-full p-2">
 				{#if pageKeys[currentPage]}
 					<img

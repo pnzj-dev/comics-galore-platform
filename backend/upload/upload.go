@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"encore.dev/beta/auth"
 	myauth "comics-galore/backend/auth"
 
+	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/storage/objects"
 	"encore.dev/storage/sqldb"
@@ -219,4 +219,9 @@ func GetSession(ctx context.Context, id string) (*UploadSession, error) {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "not your session"}
 	}
 	return &s, nil
+}
+
+//encore:api public method=GET path=/media/:key
+func ServeMedia(ctx context.Context, key string) error {
+	return nil
 }

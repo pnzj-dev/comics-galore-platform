@@ -10,7 +10,9 @@
 
 	let { comicId, initialFavorited = false, initialCount = 0 }: Props = $props();
 
+	// svelte-ignore state_referenced_locally
 	let favorited = $state(initialFavorited);
+	// svelte-ignore state_referenced_locally
 	let count = $state(initialCount);
 
 	async function toggle() {
