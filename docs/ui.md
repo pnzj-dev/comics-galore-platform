@@ -97,6 +97,130 @@ Route: `/pricing` — all screens render in a modal, closable via X button or Es
 - Use `lucide-svelte` or inline SVG for crypto currency icons (BTC, ETH, USDT, LTC).
 - Icons should be visually distinct, 32×32 minimum in the selection grid.
 
+## Comic Detail Page
+
+Route: `/comics/:slug`
+
+### Layout (desktop, two-column)
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  [Premium] badge    Title (H1)                                       │
+│  [tag1] [tag2] [+N]                                                  │
+│  Description text (muted)                                            │
+│                                                                      │
+│  ┌──────────────────┐  ┌───────────────────────────────────────────┐ │
+│  │                  │  │ ● Author (circular avatar + name)          │ │
+│  │  Cover image     │  │                                           │ │
+│  │  (aspect-3/4)    │  │ Views        1.2k     Downloads    456    │ │
+│  │                  │  │ Pages        32       Published   Jan 2   │ │
+│  │                  │  │ Reading Time 5 min    Language    EN      │ │
+│  │                  │  │                                           │ │
+│  │ [■][■][■][■]    │  │ [♥ 45]  [★ 12]                            │ │
+│  │ thumbnail strip  │  │                                           │ │
+│  │                  │  │ [Start Reading]    (premium gate)          │ │
+│  └──────────────────┘  │ [Download ▼]       (auth/quota gate)       │ │
+│                        └───────────────────────────────────────────┘ │
+├──────────────────────────────────────────────────────────────────────┤
+│  Synopsis (v1.1: premium-gated, 400-char truncation + upsell banner) │
+├──────────────────────────────────────────────────────────────────────┤
+│  Related Comics (4-col grid, lazy-loaded, skeleton loading)          │
+├──────────────────────────────────────────────────────────────────────┤
+│  Comments (v1.1: thread, SSE real-time, reply forms)                 │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**Mobile:** Stack vertically — cover full-width, metadata below, synopsis → related → comments.
+
+### Feature breakdown by version
+
+#### v1 (IN — implement now)
+
+**Cover Gallery**
+- Main cover image (3:4 aspect, `object-cover`), click to open fullscreen overlay
+- Thumbnail strip below (4-5 images), dot indicators for pagination
+- Fullscreen overlay: keyboard nav (ArrowLeft / ArrowRight / Escape), image counter header
+- No premium gating on images in v1 (all visible)
+
+**Title, Tags & Badges**
+- H1 title with inline Premium badge (gold pill, `bg-yellow-500 text-white`)
+- Tags row: each tag as a purple pill (`text-[10px] rounded-full bg-primary/10 text-primary`)
+- Age rating badge if `mature` or `explicit` (red pill)
+
+**Description**
+- Plain paragraph, `text-muted-foreground`
+
+**Author Info**
+- Circular avatar (`size-8 rounded-full bg-purple-100 dark:bg-purple-900`) with uppercase first letter
+- Author name + "Author" label
+
+**Metadata Panel** (6-row key-value)
+| Label | Value | Format |
+|-------|-------|--------|
+| Views | `view_count` | compactNum (k/M) |
+| Downloads | `download_count` | compactNum |
+| Pages | `page_keys.length` | raw int |
+| Published | `published_at` | "Jan 2, 2006" |
+| Reading Time | 5 | "5 min" |
+| Language | `content_language` | uppercased ISO |
+
+**Reactions Bar** (inline row)
+- Like button: thumbs-up icon + count, filled/outlined toggle, `text-blue-500` when active
+- Favorite button: star icon + count, filled/outlined toggle, `text-yellow-500` when active
+- Both require auth; unauthenticated users see counts but buttons redirect to login
+
+**Reader Access**
+- "Start Reading" button (green/emerald) — opens existing `Reader` component
+- If single archive: direct link. If multiple: dropdown button listing all files with name/size
+- Premium-gated: non-premium users see upsell banner instead
+
+**Download Section**
+- Gating ladder: not authenticated → "Sign in to Download" → premium upsell → quota exhausted → download button
+- Multi-archive: dropdown with filename + file size per entry
+- Quota exhausted state: "X of Y GB used (tier)" + "Upgrade Plan" button
+
+**Related Comics** (4-col grid)
+- Lazy-loaded on mount via API call
+- Skeleton loading: 4 cards with pulsing gray 3:4 aspect placeholders
+- Empty state: "No related comics found"
+- Uses existing `ComicCard` component
+
+**View Count** — incremented server-side on page load
+
+#### v1.1 (SOON)
+
+**Synopsis Premium Gate**
+- Full synopsis text. For non-premium users on premium comics: truncated to 400 chars + "..." + blur gradient + "Subscribe to read more" banner with CTA to Plans modal
+
+**Comments**
+- Lazy-loaded list of threaded comments
+- Server-Sent Events (SSE) for real-time updates when new comments are posted
+- Comment form (auth-gated): textarea + "Post Comment" button with inline spinner
+- Per-comment reply toggle: nested reply form, indented replies with left border
+- Max nesting depth configurable (default 3)
+
+**Plans Modal Trigger**
+- Same `CheckoutModal` from `/pricing` flow, triggered from "Subscribe" upsell on detail page
+
+**Boost Quota Modal**
+- Shows current quota: "X of Y GB used (tier)"
+- Three boost options: +5 GB ($5.00), +10 GB ($8.00), +20 GB ($12.00)
+- Each button POSTs to `/billing/boost` with SKU
+
+#### v2 (LATER)
+
+**Emoji Picker** — 8-column grid popover, cursor insertion into comment textarea
+**User Hover Popover** — avatar + display name + email + role + tier badges
+**Language Selector** — header toggles for EN/FR/ES
+**Image Gallery Premium Gating** — blurred thumbnails + "Subscribe" CTA overlay for non-premium users, locked images unclickable
+
+### Components used (shadcn-svelte)
+- `Card` — related comics container
+- `Button` — all CTA buttons
+- `Badge` — tags, premium, age rating
+- `Dialog` or custom overlay — fullscreen image viewer
+- `Tabs` (optional) — desktop layout sections
+
 ## Component Guidelines
 
 - Prefer shadcn-svelte.
