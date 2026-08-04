@@ -135,33 +135,56 @@
 
 ### Pricing & Checkout Flow
 
-Route: `/pricing` — all screens render in a modal, closable via X button or Esc only.
+**Route: `/pricing`** — informational only, shows all plans inline with interval selector and feature diffs. No selection buttons in page mode. Authenticated users see a "Subscribe" button that opens the checkout modal.
 
-**Screen A — Plan Grid**
-- Responsive grid of tier × interval cards.
-- Each card shows: tier name, interval badge, price in USD, cumulative features list (higher tiers inherit all lower-tier features).
-- "Select" button on each card → advances the modal to Screen B.
+**`SubscribeButton`** — reusable component that opens the checkout modal. Import on any page (detail, navbar, upload).
 
-**Screen B — Crypto Currency Selector**
-- Grid of crypto options with icons: BTC, ETH, USDT, LTC.
-- **Single-select**: selecting one deactivates the others. User must unselect to reactivate, which also clears the estimated price.
-- Backend calls NowPayments live price estimate API for the selected plan + crypto.
-- Displays estimated amount in the chosen crypto.
-- "Continue" button → triggers balance check → routes to Screen C or D.
+**`PlanGrid`** — shared plan display used in both modal (`mode="modal"`) and page (`mode="page"`) contexts.
 
-**Screen C — Processing (Step 4A: funded)**
-- Spinner + "Processing subscription..." message.
-- Backend created the subscription atomically (saved locally only if NowPayments succeeded).
-- **Polling**: frontend polls the local subscription by ID every 3 seconds, waiting for the subscription webhook to set `active = true`.
-- On success → re-sign JWT cookie with new tier → page refresh (user sees upgraded tier).
-- On timeout (5 minutes) → error message + retry button.
+#### PlanGrid layout (one card per tier)
 
-**Screen D — Deposit QR (Step 4B: needs funds)**
-- QR code image (from NowPayments response) + deposit address with copy button.
-- Amount to send displayed in the selected crypto.
-- **Polling**: frontend polls the local deposit by ID every 5 seconds, waiting for the deposit webhook to set status to `completed`.
-- On success → transition to Screen C (Processing subscription).
-- On timeout (30 minutes) → "Transaction not detected yet" + retry button.
+```
+┌─ Free ────────────────────────────────┐
+│                                        │
+│  ✓ Browse comics                       │
+│  ✓ Read comments                       │
+│  ✓ 1 GB download quota                 │
+│                                        │
+│  Free                     (no button)  │
+└────────────────────────────────────────┘
+┌─ Silver ──────────────────────────────┐
+│  Interval: [Monthly ▼]                 │
+│                                        │
+│  ✓ Browse comics                       │
+│  ✓ Read comments                       │
+│  ✓ Write comments                      │
+│  ✓ Download archives                   │
+│  ✓ Web reader                          │
+│  ✓ Full preview gallery                │
+│  + 50 GB download quota                │
+│                                        │
+│  $6.99/month                 [Select]  │
+└────────────────────────────────────────┘
+```
+
+**Rules:**
+- One card per tier (not per plan/interval)
+- Interval chosen via `<select>` dropdown inside each card (updates displayed price and features)
+- Features: cumulative per tier with **`+` (new)** vs **`✓` (inherited)** markers compared to previous tier
+- Free tier: no interval selector, no select button, slightly muted opacity
+- Select button: bottom-aligned (`mt-auto`, `border-t`), visible only in `mode="modal"`
+- `mode="page"`: no select buttons, display only, `/pricing` route
+- `mode="modal"`: selectable, used inside `CheckoutModal`
+
+#### Checkout flow (modal only)
+
+**Screen A — PlanGrid** → interval dropdown → [Select] → onSelect(planId, interval)
+
+**Screen B — CryptoSelector** → crypto grid → live estimate → [Continue] → balance check → Screen C or D
+
+**Screen C — Processing** → 3s polling, 5min timeout → success: JWT refresh + reload
+
+**Screen D — Deposit QR** → QR + address → 5s polling, 30min timeout → success: Screen C
 
 ### Crypto Icon Library
 - Use `lucide-svelte` or inline SVG for crypto currency icons (BTC, ETH, USDT, LTC).
