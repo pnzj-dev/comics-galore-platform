@@ -197,36 +197,60 @@
 
 Route: `/comics/:slug`
 
-### Layout (desktop, two-column)
+### Layout (desktop, 60/40 grid)
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  [Premium] badge    Title (H1)                                       │
-│  [tag1] [tag2] [+N]                                                  │
-│  Description text (muted)                                            │
-│                                                                      │
-│  ┌──────────────────┐  ┌───────────────────────────────────────────┐ │
-│  │                  │  │ ● Author (circular avatar + name)          │ │
-│  │  Cover image     │  │                                           │ │
-│  │  (aspect-3/4)    │  │ Views        1.2k     Downloads    456    │ │
-│  │                  │  │ Pages        32       Published   Jan 2   │ │
-│  │                  │  │ Reading Time 5 min    Language    EN      │ │
-│  │                  │  │                                           │ │
-│  │ [■][■][■][■]    │  │ [♥ 45]  [★ 12]                            │ │
-│  │ thumbnail strip  │  │                                           │ │
-│  │                  │  │ [Start Reading]    (premium gate)          │ │
-│  └──────────────────┘  │ [Download ▼]       (auth/quota gate)       │ │
-│                        └───────────────────────────────────────────┘ │
-├──────────────────────────────────────────────────────────────────────┤
-│  Synopsis (v1.1: premium-gated, 400-char truncation + upsell banner) │
-├──────────────────────────────────────────────────────────────────────┤
-│  Related Comics (4-col grid, lazy-loaded, skeleton loading)          │
-├──────────────────────────────────────────────────────────────────────┤
-│  Comments (v1.1: thread, SSE real-time, reply forms)                 │
-└──────────────────────────────────────────────────────────────────────┘
+┌─── Cover Column (~60%) ──────────────┐┌─── Info Column (~40%) ─────┐
+│                                       ││  Title (H1, text-2xl)       │
+│  ┌─────────────────────────────────┐  ││  [published] [all ages]     │
+│  │  Cover image (3:4, object-cover)│  ││  [Premium]                  │
+│  │  click → opens Lightbox         │  ││                             │
+│  │  cursor-zoom-in                 │  ││  ● Author Name              │
+│  │  onerror → book icon fallback  │  ││  (purple circle + name)     │
+│  │  [page count] badge (bottom-r)  │  ││                             │
+│  └─────────────────────────────────┘  ││  Description text           │
+│                                       ││  (text-sm, leading-relaxed)  │
+│  ┌────┐┌────┐┌────┐┌────┐            ││                             │
+│  │ P1 ││ P2 ││ P3 ││ +N │            ││  ♥ 42   ★ 18               │
+│  └────┘└────┘└────┘└────┘            ││  ──────────────────────     │
+│  4-column thumbnail strip             ││                             │
+│  click → opens Lightbox at index      ││  Metadata (3×2 grid):       │
+│  +N overflow button                   ││  👁 1.2k    ⬇ 156          │
+│                                       ││  📖 32      📅 Aug 2        │
+│                                       ││  ⏱ 5 min    🌍 EN         │
+│                                       ││                             │
+│                                       ││  [Start Reading] (emerald)  │
+│                                       ││  [Download] (outline)        │
+│                                       ││                             │
+│                                       ││  tags (purple pills)         │
+│                                       ││  Rejection reason (red box)  │
+└───────────────────────────────────────┘└─────────────────────────────┘
 ```
 
-**Mobile:** Stack vertically — cover full-width, metadata below, synopsis → related → comments.
+**Mobile:** stack vertically — title/badges first, then cover (full-width), thumbnails, description, metadata, buttons, tags.
+
+### Lightbox component
+
+| Feature | Detail |
+|---------|--------|
+| Trigger | Click cover image or any thumbnail |
+| Keyboard | ArrowLeft/ArrowRight = navigate, Escape = close |
+| Mouse | Click backdrop = close, click image = next |
+| Navigation | Prev/Next arrow buttons (left/right edges) |
+| Dot indicators | Full set of dots, click to jump, active highlighted |
+| Header | "Page N / Total" counter + close (✕) button |
+| Styling | Fixed overlay, z-60, bg-black/95 |
+
+### Components used
+
+| Component | Source | Purpose |
+|-----------|--------|---------|
+| `Lightbox` | custom | Fullscreen image viewer |
+| `ComicCard` | shared | Related comics grid |
+| `LikeButton` / `FavoriteButton` | shared | Reactions bar |
+| `Reader` | shared | Fullscreen page reader |
+| `Button` | shadcn-svelte | CTAs |
+| `Eye, Download, BookOpen, Clock, Globe` | lucide-svelte | Metadata icons |
 
 ### Feature breakdown by version
 
