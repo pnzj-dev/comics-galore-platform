@@ -169,16 +169,19 @@
 
 **Rules:**
 - One card per tier (not per plan/interval)
-- Interval chosen via `<select>` dropdown inside each card (updates displayed price and features)
-- Features: cumulative per tier with **`+` (new)** vs **`✓` (inherited)** markers compared to previous tier
-- Free tier: no interval selector, no select button, slightly muted opacity
-- Select button: bottom-aligned (`mt-auto`, `border-t`), visible only in `mode="modal"`
+- Interval chosen via `<select>` dropdown inside each card — **affects price only**, features are always fully visible
+- Intervals: `monthly`, `quarterly`, `semesterly`, `yearly` (longer = bigger discount)
+- Features: cumulative per tier with **`+` (new, blue)** vs **`✓` (inherited, green)** markers compared to previous tier
+- Free tier: shows its 3 features, no interval selector, no select button, slightly muted opacity
+- Select button: bottom-aligned (`mt-auto`, `border-t`), visible only in `mode="modal"`, calls `onSelect(planId)`
 - `mode="page"`: no select buttons, display only, `/pricing` route
 - `mode="modal"`: selectable, used inside `CheckoutModal`
 
+**`SubscribeButton`** — reusable component wrapping `CheckoutModal`. Import on any page (detail, upload, navbar) for a one-click subscribe CTA.
+
 #### Checkout flow (modal only)
 
-**Screen A — PlanGrid** → interval dropdown → [Select] → onSelect(planId, interval)
+**Screen A — PlanGrid** → interval dropdown (price updates) → [Select] → `onSelect(planId)`
 
 **Screen B — CryptoSelector** → crypto grid → live estimate → [Continue] → balance check → Screen C or D
 
