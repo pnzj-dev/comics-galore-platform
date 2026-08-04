@@ -109,3 +109,67 @@ func ContinueReading(ctx context.Context) (*ContinueReadingResponse, error) {
 
 	return &ContinueReadingResponse{Items: items}, rows.Err()
 }
+
+type DownloadResponse struct {
+	Allowed    bool   `json:"allowed"`
+	Used       int    `json:"used"`
+	Limit      int    `json:"limit"`
+	Message    string `json:"message,omitempty"`
+}
+
+//encore:api auth method=POST path=/comics/:comicId/download
+func RecordDownload(ctx context.Context, comicID string) (*DownloadResponse, error) {
+	ad := auth.Data().(*myauth.AuthData)
+
+	limit := quotaLimit(ad.Tier)
+	used, err := countDownloadsThisMonth(ctx, ad.UserID)
+	if err != nil {
+		used = 0
+	}
+
+	if used >= limit {
+		return &DownloadResponse{
+			Allowed: false,
+			Used:    used,
+			Limit:   limit,
+			Message: "Download quota exceeded. Upgrade your plan to download more.",
+		}, nil
+	}
+
+	_, err = db.Exec(ctx, `INSERT INTO download_logs (user_id, comic_id) VALUES ($1, $2)`, ad.UserID, comicID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &DownloadResponse{
+		Allowed: true,
+		Used:    used + 1,
+		Limit:   limit,
+	}, nil
+}
+
+func quotaLimit(tier string) int {
+	switch tier {
+	case "free":
+		return 5
+	case "bronze":
+		return 50
+	case "silver":
+		return 200
+	case "gold":
+		return 999999
+	case "platinum":
+		return 999999
+	default:
+		return 5
+	}
+}
+
+func countDownloadsThisMonth(ctx context.Context, userID string) (int, error) {
+	var count int
+	err := db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM download_logs
+		WHERE user_id = $1 AND created_at >= date_trunc('month', now())
+	`, userID).Scan(&count)
+	return count, err
+}

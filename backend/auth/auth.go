@@ -285,3 +285,65 @@ func getUserByID(ctx context.Context, id string) (*User, error) {
 	}
 	return &u, nil
 }
+
+// ----- Admin endpoints -----
+
+type AdminUser struct {
+	ID        string    `json:"id"`
+	Email     string    `json:"email"`
+	Role      string    `json:"role"`
+	Tier      string    `json:"tier"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type AdminUserListResponse struct {
+	Users []AdminUser `json:"users"`
+	Total int         `json:"total"`
+}
+
+//encore:api auth method=GET path=/admin/users
+func AdminListUsers(ctx context.Context) (*AdminUserListResponse, error) {
+	data := auth.Data().(*AuthData)
+	if data.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	var total int
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&total)
+
+	rows, err := db.Query(ctx, `
+		SELECT id, email, role, tier, created_at
+		FROM users ORDER BY created_at DESC LIMIT 100
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []AdminUser
+	for rows.Next() {
+		var u AdminUser
+		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Tier, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+
+	return &AdminUserListResponse{Users: users, Total: total}, rows.Err()
+}
+
+type UpdateUserRoleParams struct {
+	Role string `json:"role"`
+}
+
+//encore:api auth method=POST path=/admin/users/:id/role
+func AdminUpdateUserRole(ctx context.Context, id string, p *UpdateUserRoleParams) error {
+	data := auth.Data().(*AuthData)
+	if data.Role != "admin" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	_, err := db.Exec(ctx, `UPDATE users SET role = $1 WHERE id = $2 AND id != $3`,
+		p.Role, id, data.UserID)
+	return err
+}

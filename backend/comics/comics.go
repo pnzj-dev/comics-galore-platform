@@ -348,7 +348,15 @@ func ApproveComic(ctx context.Context, id string) error {
 		UPDATE comics SET status = 'published', published_at = now(), updated_at = now()
 		WHERE id = $1
 	`, id)
-	return err
+	if err != nil {
+		return err
+	}
+
+	db.Exec(ctx, `
+		INSERT INTO audit_logs (actor_id, action, target_type, target_id)
+		VALUES ($1, 'approve_comic', 'comic', $2)
+	`, ad.UserID, id)
+	return nil
 }
 
 //encore:api auth method=POST path=/moderation/comics/:id/reject
@@ -362,7 +370,15 @@ func RejectComic(ctx context.Context, id string, p *RejectParams) error {
 		UPDATE comics SET status = 'rejected', rejection_reason = $1, updated_at = now()
 		WHERE id = $2 AND status = 'pending_review'
 	`, p.Reason, id)
-	return err
+	if err != nil {
+		return err
+	}
+
+	db.Exec(ctx, `
+		INSERT INTO audit_logs (actor_id, action, target_type, target_id, details)
+		VALUES ($1, 'reject_comic', 'comic', $2, $3)
+	`, ad.UserID, id, `{"reason":"`+p.Reason+`"}`)
+	return nil
 }
 
 type LikeStatus struct {
@@ -441,4 +457,33 @@ func ToggleFavorite(ctx context.Context, id string) (*ToggleFavResponse, error) 
 	var favCount int
 	db.QueryRow(ctx, `SELECT fav_count FROM comics WHERE id = $1`, id).Scan(&favCount)
 	return &ToggleFavResponse{Favorited: true, FavCount: favCount}, nil
+}
+
+// ----- Admin comic list -----
+
+//encore:api auth method=GET path=/admin/comics
+func AdminListComics(ctx context.Context) (*ListComicsResponse, error) {
+	ad, hasAuth := getAuthData(ctx)
+	if !hasAuth || ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT id, uploader_id, title, slug, description, content_language, status,
+			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
+			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count,
+			created_at, updated_at
+		FROM comics ORDER BY created_at DESC LIMIT 100
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	comics, err := scanComics(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
 }

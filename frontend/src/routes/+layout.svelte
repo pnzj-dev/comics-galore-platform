@@ -30,6 +30,8 @@
 				{/if}
 				{#if user.role === 'admin'}
 					<a href="/subscriptions" class="text-sm text-muted-foreground hover:text-foreground">Subscriptions</a>
+					<a href="/users" class="text-sm text-muted-foreground hover:text-foreground">Users</a>
+					<a href="/admin/comics" class="text-sm text-muted-foreground hover:text-foreground">Comics</a>
 				{/if}
 			{/if}
 		</div>
@@ -57,3 +59,9 @@
 <main class="max-w-7xl mx-auto p-4">
 	{@render children()}
 </main>
+
+<footer class="border-t py-4 text-center text-xs text-muted-foreground">
+	<a href="/legal/terms" class="hover:underline mx-2">Terms</a>
+	<a href="/legal/privacy" class="hover:underline mx-2">Privacy</a>
+	<a href="/legal/dmca" class="hover:underline mx-2">DMCA</a>
+</footer>
