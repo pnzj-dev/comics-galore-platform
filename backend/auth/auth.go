@@ -215,6 +215,36 @@ func Me(ctx context.Context) (*User, error) {
 	return user, nil
 }
 
+//encore:api auth method=GET path=/auth/renew
+func RenewToken(ctx context.Context) (*AuthResponse, error) {
+	data := auth.Data().(*AuthData)
+	user, err := getUserByID(ctx, data.UserID)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, &errs.Error{
+				Code:    errs.NotFound,
+				Message: "user not found",
+			}
+		}
+		return nil, err
+	}
+
+	token, err := generateToken(&Claims{
+		UserID: user.ID,
+		Email:  user.Email,
+		Role:   user.Role,
+		Tier:   user.Tier,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &AuthResponse{
+		Token: token,
+		User:  *user,
+	}, nil
+}
+
 type User struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`

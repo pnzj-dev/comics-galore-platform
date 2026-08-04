@@ -5,9 +5,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strconv"
 
 	"encore.dev/storage/sqldb"
 )
+
+func nextIdx(n int) string {
+	return strconv.Itoa(n)
+}
 
 func isNoRows(err error) bool {
 	return errors.Is(err, sqldb.ErrNoRows)
@@ -72,17 +77,14 @@ func scanComics(rows *sqldb.Rows) ([]Comic, error) {
 	var comics []Comic
 	for rows.Next() {
 		var c Comic
-		var pubAt, rejAt interface{}
 		err := rows.Scan(
 			&c.ID, &c.UploaderID, &c.Title, &c.Slug, &c.Description,
 			&c.ContentLanguage, &c.Status, &c.CoverKey, &c.FileKey,
 			scanStringSlice(&c.PageKeys), &c.FileSizeBytes, nulString(&c.MinTierID),
 			&c.AgeRating, scanStringSlice(&c.Tags), nulString(&c.RejectionReason),
-			&c.ViewCount, &c.DownloadCount, &c.LikeCount, &c.FavCount,
+			&c.PublishedAt, &c.ViewCount, &c.DownloadCount, &c.LikeCount, &c.FavCount,
 			&c.CreatedAt, &c.UpdatedAt,
 		)
-		_ = pubAt
-		_ = rejAt
 		if err != nil {
 			return nil, err
 		}

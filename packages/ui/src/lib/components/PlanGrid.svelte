@@ -61,7 +61,7 @@
 										${(plan.price_usd_cents / 100).toFixed(2)}
 									{/if}
 								</span>
-							</div>
+						</button>
 							{#if plan.features && parseFeatures(plan.features).length > 0}
 								<ul class="mt-1 space-y-0.5">
 									{#each parseFeatures(plan.features) as feat}
@@ -72,7 +72,7 @@
 									{/each}
 								</ul>
 							{/if}
-						</button>
+						</div>
 					{/each}
 					<Button class="w-full text-xs" size="sm" onclick={() => {
 						const firstPlan = tierPlans(tier.id)[0];

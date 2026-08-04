@@ -159,21 +159,32 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 	}
 	offset := (page - 1) * limit
 
+	var where string
+	var args []interface{}
+	args = append(args, "published")
+
+	if p.Language != "" {
+		where = "WHERE status = $1 AND content_language = $2"
+		args = append(args, p.Language)
+	} else {
+		where = "WHERE status = $1"
+	}
+
 	var total int
-	err := db.QueryRow(ctx, `SELECT COUNT(*) FROM comics WHERE status = 'published'`).Scan(&total)
+	err := db.QueryRow(ctx, `SELECT COUNT(*) FROM comics `+where, args...).Scan(&total)
 	if err != nil {
 		return nil, err
 	}
 
+	queryArgs := append(args, limit, offset)
 	rows, err := db.Query(ctx, `
 		SELECT id, uploader_id, title, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
-			tags, rejection_reason, view_count, download_count, like_count, fav_count,
+			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count,
 			created_at, updated_at
-		FROM comics WHERE status = 'published'
+		FROM comics `+where+`
 		ORDER BY published_at DESC
-		LIMIT $1 OFFSET $2
-	`, limit, offset)
+		LIMIT $`+nextIdx(len(args))+` OFFSET $`+nextIdx(len(args)+1), queryArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +394,9 @@ func ToggleLike(ctx context.Context, id string) (*ToggleLikeResponse, error) {
 	if exists {
 		db.Exec(ctx, `DELETE FROM likes WHERE user_id = $1 AND comic_id = $2`, ad.UserID, id)
 		db.Exec(ctx, `UPDATE comics SET like_count = GREATEST(like_count - 1, 0) WHERE id = $1`, id)
-		return &ToggleLikeResponse{Liked: false, LikeCount: 0}, nil
+		var likeCount int
+		db.QueryRow(ctx, `SELECT like_count FROM comics WHERE id = $1`, id).Scan(&likeCount)
+		return &ToggleLikeResponse{Liked: false, LikeCount: likeCount}, nil
 	}
 
 	_, err := db.Exec(ctx, `INSERT INTO likes (user_id, comic_id) VALUES ($1, $2)`, ad.UserID, id)
@@ -412,7 +425,9 @@ func ToggleFavorite(ctx context.Context, id string) (*ToggleFavResponse, error) 
 	if exists {
 		db.Exec(ctx, `DELETE FROM favorites WHERE user_id = $1 AND comic_id = $2`, ad.UserID, id)
 		db.Exec(ctx, `UPDATE comics SET fav_count = GREATEST(fav_count - 1, 0) WHERE id = $1`, id)
-		return &ToggleFavResponse{Favorited: false, FavCount: 0}, nil
+		var favCount int
+		db.QueryRow(ctx, `SELECT fav_count FROM comics WHERE id = $1`, id).Scan(&favCount)
+		return &ToggleFavResponse{Favorited: false, FavCount: favCount}, nil
 	}
 
 	_, err := db.Exec(ctx, `INSERT INTO favorites (user_id, comic_id) VALUES ($1, $2)`, ad.UserID, id)

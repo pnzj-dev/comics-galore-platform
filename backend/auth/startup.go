@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"log"
+	"os"
 )
 
 func init() {
@@ -20,8 +21,12 @@ func checkAdminExists() {
 	}
 
 	if count == 0 {
-		log.Println("[BOOTSTRAP] FATAL: No admin user exists in the database.")
-		log.Println("[BOOTSTRAP] The application cannot start without at least one admin.")
-		log.Println("[BOOTSTRAP] The first user to register will automatically be assigned the 'admin' role.")
+		var totalUsers int
+		db.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&totalUsers)
+		if totalUsers > 0 {
+			log.Println("[BOOTSTRAP] FATAL: Users exist but no admin found. Refusing to start.")
+			os.Exit(1)
+		}
+		log.Println("[BOOTSTRAP] No users yet. First registrant will become admin.")
 	}
 }

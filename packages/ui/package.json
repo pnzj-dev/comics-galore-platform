@@ -1,12 +1,13 @@
 {
 	"name": "@comics-galore/ui",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"private": true,
 	"type": "module",
 	"exports": {
-		"./components/*": "./components/*",
-		"./forms/*": "./forms/*",
-		"./lib/*": "./lib/*"
+		"./components/*": "./src/lib/components/*",
+		"./stores/*": "./src/lib/stores/*",
+		"./api/*": "./src/lib/api/*",
+		"./utils": "./src/lib/utils.ts"
 	},
 	"peerDependencies": {
 		"svelte": "^5.0.0"

@@ -48,6 +48,12 @@
 	</div>
 </nav>
 
+{#if authed && user?.role === 'admin'}
+	<div class="bg-red-600 text-white text-xs text-center py-1.5 font-medium">
+		Action required: Configure the complete plan matrix in admin settings.
+	</div>
+{/if}
+
 <main class="max-w-7xl mx-auto p-4">
 	{@render children()}
 </main>

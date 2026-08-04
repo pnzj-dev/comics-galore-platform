@@ -21,13 +21,17 @@ type Tier struct {
 }
 
 type Plan struct {
-	ID              string    `json:"id"`
-	TierID          string    `json:"tier_id"`
-	Interval        string    `json:"interval"`
-	PriceUsdCents   int       `json:"price_usd_cents"`
-	QuotaDownloads  int       `json:"quota_downloads"`
-	IsActive        bool      `json:"is_active"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID                   string    `json:"id"`
+	TierID               string    `json:"tier_id"`
+	Name                 string    `json:"name"`
+	Interval             string    `json:"interval"`
+	PriceUsdCents        int       `json:"price_usd_cents"`
+	QuotaDownloads       int       `json:"quota_downloads"`
+	Features             []string  `json:"features"`
+	IsActive             bool      `json:"is_active"`
+	ProviderPlanID       string    `json:"provider_plan_id,omitempty"`
+	ProviderIntervalDays int       `json:"provider_interval_days"`
+	CreatedAt            time.Time `json:"created_at"`
 }
 
 //encore:api public method=GET path=/tiers
@@ -83,8 +87,10 @@ func GetTier(ctx context.Context, id string) (*Tier, error) {
 //encore:api public method=GET path=/plans
 func ListPlans(ctx context.Context) (*ListPlansResponse, error) {
 	rows, err := db.Query(ctx, `
-		SELECT id, tier_id, interval, price_usd_cents, quota_downloads, is_active, created_at
-		FROM plans
+		SELECT id, tier_id, COALESCE(plans.name, t.name || ' ' || plans.interval) as name, interval,
+			price_usd_cents, quota_downloads, COALESCE(features, '[]'),
+			is_active, COALESCE(provider_plan_id, ''), COALESCE(provider_interval_days, 0), created_at
+		FROM plans LEFT JOIN tiers t ON t.id = plans.tier_id
 		ORDER BY price_usd_cents ASC
 	`)
 	if err != nil {
@@ -95,9 +101,13 @@ func ListPlans(ctx context.Context) (*ListPlansResponse, error) {
 	var plans []Plan
 	for rows.Next() {
 		var p Plan
-		if err := rows.Scan(&p.ID, &p.TierID, &p.Interval, &p.PriceUsdCents, &p.QuotaDownloads, &p.IsActive, &p.CreatedAt); err != nil {
+		var featuresJSON []byte
+		if err := rows.Scan(&p.ID, &p.TierID, &p.Name, &p.Interval, &p.PriceUsdCents,
+			&p.QuotaDownloads, &featuresJSON, &p.IsActive, &p.ProviderPlanID,
+			&p.ProviderIntervalDays, &p.CreatedAt); err != nil {
 			return nil, err
 		}
+		p.Features = parseFeatures(featuresJSON)
 		plans = append(plans, p)
 	}
 	if err := rows.Err(); err != nil {

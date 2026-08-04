@@ -17,10 +17,6 @@
 
 	const pageCount = totalPages || pageKeys.length || 1;
 
-	function getPageLabel(page: number, total: number): string {
-		return `Page ${page + 1} of ${total}`;
-	}
-
 	function nextPage() {
 		if (currentPage < pageCount - 1) currentPage++;
 	}
@@ -76,20 +72,11 @@
 			</Button>
 		</div>
 
-		<div class="flex-1 flex items-center justify-center overflow-hidden bg-black" onclick={nextPage} role="img" aria-label={getPageLabel(currentPage, pageCount)} onkeydown={(e) => { if (e.key === 'Enter') nextPage(); }}>
-			<div class="max-h-full max-w-full p-2">
-				{#if pageKeys[currentPage]}
-					<img
-						src={`/media/${pageKeys[currentPage]}`}
-						alt={`Page ${currentPage + 1} of ${pageCount}`}
-						class="max-h-[85vh] max-w-full object-contain rounded shadow-lg"
-						loading="eager"
-					/>
-				{:else}
-					<div class="bg-gray-800 rounded-lg w-full max-w-3xl aspect-[3/4] flex items-center justify-center text-white/40 text-lg">
-						Page {currentPage + 1}
-					</div>
-				{/if}
+		<div class="flex-1 flex items-center justify-center overflow-hidden" onclick={nextPage}>
+			<div class="max-h-full max-w-full p-4">
+				<div class="bg-muted/20 rounded-lg w-full max-w-3xl aspect-[3/4] flex items-center justify-center text-white/40 text-lg">
+					Page {currentPage + 1}
+				</div>
 			</div>
 		</div>
 

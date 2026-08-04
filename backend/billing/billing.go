@@ -296,7 +296,7 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 			ORDER BY created_at DESC LIMIT 1
 		`, event.ID.String()).Scan(&userID, &tier)
 		if err == nil {
-			db.Exec(ctx, `UPDATE subscriptions SET active = true WHERE provider_subscription_id = $1`, event.ID.String())
+			db.Exec(ctx, `UPDATE subscriptions SET active = true, status = 'active' WHERE provider_subscription_id = $1`, event.ID.String())
 			db.Exec(ctx, `UPDATE users SET tier = $1 WHERE id = $2`, tier, userID)
 		}
 	}
