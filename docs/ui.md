@@ -28,40 +28,83 @@
 - After successful creation the user lands here.
 
 ### Tab 2 – Manual Creation
-- Superforms form with clear sections.
-- Text fields: Title (required), Author, Description, Synopsis, Category, Tags (comma-separated).
-- Language and Age Rating selectors.
 
-**Cover Image (required)**
-- Dedicated file input (`accept="image/*"`)
-- Local preview via `URL.createObjectURL()` shown immediately upon selection
-- Uploads to S3 via presigned URL on file select (immediate, not deferred)
-- XHR upload with progress tracking
-- Removable: × button clears preview and key
-- Aspect ratio: landscape preview (h-32)
+**Layout: two-column (metadata left, cover right), full-width previews + archives**
 
-**Preview Images (min 2, max 10)**
-- 5-column grid of thumbnail slots (`aspect-[2/3]`)
-- Each slot: empty placeholder with file input → uploaded image preview + × remove button
-- "+ Add" button to add slots (hidden at 10 max)
-- Cannot remove below 2 slots
-- Each uploads independently via presigned URL with progress overlay
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  Create New Comic                                                    │
+│                                                                      │
+│  ┌─────────────────────────────┐ ┌────────────────────────────────┐ │
+│  │ Title *                     │ │                                │ │
+│  │ Author                      │ │   Cover Image *                │ │
+│  │ Description (2 rows)       │ │                                │ │
+│  │ Synopsis (2 rows)          │ │   ┌──────────────────────┐    │ │
+│  │ Language ▼  Age Rating ▼    │ │   │                      │    │ │
+│  │ Category                    │ │   │   3 : 4 aspect       │    │ │
+│  │ Tags (comma-separated)      │ │   │   upload or preview  │    │ │
+│  └─────────────────────────────┘ │   │       × %            │    │ │
+│                                  │   └──────────────────────┘    │ │
+│                                  └────────────────────────────────┘ │
+│                                                                      │
+│  Preview Images (min 2)                                   [+ Add]    │
+│  ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐                  │
+│  │ 🌄 │ │ 🌄 │ │ 🌄 │ │ 🌄 │ │ 🌄 │ │  + │ │  + │                  │
+│  │ 2:3│ │ 2:3│ │ 2:3│ │ 2:3│ │ 2:3│ │ 2:3│ │ 2:3│                  │
+│  └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘                  │
+│  7-column grid, each slot: upload→preview→progress→× remove         │
+│                                                                      │
+│  Archive Files (min 1)                                   [+ Add]    │
+│  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐                       │
+│  │  ⬇   │ │  ⬇   │ │ 50%  │ │  +   │ │  +   │                       │
+│  │ name  │ │ name  │ │ name  │ │ Arch  │ │ Arch  │                       │
+│  │size ×│ │size ×│ │size   │ │       │ │       │                       │
+│  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘                       │
+│  5-column grid, each slot: upload→name+size→× remove                │
+│                                                                      │
+│  [Publish Comic] (full width)                                       │
+└──────────────────────────────────────────────────────────────────────┘
+```
 
-**Archive Files (min 1, max 10)**
-- 5-column grid of archive slots
+**Metadata fields (left column, stacked):**
+- Title (required)
+- Author
+- Description (2 rows textarea)
+- Synopsis (2 rows textarea)
+- Language selector + Age Rating selector (inline)
+- Category text input
+- Tags (comma-separated, full width in metadata column)
+
+**Cover Image (right column, 320px, required)**
+- 3:4 aspect ratio placeholder when empty
+- File input overlay (`accept="image/*"`)
+- On select: local `URL.createObjectURL()` preview fills the area
+- Upload starts immediately via presigned URL with XHR progress tracking
+- Progress state: dark overlay with spinner + percentage
+- × button (top-right) to remove and clear
+
+**Preview Images (full width, min 2, max 10)**
+- 7-column responsive grid (3 on mobile, 5 on tablet, 7 on desktop)
+- Each slot: 2:3 aspect, dashed border, file input overlay
+- Empty: book icon placeholder
+- Uploaded: image preview with × remove button (cannot go below 2)
+- Progress overlay: spinner + percentage on upload
+- [+ Add] button (hidden at 10 max)
+
+**Archive Files (full width, min 1, max 10)**
+- 5-column responsive grid (3 on mobile)
+- Each slot: square aspect, dashed border, file input overlay
 - Accepts: `.cbr,.cbz,.pdf,.zip,.rar,.7z`
-- Each slot shows: upload icon → filename (truncated) + formatted file size → × remove
-- Uploaded state: purple tint background with download icon
-- "+ Add" button to add slots (hidden at 10 max)
-- Cannot remove below 1 slot
+- Empty: download icon + "Archive" label
+- Uploaded: purple tint + download icon + filename (truncated) + file size + × remove (cannot go below 1)
+- Progress: spinner + percentage on upload
+- [+ Add] button (hidden at 10 max)
 
-**Shared Upload UX**
-- Cover + archive file inputs that:
-  - Request presigned URL(s) from the backend
-  - Upload **directly from browser to S3** via XHR
-  - Show determinate progress (percentage overlay)
-- “Save draft / Resume” indicator if an incomplete session exists.
-- Submit → creates comic in `pending_review` → redirect to Tab 1.
+**Submit**
+- Validates: title, cover, at least 1 archive
+- Collects keys from uploaded files
+- Sends `POST /comics` with unified payload
+- On success: redirects to Tab 1 (My Comics)
 
 ### Tab 3 – Archive + JSON
 - Large drop zone.
