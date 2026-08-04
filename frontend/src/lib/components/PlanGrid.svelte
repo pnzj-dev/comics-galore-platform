@@ -84,9 +84,6 @@
 			{@const tp = tierPlans(tier.id)}
 			{@const allFeatures = tierFeatures(tier.id)}
 			{@const prevFeatures = previousFeatures(idx)}
-			{@const interval = selectedIntervals[tier.id] || (isFree ? 'monthly' : tp[0]?.interval || 'monthly')}
-			{@const price = priceForInterval(tier.id, interval)}
-			{@const planId = planIdFor(tier.id, interval)}
 
 			<Card class="flex flex-col {isFree ? 'opacity-80' : ''}">
 				<CardHeader>
@@ -94,10 +91,7 @@
 				</CardHeader>
 				<CardContent class="flex-1 flex flex-col justify-between gap-3">
 					{#if !isFree && tp.length > 1}
-						<select
-							bind:value={selectedIntervals[tier.id]}
-							class="w-full rounded-md border border-input bg-background px-3 py-2 text-xs"
-						>
+						<select bind:value={selectedIntervals[tier.id]} class="w-full rounded-md border border-input bg-background px-3 py-2 text-xs">
 							{#each tp as plan}
 								<option value={plan.interval}>{intervalLabels[plan.interval] || plan.interval}</option>
 							{/each}
@@ -122,17 +116,17 @@
 						<div class="flex items-center justify-between">
 							<div>
 								<span class="text-lg font-bold">
-									{#if price === 0}Free
-									{:else}${(price / 100).toFixed(2)}
+									{#if priceForInterval(tier.id, selectedIntervals[tier.id] || 'monthly') === 0}Free
+									{:else}${(priceForInterval(tier.id, selectedIntervals[tier.id] || 'monthly') / 100).toFixed(2)}
 									{/if}
 								</span>
-								{#if price > 0}
-									<span class="text-xs text-muted-foreground">/{selInterval}</span>
+								{#if priceForInterval(tier.id, selectedIntervals[tier.id] || 'monthly') > 0}
+									<span class="text-xs text-muted-foreground">/{selectedIntervals[tier.id] || 'monthly'}</span>
 								{/if}
 							</div>
 
 							{#if isModal && !isFree}
-								<Button size="sm" onclick={() => onSelect?.(planId)}>Select</Button>
+								<Button size="sm" onclick={() => onSelect?.(planIdFor(tier.id, selectedIntervals[tier.id] || 'monthly'))}>Select</Button>
 							{/if}
 						</div>
 					</div>
