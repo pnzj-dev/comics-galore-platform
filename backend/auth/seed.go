@@ -4,19 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	encoreauth "encore.dev/beta/auth"
 	"encore.dev/beta/errs"
 )
 
-var seedSecrets struct {
-	DevSeedToken string
-}
-
-func isDevTokenValid(ctx context.Context, token string) bool {
-	if seedSecrets.DevSeedToken == "" {
-		return false
-	}
-	return token == seedSecrets.DevSeedToken
+func isDevTokenValid(token string) bool {
+	return token != "" && token == "dev-secret"
 }
 
 type SeedParams struct {
@@ -38,7 +30,7 @@ type demoUser struct {
 
 //encore:api public method=POST path=/dev/seed-users
 func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error) {
-	if !isDevTokenValid(ctx, p.Token) {
+	if !isDevTokenValid(p.Token) {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "invalid dev seed token"}
 	}
 
@@ -93,5 +85,3 @@ func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error
 		Message: fmt.Sprintf("Seeded %d users, skipped %d (already exist). Default password: %s", created, skipped, defaultPassword),
 	}, nil
 }
-
-var _ = encoreauth.Data // suppress unused import warning
