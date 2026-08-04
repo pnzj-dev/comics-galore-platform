@@ -55,9 +55,9 @@ func DevSeedBilling(ctx context.Context, p *SeedBillingParams) (*SeedBillingResp
 		_, err := db.Exec(ctx, `
 			INSERT INTO subscriptions (id, user_id, plan_id, provider, provider_subscription_id,
 				status, active, tier, activated_at, expires_at, created_at, updated_at)
-			VALUES (gen_random_uuid(), $1, gen_random_uuid(), 'nowpayments', 'seed-'||$1,
+			VALUES (gen_random_uuid(), $1, gen_random_uuid(), 'nowpayments', $3,
 				'active', true, $2, now(), now() + interval '30 days', now(), now())
-		`, s.UserID, s.Tier)
+		`, s.UserID, s.Tier, "seed-"+s.UserID)
 		if err != nil {
 			return nil, err
 		}
@@ -87,8 +87,8 @@ func DevSeedBilling(ctx context.Context, p *SeedBillingParams) (*SeedBillingResp
 		}
 		db.Exec(ctx, `
 			INSERT INTO deposits (id, user_id, provider, provider_deposit_id, currency_crypto, amount_usd_cents, status, pay_address, created_at, completed_at)
-			VALUES (gen_random_uuid(), $1, 'nowpayments', 'seed-deposit-'||$1, $2, $3, $4, 'seed-address-'||$2, now() - interval '14 days', $5)
-		`, d.UserID, d.Crypto, d.AmountUSD, d.Status, completedAt)
+			VALUES (gen_random_uuid(), $1, 'nowpayments', $6, $2, $3, $4, 'seed-address-'||$2, now() - interval '14 days', $5)
+		`, d.UserID, d.Crypto, d.AmountUSD, d.Status, completedAt, "seed-deposit-"+d.UserID)
 	}
 
 	return &SeedBillingResponse{
