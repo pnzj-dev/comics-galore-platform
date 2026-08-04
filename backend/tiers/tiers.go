@@ -87,11 +87,11 @@ func GetTier(ctx context.Context, id string) (*Tier, error) {
 //encore:api public method=GET path=/plans
 func ListPlans(ctx context.Context) (*ListPlansResponse, error) {
 	rows, err := db.Query(ctx, `
-		SELECT id, tier_id, COALESCE(plans.name, t.name || ' ' || plans.interval) as name, interval,
-			price_usd_cents, quota_downloads, COALESCE(features, '[]'),
-			is_active, COALESCE(provider_plan_id, ''), COALESCE(provider_interval_days, 0), created_at
+		SELECT plans.id, plans.tier_id, COALESCE(plans.name, t.name || ' ' || plans.interval) as name, plans.interval,
+			plans.price_usd_cents, plans.quota_downloads, COALESCE(plans.features, '[]'),
+			plans.is_active, COALESCE(plans.provider_plan_id, ''), COALESCE(plans.provider_interval_days, 0), plans.created_at
 		FROM plans LEFT JOIN tiers t ON t.id = plans.tier_id
-		ORDER BY price_usd_cents ASC
+		ORDER BY plans.price_usd_cents ASC
 	`)
 	if err != nil {
 		return nil, err

@@ -36,7 +36,7 @@
 
 <section class="py-8">
 	<div class="flex items-center gap-4 mb-6">
-		<Button variant={tab === 'list' ? 'default' : 'outline'} onclick={() => { tab = 'list'; loadComics(); }}>
+		<Button variant={tab === 'list' ? 'default' : 'outline'} onclick={() => { tab = 'list'; loading = true; loadComics(); }}>
 			My Comics
 		</Button>
 		<Button variant={tab === 'create' ? 'default' : 'outline'} onclick={() => tab = 'create'}>

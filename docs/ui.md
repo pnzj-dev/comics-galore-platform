@@ -29,10 +29,37 @@
 
 ### Tab 2 – Manual Creation
 - Superforms form with clear sections.
+- Text fields: Title (required), Author, Description, Synopsis, Category, Tags (comma-separated).
+- Language and Age Rating selectors.
+
+**Cover Image (required)**
+- Dedicated file input (`accept="image/*"`)
+- Local preview via `URL.createObjectURL()` shown immediately upon selection
+- Uploads to S3 via presigned URL on file select (immediate, not deferred)
+- XHR upload with progress tracking
+- Removable: × button clears preview and key
+- Aspect ratio: landscape preview (h-32)
+
+**Preview Images (min 2, max 10)**
+- 5-column grid of thumbnail slots (`aspect-[2/3]`)
+- Each slot: empty placeholder with file input → uploaded image preview + × remove button
+- "+ Add" button to add slots (hidden at 10 max)
+- Cannot remove below 2 slots
+- Each uploads independently via presigned URL with progress overlay
+
+**Archive Files (min 1, max 10)**
+- 5-column grid of archive slots
+- Accepts: `.cbr,.cbz,.pdf,.zip,.rar,.7z`
+- Each slot shows: upload icon → filename (truncated) + formatted file size → × remove
+- Uploaded state: purple tint background with download icon
+- "+ Add" button to add slots (hidden at 10 max)
+- Cannot remove below 1 slot
+
+**Shared Upload UX**
 - Cover + archive file inputs that:
   - Request presigned URL(s) from the backend
-  - Upload **directly from browser to S3**
-  - Show progress, allow cancel, support resume via Upload Session
+  - Upload **directly from browser to S3** via XHR
+  - Show determinate progress (percentage overlay)
 - “Save draft / Resume” indicator if an incomplete session exists.
 - Submit → creates comic in `pending_review` → redirect to Tab 1.
 
