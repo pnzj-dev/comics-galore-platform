@@ -35,6 +35,21 @@ WHERE t.name IN ('Bronze', 'Silver', 'Gold', 'Platinum')
 AND NOT EXISTS (SELECT 1 FROM plans WHERE plans.tier_id = t.id AND plans.interval = 'quarterly');
 
 INSERT INTO plans (tier_id, interval, price_usd_cents, quota_downloads, features, provider_interval_days)
+SELECT t.id, 'semesterly', CASE t.name
+    WHEN 'Bronze' THEN 2035 WHEN 'Silver' THEN 3565 WHEN 'Gold' THEN 5095 WHEN 'Platinum' THEN 10195
+END, CASE t.name
+    WHEN 'Bronze' THEN 10 WHEN 'Silver' THEN 50 WHEN 'Gold' THEN 200 WHEN 'Platinum' THEN 1000000
+END, CASE t.name
+    WHEN 'Bronze' THEN '["Browse comics","Read comments","Write comments","Download archives","Web reader","Full preview gallery","10 GB download quota"]'::jsonb
+    WHEN 'Silver' THEN '["Browse comics","Read comments","Write comments","Download archives","Web reader","Full preview gallery","50 GB download quota"]'::jsonb
+    WHEN 'Gold' THEN '["Browse comics","Read comments","Write comments","Download archives","Web reader","Full preview gallery","Premium & exclusive posts","200 GB download quota"]'::jsonb
+    WHEN 'Platinum' THEN '["Browse comics","Read comments","Write comments","Download archives","Web reader","Full preview gallery","Premium & exclusive posts","1 TB download quota"]'::jsonb
+END, 180
+FROM tiers t
+WHERE t.name IN ('Bronze', 'Silver', 'Gold', 'Platinum')
+AND NOT EXISTS (SELECT 1 FROM plans WHERE plans.tier_id = t.id AND plans.interval = 'semesterly');
+
+INSERT INTO plans (tier_id, interval, price_usd_cents, quota_downloads, features, provider_interval_days)
 SELECT t.id, 'yearly', CASE t.name
     WHEN 'Bronze' THEN 3884 WHEN 'Silver' THEN 6806 WHEN 'Gold' THEN 9722 WHEN 'Platinum' THEN 19390
 END, CASE t.name

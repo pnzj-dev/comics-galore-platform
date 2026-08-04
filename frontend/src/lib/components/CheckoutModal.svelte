@@ -19,7 +19,7 @@
 		if (e.key === 'Escape') onClose();
 	}
 
-	function goToCrypto(planId: string, _interval: string) {
+	function goToCrypto(planId: string) {
 		selectedPlanId = planId;
 		screen = 'crypto';
 	}

@@ -125,6 +125,8 @@ func CreateSubscription(ctx context.Context, p *CreateSubParams) (*CreateSubResp
 		expiresAt = expiresAt.AddDate(0, 1, 0)
 	case "quarterly":
 		expiresAt = expiresAt.AddDate(0, 3, 0)
+	case "semesterly":
+		expiresAt = expiresAt.AddDate(0, 6, 0)
 	case "yearly":
 		expiresAt = expiresAt.AddDate(1, 0, 0)
 	default:
