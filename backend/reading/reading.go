@@ -118,7 +118,7 @@ type DownloadResponse struct {
 }
 
 //encore:api auth method=POST path=/comics/:comicId/download
-func RecordDownload(ctx context.Context, comicID string) (*DownloadResponse, error) {
+func RecordDownload(ctx context.Context, comicId string) (*DownloadResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
 	limit := quotaLimit(ad.Tier)
@@ -136,7 +136,7 @@ func RecordDownload(ctx context.Context, comicID string) (*DownloadResponse, err
 		}, nil
 	}
 
-	_, err = db.Exec(ctx, `INSERT INTO download_logs (user_id, comic_id) VALUES ($1, $2)`, ad.UserID, comicID)
+	_, err = db.Exec(ctx, `INSERT INTO download_logs (user_id, comic_id) VALUES ($1, $2)`, ad.UserID, comicId)
 	if err != nil {
 		return nil, err
 	}
