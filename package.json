@@ -1,0 +1,8 @@
+{
+	"name": "comics-galore",
+	"private": true,
+	"workspaces": ["frontend", "packages/*"],
+	"scripts": {
+		"prepare": "git config core.hooksPath .husky"
+	}
+}

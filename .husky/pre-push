@@ -1,0 +1,29 @@
+#!/bin/sh
+
+echo ""
+echo "┌─────────────────────────────┐"
+echo "│  Running backend tests...    │"
+echo "└─────────────────────────────┘"
+
+export PATH="$HOME/.encore/bin:$PATH"
+cd backend && encore test ./... 2>&1 | tail -5
+if [ ${PIPESTATUS[0]} -ne 0 ]; then
+  echo ""
+  echo "Backend tests failed. Push aborted."
+  exit 1
+fi
+
+echo ""
+echo "┌─────────────────────────────┐"
+echo "│  Running frontend tests...   │"
+echo "└─────────────────────────────┘"
+
+cd ../frontend && bun run test:unit --run 2>&1 | tail -3
+if [ ${PIPESTATUS[0]} -ne 0 ]; then
+  echo ""
+  echo "Frontend tests failed. Push aborted."
+  exit 1
+fi
+
+echo ""
+echo "All tests passed. Pushing..."

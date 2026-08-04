@@ -40,3 +40,4 @@ desktop/build
 # Shared packages
 packages/ui/node_modules
 
+node_modules/
