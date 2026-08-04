@@ -106,16 +106,23 @@ func CreateComic(ctx context.Context, p *CreateComicParams) (*Comic, error) {
 		tags, _ = marshalStringSlice(p.Tags)
 	}
 
+	var minTierID interface{}
+	if p.MinTierID == "" {
+		minTierID = nil
+	} else {
+		minTierID = p.MinTierID
+	}
+
 	err := db.QueryRow(ctx, `
 		INSERT INTO comics (uploader_id, title, slug, description, content_language,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, tags)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, nullif($10,''), $11, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		RETURNING id, uploader_id, title, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
 			tags, rejection_reason, view_count, download_count, like_count, fav_count,
 			created_at, updated_at
 	`, ad.UserID, p.Title, slug, p.Description, lang,
-		p.CoverKey, p.FileKey, pageKeys, p.FileSizeBytes, p.MinTierID, ageRating, tags).Scan(
+		p.CoverKey, p.FileKey, pageKeys, p.FileSizeBytes, minTierID, ageRating, tags).Scan(
 		&comic.ID, &comic.UploaderID, &comic.Title, &comic.Slug, &comic.Description,
 		&comic.ContentLanguage, &comic.Status, &comic.CoverKey, &comic.FileKey,
 		scanStringSlice(&comic.PageKeys), &comic.FileSizeBytes, nulString(&comic.MinTierID),

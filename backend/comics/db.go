@@ -2,6 +2,7 @@ package comics
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -77,16 +78,20 @@ func scanComics(rows *sqldb.Rows) ([]Comic, error) {
 	var comics []Comic
 	for rows.Next() {
 		var c Comic
+		var pubAt sql.NullTime
 		err := rows.Scan(
 			&c.ID, &c.UploaderID, &c.Title, &c.Slug, &c.Description,
 			&c.ContentLanguage, &c.Status, &c.CoverKey, &c.FileKey,
 			scanStringSlice(&c.PageKeys), &c.FileSizeBytes, nulString(&c.MinTierID),
 			&c.AgeRating, scanStringSlice(&c.Tags), nulString(&c.RejectionReason),
-			&c.PublishedAt, &c.ViewCount, &c.DownloadCount, &c.LikeCount, &c.FavCount,
+			&pubAt, &c.ViewCount, &c.DownloadCount, &c.LikeCount, &c.FavCount,
 			&c.CreatedAt, &c.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
+		}
+		if pubAt.Valid {
+			c.PublishedAt = pubAt.Time
 		}
 		comics = append(comics, c)
 	}
