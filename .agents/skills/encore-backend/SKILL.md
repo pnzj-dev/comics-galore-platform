@@ -78,6 +78,25 @@ ALTER TABLE plans ADD CONSTRAINT ... CHECK (...);                    -- 3. add n
 ### Stale generated files (encore.gen.go)
 After renaming/deleting types referenced by generated code, delete `encore.gen.go` files and let Encore regenerate them on next `encore run`.
 
+### Dynamic SQL parameter indexing with LIMIT/OFFSET
+When building queries with dynamic WHERE clauses (filters), the LIMIT and OFFSET positional parameters shift depending on how many filter args precede them. Always offset by the WHERE arg count + 1:
+```go
+args := []interface{}{status}           // $1 = status
+if lang != "" {
+    args = append(args, lang)           // $2 = lang
+}
+queryArgs := append(args, limit, offset) // $N = limit, $N+1 = offset
+limitIdx := len(args) + 1               // +1 because Encore is 1-indexed
+offsetIdx := len(args) + 2
+
+// WRONG: $len(args) is the last WHERE arg, not the limit
+LIMIT $`+itoa(len(args))+` OFFSET $`+itoa(len(args)+1)
+
+// CORRECT:
+LIMIT $`+itoa(limitIdx)+` OFFSET $`+itoa(offsetIdx)
+```
+Always verify: count the args slice and match each `$N` to the correct element.
+
 ## References
 
 - `docs/api.md`, `docs/database.md`, `docs/architecture.md`, `docs/v1-scope.md`

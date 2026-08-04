@@ -177,6 +177,8 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 	}
 
 	queryArgs := append(args, limit, offset)
+	limitIdx := len(args) + 1
+	offsetIdx := len(args) + 2
 	rows, err := db.Query(ctx, `
 		SELECT id, uploader_id, title, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
@@ -184,7 +186,7 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 			created_at, updated_at
 		FROM comics `+where+`
 		ORDER BY published_at DESC
-		LIMIT $`+nextIdx(len(args))+` OFFSET $`+nextIdx(len(args)+1), queryArgs...)
+		LIMIT $`+nextIdx(limitIdx)+` OFFSET $`+nextIdx(offsetIdx), queryArgs...)
 	if err != nil {
 		return nil, err
 	}
