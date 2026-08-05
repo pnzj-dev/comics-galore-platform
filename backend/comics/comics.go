@@ -2,6 +2,8 @@ package comics
 
 import (
 	"context"
+	"fmt"
+	"hash/fnv"
 	"net/http"
 	"regexp"
 	"strings"
@@ -44,6 +46,10 @@ type Comic struct {
 	FavCount        int       `json:"fav_count"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+
+	// Resolved URLs (populated server-side, not from DB)
+	CoverURL  string   `json:"cover_url,omitempty"`
+	PageURLs  []string `json:"page_urls,omitempty"`
 }
 
 type CreateComicParams struct {
@@ -259,6 +265,7 @@ func GetComic(ctx context.Context, id string) (*Comic, error) {
 
 	db.Exec(ctx, `UPDATE comics SET view_count = view_count + 1 WHERE id = $1`, id)
 
+	resolveComicURLs(&comic)
 	return &comic, nil
 }
 
@@ -285,6 +292,60 @@ func MyComics(ctx context.Context) (*ListComicsResponse, error) {
 	}
 
 	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
+}
+
+// ----- Image URL Resolution -----
+
+var seedCoverImages = []string{
+	"43fa19e1-5bbc-4865-3c5f-80dab3711200",
+	"7ef3f0b7-c330-4302-96c3-3fe876cf0200",
+	"7845d02b-f5b1-43b6-ff07-0002a3416100",
+	"5504dd7d-2dbd-4e36-d337-0e2b27542600",
+	"8cf41eb3-249e-4906-5824-cf31a866af00",
+	"8328c47e-b4ec-43f0-997b-8321e7b96100",
+	"cf2739fd-7ec2-44c8-bc47-47b31d8fe000",
+	"fd535c8b-95fa-49e5-be59-02fd3be9f100",
+	"0d90dacb-3868-4c71-2885-086cf63bd300",
+}
+
+var uuidLike = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+var cfDeliveryHash = "HSI9oWWzl51z3qob-AZdpA"
+
+func resolveCoverURL(key string) string {
+	if key == "" {
+		return ""
+	}
+	if strings.HasPrefix(key, "seed/") && len(seedCoverImages) > 0 {
+		h := fnv.New32a()
+		h.Write([]byte(key))
+		idx := int(h.Sum32()) % len(seedCoverImages)
+		return fmt.Sprintf("https://imagedelivery.net/%s/%s/public", cfDeliveryHash, seedCoverImages[idx])
+	}
+	if uuidLike.MatchString(key) {
+		return fmt.Sprintf("https://imagedelivery.net/%s/%s/public", cfDeliveryHash, key)
+	}
+	return fmt.Sprintf("http://localhost:4000/media/%s", key)
+}
+
+func resolvePageURLs(keys []string) []string {
+	for _, k := range keys {
+		if k == "" {
+			continue
+		}
+		// For pages, use the same resolution as cover
+	}
+	urls := make([]string, len(keys))
+	for i, k := range keys {
+		urls[i] = resolveCoverURL(k)
+	}
+	return urls
+}
+
+func resolveComicURLs(c *Comic) {
+	c.CoverURL = resolveCoverURL(c.CoverKey)
+	if len(c.PageKeys) > 0 {
+		c.PageURLs = resolvePageURLs(c.PageKeys)
+	}
 }
 
 func generateSlug(title string) string {

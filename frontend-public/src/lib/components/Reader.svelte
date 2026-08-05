@@ -7,10 +7,11 @@
 	interface Props {
 		comicId: string;
 		pageKeys: string[];
+		pageUrls?: string[];
 		totalPages: number;
 	}
 
-	let { comicId, pageKeys, totalPages }: Props = $props();
+	let { comicId, pageKeys, pageUrls, totalPages }: Props = $props();
 
 	type FitMode = 'height' | 'width' | 'original';
 
@@ -21,8 +22,7 @@
 	let autosaveTimer: ReturnType<typeof setTimeout>;
 
 	const pageCount = $derived(totalPages || pageKeys.length || 1);
-	const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-	const pageImages = $derived(pageKeys.map(k => `${API}/media/${k}`));
+	const pageImages = $derived(pageUrls || pageKeys.map(k => `http://localhost:4000/media/${k}`));
 
 	const fitClass = $derived(fitMode === 'height' ? 'max-h-[85vh] w-auto object-contain' :
 		fitMode === 'width' ? 'w-full max-h-none object-contain' :

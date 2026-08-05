@@ -93,6 +93,7 @@ func scanComics(rows *sqldb.Rows) ([]Comic, error) {
 		if pubAt.Valid {
 			c.PublishedAt = pubAt.Time
 		}
+		resolveComicURLs(&c)
 		comics = append(comics, c)
 	}
 	return comics, rows.Err()

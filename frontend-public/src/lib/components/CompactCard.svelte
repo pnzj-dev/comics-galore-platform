@@ -40,7 +40,6 @@
 
 	function coverSrc(): string {
 		if (cover_url) return cover_url;
-		if (cover_key) return `${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/media/${cover_key}`;
 		return '';
 	}
 </script>
