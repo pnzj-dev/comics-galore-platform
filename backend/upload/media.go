@@ -3,6 +3,7 @@ package upload
 import (
 	"fmt"
 	"hash/fnv"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -13,6 +14,7 @@ import (
 var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 var seedImages []string
+var proxyClient = &http.Client{}
 
 func init() {
 	seedImages = []string{
@@ -40,7 +42,7 @@ func ServeMedia(w http.ResponseWriter, req *http.Request) {
 			h.Write([]byte(key))
 			idx := int(h.Sum32()) % len(seedImages)
 			url := fmt.Sprintf("https://imagedelivery.net/%s/%s/public", cfSecrets.CloudflareImagesHash, seedImages[idx])
-			http.Redirect(w, req, url, http.StatusTemporaryRedirect)
+			proxyImage(w, req, url)
 			return
 		}
 		w.Header().Set("Content-Type", "image/svg+xml")
@@ -51,7 +53,7 @@ func ServeMedia(w http.ResponseWriter, req *http.Request) {
 
 	if uuidRe.MatchString(key) && cfSecrets.CloudflareImagesHash != "" {
 		url := fmt.Sprintf("https://imagedelivery.net/%s/%s/public", cfSecrets.CloudflareImagesHash, key)
-		http.Redirect(w, req, url, http.StatusTemporaryRedirect)
+		proxyImage(w, req, url)
 		return
 	}
 
@@ -61,7 +63,26 @@ func ServeMedia(w http.ResponseWriter, req *http.Request) {
 		w.Write(placeholderSVG())
 		return
 	}
-	http.Redirect(w, req, url.URL, http.StatusTemporaryRedirect)
+	proxyImage(w, req, url.URL)
+}
+
+func proxyImage(w http.ResponseWriter, req *http.Request, url string) {
+	fetchReq, err := http.NewRequestWithContext(req.Context(), "GET", url, nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	resp, err := proxyClient.Do(fetchReq)
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	w.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
 
 func placeholderSVG() []byte {
