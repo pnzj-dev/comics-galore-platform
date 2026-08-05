@@ -494,3 +494,106 @@ func AdminListComics(ctx context.Context) (*ListComicsResponse, error) {
 
 	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
 }
+
+// ----- Comments -----
+
+type CommentData struct {
+	ID        string        `json:"id"`
+	ComicID   string        `json:"comic_id"`
+	UserID    string        `json:"user_id"`
+	ParentID  string        `json:"parent_id,omitempty"`
+	BodyText  string        `json:"body_text"`
+	CreatedAt time.Time     `json:"created_at"`
+	Replies   []CommentData `json:"replies,omitempty"`
+}
+
+type ListCommentsResponse struct {
+	Comments []CommentData `json:"comments"`
+}
+
+//encore:api public method=GET path=/comics/:id/comments
+func ListComments(ctx context.Context, id string) (*ListCommentsResponse, error) {
+	rows, err := db.Query(ctx, `
+		SELECT c.id, c.comic_id, c.user_id, COALESCE(c.parent_id::text, ''), c.body_text, c.created_at
+		FROM comments c
+		WHERE c.comic_id = $1
+		ORDER BY c.created_at ASC
+	`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var all []CommentData
+	for rows.Next() {
+		var c CommentData
+		if err := rows.Scan(&c.ID, &c.ComicID, &c.UserID, &c.ParentID, &c.BodyText, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		all = append(all, c)
+	}
+
+	roots := buildThread(all)
+	return &ListCommentsResponse{Comments: roots}, nil
+}
+
+type CreateCommentParams struct {
+	BodyText string `json:"body_text"`
+	ParentID string `json:"parent_id"`
+}
+
+//encore:api auth method=POST path=/comics/:id/comments
+func CreateComment(ctx context.Context, id string, p *CreateCommentParams) (*CommentData, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if p.BodyText == "" {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "body_text is required"}
+	}
+
+	var parentID interface{}
+	if p.ParentID != "" {
+		parentID = p.ParentID
+	}
+
+	var c CommentData
+	err := db.QueryRow(ctx, `
+		INSERT INTO comments (comic_id, user_id, parent_id, body_text)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, comic_id, user_id, COALESCE(parent_id::text, ''), body_text, created_at
+	`, id, ad.UserID, parentID, p.BodyText).Scan(&c.ID, &c.ComicID, &c.UserID, &c.ParentID, &c.BodyText, &c.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func buildThread(comments []CommentData) []CommentData {
+	children := make(map[string][]CommentData)
+	for _, c := range comments {
+		if c.ParentID != "" {
+			children[c.ParentID] = append(children[c.ParentID], c)
+		}
+	}
+	var result []CommentData
+	for _, c := range comments {
+		if c.ParentID == "" {
+			c.Replies = children[c.ID]
+			result = append(result, c)
+		}
+	}
+	return result
+}
+
+//encore:api auth method=DELETE path=/comments/:id
+func DeleteComment(ctx context.Context, id string) error {
+	ad := auth.Data().(*myauth.AuthData)
+	var userID string
+	err := db.QueryRow(ctx, `SELECT user_id FROM comments WHERE id = $1`, id).Scan(&userID)
+	if err != nil {
+		return &errs.Error{Code: errs.NotFound, Message: "comment not found"}
+	}
+	if userID != ad.UserID && ad.Role != "admin" && ad.Role != "moderator" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "not your comment"}
+	}
+	_, err = db.Exec(ctx, `DELETE FROM comments WHERE id = $1`, id)
+	return err
+}

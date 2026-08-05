@@ -8,6 +8,9 @@
 	import Reader from '$lib/components/Reader.svelte';
 	import ComicCard from '$lib/components/ComicCard.svelte';
 	import Lightbox from '$lib/components/Lightbox.svelte';
+	import CommentList from '$lib/components/CommentList.svelte';
+	import type { Comment } from '$lib/components/CommentList.svelte';
+	import CommentForm from '$lib/components/CommentForm.svelte';
 	import { currentUser } from '$lib/stores/auth';
 	import { Eye, Download, BookOpen, Globe, Clock } from 'lucide-svelte';
 
@@ -20,6 +23,10 @@
 	let likeStatus = $state<{ liked: boolean; favorited: boolean } | null>(null);
 	let related = $state<any[]>([]);
 	let relatedLoading = $state(true);
+
+	let comments = $state<Comment[]>([]);
+	let commentsLoading = $state(true);
+	let replyTarget = $state('');
 
 	const id = $derived($page.params.id);
 	const user = $derived($currentUser);
@@ -49,6 +56,7 @@
 			comic = await api.get(`/comics/${id}`);
 			if (user) { try { likeStatus = await api.get(`/comics/${id}/like-status`); } catch {} }
 			loadRelated();
+			loadComments();
 		} catch (err) { error = (err as Error).message; }
 		loading = false;
 	});
@@ -59,6 +67,25 @@
 			related = res.comics.filter((c: any) => c.id !== id).slice(0, 4);
 		} catch {}
 		relatedLoading = false;
+	}
+
+	async function loadComments() {
+		try {
+			const res = await api.get<{ comments: Comment[] }>(`/comics/${id}/comments`);
+			comments = res.comments;
+		} catch {}
+		commentsLoading = false;
+	}
+
+	async function submitComment(bodyText: string, parentId?: string) {
+		await api.post(`/comics/${id}/comments`, { body_text: bodyText, parent_id: parentId || '' });
+		replyTarget = '';
+		await loadComments();
+	}
+
+	async function deleteComment(commentId: string) {
+		await api.delete(`/comments/${commentId}`);
+		await loadComments();
 	}
 </script>
 
@@ -208,6 +235,35 @@
 				</div>
 			{:else}
 				<p class="text-sm text-muted-foreground text-center py-8">No related comics found.</p>
+			{/if}
+		</section>
+
+		<!-- Comments -->
+		<section class="mt-12">
+			<h2 class="text-xl font-semibold mb-4">Comments</h2>
+
+			{#if user}
+				<div class="mb-4">
+					<CommentForm onSubmit={submitComment} parentId={replyTarget} placeholder={replyTarget ? 'Write a reply...' : 'Write a comment...'} />
+				</div>
+			{/if}
+
+			{#if commentsLoading}
+				<div class="space-y-3">
+					{#each Array(3) as _}
+						<div class="flex gap-2 animate-pulse">
+							<div class="size-7 rounded-full bg-gray-200 dark:bg-gray-700 flex-shrink-0"></div>
+							<div class="flex-1 space-y-1.5">
+								<div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+								<div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{:else if comments.length > 0}
+				<CommentList comments={comments} onReply={(id) => replyTarget = id} onDelete={deleteComment} userId={user?.id} role={user?.role} />
+			{:else}
+				<p class="text-sm text-muted-foreground text-center py-4">No comments yet. Be the first!</p>
 			{/if}
 		</section>
 	</div>
