@@ -569,17 +569,61 @@ When loading, show skeleton cards matching the ComicCard layout:
 - Quick Look overlay (cover + first pages).
 - Local session stats visible in a discreet panel.
 
-### Admin Control Panel
+### Admin Control Panel (`frontend-admin/` — admin.comics-galore.com)
+
+Separate SvelteKit application with admin-only features. Login required (no register). All pages use **data tables** (not card grids) with consistent table styling.
+
+**Layout:**
+- Sticky admin navbar: Dashboard, Moderation, Users, Subscriptions, Comics
 - Persistent **red banner** when plan matrix is incomplete
-- Dashboard: KPI cards, charts, activity feeds, quick actions
-- Datalists with search, filter, **saved views**, **bulk actions**, **CSV export**
-- User detail drawer (subs, downloads, flags, tickets); ban/suspend; audited impersonation
-- Comics/series/tags management; recycle bin; scheduled list; Staff Picks ordering
-- Plan matrix editor; manual subscription grant/extend; coupons; past-due list
-- AI settings + AI review queue + decision log
-- System health: background jobs, dead-letter retry, storage usage
-- Broadcast announcements; email template preview
-- Support tickets; audit log; general settings
+- Dark mode support via theme toggle
+
+**Table pattern (all admin pages):**
+```
+┌─ Table ────────────────────────────────────────────────────┐
+│  border border-border rounded-xl overflow-hidden           │
+│                                                            │
+│  ── Header row (bg-muted/50, font-medium) ──               │
+│  Col 1      Col 2      Col 3      Col 4      Actions      │
+│  ── Data rows (divide-y, hover:bg-muted/30) ──            │
+│  Value      Value      Value      Value      [Edit][Del]  │
+│  Value      Value      Value      Value      [Edit][Del]  │
+│  ── Empty state: text-center py-12 text-muted ──           │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Loading**: Skeleton table rows (8 rows with pulsing gray bars, matching column widths).
+
+**Actions per row:**
+- **Edit**: Inline editor (role dropdown for users, status change for comics) or opens edit modal
+- **Delete**: Button → inline confirmation (Confirm / Cancel), calls DELETE API, removes row
+- **Create**: Global create button opens a creation modal (reuses existing forms)
+
+**Dashboard:**
+- 6 KPI cards (users, comics, pending, active subs, downloads, views)
+- Lucide icons per card, skeleton cards on loading
+
+**Moderation:**
+- Pending comics queue with checkboxes + bulk approve/reject
+- Select all toggle, "N selected" action bar
+- Per-item: title, submit date, approve/reject buttons
+- Loading: 4 skeleton cards with checkbox + title placeholders
+
+**Users:**
+- Table: Email, Role (dropdown), Tier (badge), Created date, Actions
+- Inline role change via `<select>` dropdown
+- Skeleton: 8 table rows with column-width matches
+
+**Subscriptions:**
+- Table: User ID (truncated UUID), Plan ID, Status (badge), Tier, Expires, Actions
+- Cancel button (disabled — API pending)
+- Skeleton: 6 table rows
+
+**Comics:**
+- Table: Title (link to public page), Status (badge), Views, Downloads, Created, Actions
+- Delete with inline confirmation (button → Confirm/Cancel)
+- Edit button (disabled — API pending)
+- Skeleton: 8 table rows
 
 ## Public experience (completed)
 

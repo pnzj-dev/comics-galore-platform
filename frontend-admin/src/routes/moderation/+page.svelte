@@ -68,7 +68,19 @@
 	<h1 class="text-3xl font-bold mb-6">Moderation Queue</h1>
 
 	{#if loading}
-		<p class="text-muted-foreground">Loading...</p>
+		<div class="space-y-3">
+			{#each Array(4) as _}
+				<div class="rounded-xl border border-border p-4 animate-pulse">
+					<div class="flex gap-3">
+						<div class="w-4 h-4 rounded bg-gray-200 dark:bg-gray-700 mt-1"></div>
+						<div class="flex-1 space-y-2">
+							<div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
+							<div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+						</div>
+					</div>
+				</div>
+			{/each}
+		</div>
 	{:else if pending.length === 0}
 		<div class="text-center py-12">
 			<p class="text-lg text-muted-foreground">No comics pending review.</p>
