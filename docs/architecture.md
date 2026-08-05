@@ -41,16 +41,17 @@
 
 ```
 Comics-Galore/
-├── backend/                 # Encore Go API (single source of truth)
-├── frontend/                # SvelteKit web application
-├── desktop/                 # Wails v2 application
-│   ├── main.go / app.go     # Go side (bindings, native menus, etc.)
-│   └── frontend/            # Vite + Svelte app that uses packages/ui
+├── backend/                     # Encore Go API (single source of truth)
+├── frontend-public/             # SvelteKit web app — comics-galore.com
+├── frontend-admin/              # SvelteKit web app — admin.comics-galore.com
+├── desktop/                     # Wails v2 application
+│   ├── main.go / app.go         # Go side (bindings, native menus, etc.)
+│   └── frontend/                # Vite + Svelte app that uses packages/ui
 └── packages/
-    └── ui/                  # Shared Svelte code
+    └── ui/                      # Shared Svelte code
         ├── components/
         ├── forms/
-        ├── lib/             # Zod, stores, upload-session, API helpers
+        ├── lib/                 # Zod, stores, upload-session, API helpers
         └── ...
 ```
 
@@ -69,12 +70,23 @@ Must contain (at minimum):
 Web and desktop both import from this package.  
 Duplication of UI or validation logic is considered a bug.
 
-## Web Client (SvelteKit)
+## Web Client — Two Applications
+
+### Public (`frontend-public/` — comics-galore.com)
 
 - Full SSR / progressive enhancement for public pages.
-- Route groups: `(public)`, `(app)`, `(uploader)`, `(moderator)`, `(admin)`.
+- Route groups: `(public)`, `(app)`, `(auth)`.
 - Uses `packages/ui` for almost all visual and form code.
-- Handles SEO, RSS, Open Graph, legal pages, age gate, tag pages, series follow, notification preferences.
+- Handles home, browse, detail, reader, series, tags, pricing, upload, settings, auth, SEO, RSS, Open Graph, legal pages, age gate.
+
+### Admin (`frontend-admin/` — admin.comics-galore.com)
+
+- Separate SvelteKit application for admin-only features.
+- Login required (no register — admins are created by the system).
+- Uses `packages/ui` for shared components.
+- Handles dashboard, moderation, user management, subscriptions, comics management.
+- Shows red plan matrix banner when incomplete.
+- No public content or discovery features.
 
 ## Desktop Client (Wails)
 

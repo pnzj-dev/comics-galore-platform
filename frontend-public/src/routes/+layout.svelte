@@ -28,12 +28,6 @@
 				{#if user.role === 'moderator' || user.role === 'admin'}
 					<a href="/moderation" class="text-sm text-muted-foreground hover:text-foreground">Moderation</a>
 				{/if}
-				{#if user.role === 'admin'}
-					<a href="/dashboard" class="text-sm text-muted-foreground hover:text-foreground">Dashboard</a>
-					<a href="/subscriptions" class="text-sm text-muted-foreground hover:text-foreground">Subscriptions</a>
-					<a href="/users" class="text-sm text-muted-foreground hover:text-foreground">Users</a>
-					<a href="/admin/comics" class="text-sm text-muted-foreground hover:text-foreground">Comics</a>
-				{/if}
 			{/if}
 		</div>
 		<div class="flex items-center gap-2">
@@ -50,12 +44,6 @@
 		</div>
 	</div>
 </nav>
-
-{#if authed && user?.role === 'admin'}
-	<div class="bg-red-600 text-white text-xs text-center py-1.5 font-medium">
-		Action required: Configure the complete plan matrix in admin settings.
-	</div>
-{/if}
 
 <main class="max-w-7xl mx-auto p-4">
 	{@render children()}

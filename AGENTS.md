@@ -55,7 +55,8 @@ Comics-Galore/
 ├── README.md
 ├── docs/
 ├── backend/                     # Encore Go API
-├── frontend/                    # SvelteKit web app
+├── frontend-public/             # SvelteKit web app (comics-galore.com)
+├── frontend-admin/              # SvelteKit web app (admin.comics-galore.com)
 ├── desktop/                     # Wails application
 │   ├── main.go / app.go         # Wails Go bindings
 │   └── frontend/                # Svelte (Vite) app that consumes shared UI
@@ -69,8 +70,10 @@ Comics-Galore/
 
 Rules:
 - All reusable Svelte UI and client logic lives in `packages/ui`.
-- `frontend/` (SvelteKit) and `desktop/frontend/` both import from `packages/ui`.
-- Desktop-specific code (native menus, file dialogs, window management, offline helpers) lives only under `desktop/`.
+- `frontend-public/` (SvelteKit) and `frontend-admin/` (SvelteKit) both import from `packages/ui`.
+- Public app handles all consumer-facing features (home, browse, reader, auth, upload, settings).
+- Admin app handles admin-only features (dashboard, moderation, users, subscriptions, comics).
+- Do not add admin features to public app or public features to admin app.
 - The Encore backend remains the single source of truth for business logic, auth, payments and data.
 
 ---
