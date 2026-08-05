@@ -69,7 +69,7 @@
 		relatedLoading = false;
 	}
 
-	async function loadComments() {
+			async function loadComments() {
 		try {
 			const res = await api.get<{ comments: Comment[] }>(`/comics/${id}/comments`);
 			comments = res.comments;
@@ -87,10 +87,25 @@
 		await api.delete(`/comments/${commentId}`);
 		await loadComments();
 	}
+
+	async function handleDownload() {
+		try {
+			const res = await api.post<{ allowed: boolean; used: number; limit: number; message: string }>(`/comics/${comic.id}/download`);
+			if (!res.allowed) {
+				alert(`${res.message}\nYou've used ${res.used} of ${res.limit} downloads.`);
+			} else if (res.used >= res.limit * 0.8) {
+				alert(`Download started!\nQuota warning: ${res.used} of ${res.limit} downloads used.`);
+			}
+		} catch {}
+	}
 </script>
 
 <svelte:head>
 	<title>{comic?.title || 'Comic'} - Comics Galore</title>
+	<meta property="og:title" content={comic?.title || 'Comic'} />
+	<meta property="og:description" content={comic?.description || 'Discover and read comics on Comics Galore'} />
+	<meta property="og:type" content="article" />
+	<meta name="description" content={comic?.description || ''} />
 </svelte:head>
 
 {#if reading && comic}
@@ -197,7 +212,7 @@
 						<Button size="lg" class="bg-emerald-600 hover:bg-emerald-700" onclick={() => reading = true}>Start Reading</Button>
 					{/if}
 					{#if user}
-						<Button size="lg" variant="outline">Download</Button>
+						<Button size="lg" variant="outline" onclick={handleDownload}>Download</Button>
 					{:else}
 						<Button size="lg" variant="outline" href="/login">Sign in</Button>
 					{/if}

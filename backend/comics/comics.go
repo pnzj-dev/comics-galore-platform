@@ -2,6 +2,7 @@ package comics
 
 import (
 	"context"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -744,4 +745,50 @@ func UnfollowSeries(ctx context.Context, id string) error {
 	ad := auth.Data().(*myauth.AuthData)
 	_, err := db.Exec(ctx, `DELETE FROM series_follows WHERE user_id = $1 AND series_id = $2`, ad.UserID, id)
 	return err
+}
+
+// ----- RSS Feed -----
+
+//encore:api public raw method=GET path=/rss
+func RSSFeed(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	rows, err := db.Query(ctx, `
+		SELECT title, slug, description, published_at FROM comics
+		WHERE status = 'published' ORDER BY published_at DESC LIMIT 20
+	`)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
+	w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Comics Galore</title><link>https://comicsgalore.com</link><description>Discover and read digital comics</description>`))
+
+	for rows.Next() {
+		var title, slug, desc string
+		var pubAt *time.Time
+		rows.Scan(&title, &slug, &desc, &pubAt)
+		pubDate := ""
+		if pubAt != nil {
+			pubDate = pubAt.Format(time.RFC1123Z)
+		}
+		w.Write([]byte(`<item><title>` + escapeXML(title) + `</title><link>https://comicsgalore.com/comics/` + slug + `</link><description>` + escapeXML(desc) + `</description><pubDate>` + pubDate + `</pubDate></item>`))
+	}
+
+	w.Write([]byte(`</channel></rss>`))
+}
+
+func escapeXML(s string) string {
+	result := ""
+	for _, c := range s {
+		switch c {
+		case '&': result += "&amp;"
+		case '<': result += "&lt;"
+		case '>': result += "&gt;"
+		case '"': result += "&quot;"
+		default: result += string(c)
+		}
+	}
+	return result
 }

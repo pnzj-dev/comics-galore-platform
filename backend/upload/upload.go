@@ -220,3 +220,35 @@ func GetSession(ctx context.Context, id string) (*UploadSession, error) {
 	}
 	return &s, nil
 }
+
+type ListSessionsResponse struct {
+	Sessions []UploadSession `json:"sessions"`
+}
+
+//encore:api auth method=GET path=/upload-sessions
+func ListActiveSessions(ctx context.Context) (*ListSessionsResponse, error) {
+	ad := auth.Data().(*myauth.AuthData)
+
+	rows, err := db.Query(ctx, `
+		SELECT id, user_id, mode, status, s3_prefix, parts, expires_at, created_at
+		FROM upload_sessions WHERE user_id = $1 AND status = 'active' AND expires_at > now()
+		ORDER BY created_at DESC LIMIT 10
+	`, ad.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sessions []UploadSession
+	for rows.Next() {
+		var s UploadSession
+		var partsBytes []byte
+		if err := rows.Scan(&s.ID, &s.UserID, &s.Mode, &s.Status, &s.S3Prefix, &partsBytes, &s.ExpiresAt, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		scanParts(partsBytes, &s.Parts)
+		sessions = append(sessions, s)
+	}
+
+	return &ListSessionsResponse{Sessions: sessions}, rows.Err()
+}
