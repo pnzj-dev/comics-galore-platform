@@ -134,6 +134,10 @@ func Register(ctx context.Context, p *RegisterParams) (*AuthResponse, error) {
 		return nil, err
 	}
 
+	verifyToken := randomToken(32)
+	db.Exec(ctx, `UPDATE users SET verify_token = $1, verify_token_expires_at = now() + interval '24 hours' WHERE id = $2`, verifyToken, user.ID)
+	go sendVerificationEmail(user.Email, verifyToken)
+
 	return &AuthResponse{
 		Token: token,
 		User:  user,
@@ -275,7 +279,7 @@ func ResendVerification(ctx context.Context) error {
 	data := auth.Data().(*AuthData)
 
 	var verified bool
-	db.QueryRow(ctx, `SELECT email_verified_at IS NOT NULL FROM users WHERE id = $1`, data.UserID).Scan(&verified)
+		db.QueryRow(ctx, `SELECT email_verified_at IS NOT NULL FROM users WHERE id = $1`, data.UserID).Scan(&verified)
 	if verified {
 		return &errs.Error{Code: errs.InvalidArgument, Message: "email already verified"}
 	}
@@ -287,6 +291,12 @@ func ResendVerification(ctx context.Context) error {
 	`, token, data.UserID)
 	if err != nil {
 		return err
+	}
+
+	var email string
+	db.QueryRow(ctx, `SELECT email FROM users WHERE id = $1`, data.UserID).Scan(&email)
+	if email != "" {
+		go sendVerificationEmail(email, token)
 	}
 	return nil
 }
@@ -312,7 +322,9 @@ func RequestPasswordReset(ctx context.Context, p *PasswordResetRequest) error {
 		return err
 	}
 	n := result.RowsAffected()
-	_ = n // Always return success to prevent email enumeration
+	if n > 0 {
+		go sendPasswordResetEmail(p.Email, token)
+	}
 	return nil
 }
 
