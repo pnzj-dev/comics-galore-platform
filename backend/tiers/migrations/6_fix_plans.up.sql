@@ -1,6 +1,9 @@
 -- Cleanup and re-seed plans with correct pricing, features, and intervals.
 -- Run this migration to fix discrepancies from old seed data.
 
+ALTER TABLE plans DROP CONSTRAINT IF EXISTS plans_interval_check;
+ALTER TABLE plans ADD CONSTRAINT plans_interval_check CHECK (interval IN ('monthly', 'quarterly', 'semesterly', 'yearly'));
+
 DELETE FROM plans;
 
 INSERT INTO plans (tier_id, name, interval, price_usd_cents, quota_downloads, features, provider_interval_days)
