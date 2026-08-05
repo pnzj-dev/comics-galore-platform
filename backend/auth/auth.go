@@ -245,6 +245,110 @@ func RenewToken(ctx context.Context) (*AuthResponse, error) {
 	}, nil
 }
 
+// ----- Email Verification -----
+
+type VerifyEmailParams struct {
+	Token string `json:"token"`
+}
+
+//encore:api public method=POST path=/auth/verify-email
+func VerifyEmail(ctx context.Context, p *VerifyEmailParams) error {
+	if p.Token == "" {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "token is required"}
+	}
+	result, err := db.Exec(ctx, `
+		UPDATE users SET email_verified_at = now(), verify_token = NULL, verify_token_expires_at = NULL
+		WHERE verify_token = $1 AND verify_token_expires_at > now() AND email_verified_at IS NULL
+	`, p.Token)
+	if err != nil {
+		return err
+	}
+	n := result.RowsAffected()
+	if n == 0 {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "invalid or expired verification token"}
+	}
+	return nil
+}
+
+//encore:api auth method=POST path=/auth/resend-verification
+func ResendVerification(ctx context.Context) error {
+	data := auth.Data().(*AuthData)
+
+	var verified bool
+	db.QueryRow(ctx, `SELECT email_verified_at IS NOT NULL FROM users WHERE id = $1`, data.UserID).Scan(&verified)
+	if verified {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "email already verified"}
+	}
+
+	token := randomToken(32)
+	_, err := db.Exec(ctx, `
+		UPDATE users SET verify_token = $1, verify_token_expires_at = now() + interval '24 hours'
+		WHERE id = $2 AND email_verified_at IS NULL
+	`, token, data.UserID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ----- Password Reset -----
+
+type PasswordResetRequest struct {
+	Email string `json:"email"`
+}
+
+//encore:api public method=POST path=/auth/password-reset/request
+func RequestPasswordReset(ctx context.Context, p *PasswordResetRequest) error {
+	if p.Email == "" {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "email is required"}
+	}
+
+	token := randomToken(32)
+	result, err := db.Exec(ctx, `
+		UPDATE users SET reset_token = $1, reset_token_expires_at = now() + interval '1 hour'
+		WHERE email = $2
+	`, token, p.Email)
+	if err != nil {
+		return err
+	}
+	n := result.RowsAffected()
+	_ = n // Always return success to prevent email enumeration
+	return nil
+}
+
+type PasswordResetConfirm struct {
+	Token    string `json:"token"`
+	Password string `json:"password" encore:"sensitive"`
+}
+
+//encore:api public method=POST path=/auth/password-reset/confirm
+func ConfirmPasswordReset(ctx context.Context, p *PasswordResetConfirm) error {
+	if p.Token == "" || p.Password == "" {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "token and password are required"}
+	}
+	if len(p.Password) < 8 {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "password must be at least 8 characters"}
+	}
+
+	hash, err := hashPassword(p.Password)
+	if err != nil {
+		return err
+	}
+
+	result, err := db.Exec(ctx, `
+		UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires_at = NULL
+		WHERE reset_token = $2 AND reset_token_expires_at > now()
+	`, hash, p.Token)
+	if err != nil {
+		return err
+	}
+	n := result.RowsAffected()
+	if n == 0 {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "invalid or expired reset token"}
+	}
+	return nil
+}
+
 type User struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
