@@ -35,7 +35,7 @@
 	<div class="flex items-center justify-between mb-6">
 		<h1 class="text-3xl font-bold">Browse Comics</h1>
 		<div class="flex items-center gap-2">
-			<Label for="lang-filter" class="text-sm text-muted-foreground">Language:</Label>
+			<label for="lang-filter" class="text-sm text-muted-foreground">Language:</label>
 			<select id="lang-filter" value={langFilter} onchange={changeLang} class="rounded-md border border-input bg-background px-3 py-1.5 text-sm">
 				<option value="">All languages</option>
 				{#each languages.filter(l => l !== '') as lang}
