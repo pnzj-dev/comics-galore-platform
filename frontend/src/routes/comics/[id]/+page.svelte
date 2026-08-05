@@ -141,15 +141,16 @@
 			<!-- Cover Column -->
 			<div class="space-y-3">
 				<div class="aspect-[3/4] rounded-xl bg-muted overflow-hidden relative">
-					<img
-						src={coverSrc}
-						alt={comic.title}
-						onclick={() => openLightbox(0)}
-						class="w-full h-full object-cover cursor-zoom-in"
-						loading="eager"
-						onerror={(e) => { const t = e.target as HTMLImageElement; t.style.display = 'none'; (t.nextElementSibling as HTMLElement).style.display = 'flex'; }}
-					/>
-					<div class="w-full h-full items-center justify-center text-muted-foreground hidden">
+					<button onclick={() => openLightbox(0)} class="w-full h-full p-0 border-0 bg-transparent cursor-zoom-in" aria-label="Open cover image">
+						<img
+							src={coverSrc}
+							alt={comic.title}
+							class="w-full h-full object-cover"
+							loading="eager"
+							onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (document.querySelector('.cover-fallback') as HTMLElement).style.display = 'flex'; }}
+						/>
+					</button>
+					<div class="cover-fallback w-full h-full items-center justify-center text-muted-foreground hidden absolute inset-0">
 						<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
 					</div>
 					<div class="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">{comic.page_keys?.length || 0} pages</div>
