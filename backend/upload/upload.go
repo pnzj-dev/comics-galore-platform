@@ -220,8 +220,3 @@ func GetSession(ctx context.Context, id string) (*UploadSession, error) {
 	}
 	return &s, nil
 }
-
-//encore:api public method=GET path=/media/:key
-func ServeMedia(ctx context.Context, key string) error {
-	return nil
-}
