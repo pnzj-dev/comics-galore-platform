@@ -347,3 +347,77 @@ func AdminUpdateUserRole(ctx context.Context, id string, p *UpdateUserRoleParams
 		p.Role, id, data.UserID)
 	return err
 }
+
+// ----- Notification Preferences -----
+
+type NotificationPrefs struct {
+	EmailFromFollowing bool `json:"email_new_from_following"`
+	EmailSupportReplies bool `json:"email_support_replies"`
+	EmailMarketing     bool `json:"email_marketing"`
+	InAppEnabled       bool `json:"in_app_enabled"`
+}
+
+//encore:api auth method=GET path=/me/notification-preferences
+func GetNotificationPrefs(ctx context.Context) (*NotificationPrefs, error) {
+	data := auth.Data().(*AuthData)
+	var p NotificationPrefs
+	err := db.QueryRow(ctx, `
+		SELECT COALESCE(np.email_new_from_following, true),
+			COALESCE(np.email_support_replies, true),
+			COALESCE(np.email_marketing, false),
+			COALESCE(np.in_app_enabled, true)
+		FROM notification_preferences np WHERE np.user_id = $1
+	`, data.UserID).Scan(&p.EmailFromFollowing, &p.EmailSupportReplies, &p.EmailMarketing, &p.InAppEnabled)
+	if err != nil {
+		if isNoRows(err) {
+			return &NotificationPrefs{EmailFromFollowing: true, EmailSupportReplies: true, InAppEnabled: true}, nil
+		}
+		return nil, err
+	}
+	return &p, nil
+}
+
+//encore:api auth method=PATCH path=/me/notification-preferences
+func UpdateNotificationPrefs(ctx context.Context, p *NotificationPrefs) (*NotificationPrefs, error) {
+	data := auth.Data().(*AuthData)
+	_, err := db.Exec(ctx, `
+		INSERT INTO notification_preferences (user_id, email_new_from_following, email_support_replies, email_marketing, in_app_enabled)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (user_id) DO UPDATE SET
+			email_new_from_following = $2, email_support_replies = $3,
+			email_marketing = $4, in_app_enabled = $5, updated_at = now()
+	`, data.UserID, p.EmailFromFollowing, p.EmailSupportReplies, p.EmailMarketing, p.InAppEnabled)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// ----- Admin Dashboard Stats -----
+
+type DashboardStats struct {
+	TotalUsers        int `json:"total_users"`
+	TotalComics       int `json:"total_comics"`
+	PendingComics     int `json:"pending_comics"`
+	ActiveSubs        int `json:"active_subscriptions"`
+	TotalDownloads    int `json:"total_downloads"`
+	TotalViews        int `json:"total_views"`
+}
+
+//encore:api auth method=GET path=/admin/stats
+func AdminDashboardStats(ctx context.Context) (*DashboardStats, error) {
+	data := auth.Data().(*AuthData)
+	if data.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	var stats DashboardStats
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&stats.TotalUsers)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics`).Scan(&stats.TotalComics)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics WHERE status = 'pending_review'`).Scan(&stats.PendingComics)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM subscriptions WHERE active = true`).Scan(&stats.ActiveSubs)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM download_logs`).Scan(&stats.TotalDownloads)
+	db.QueryRow(ctx, `SELECT COALESCE(SUM(view_count), 0) FROM comics`).Scan(&stats.TotalViews)
+
+	return &stats, nil
+}

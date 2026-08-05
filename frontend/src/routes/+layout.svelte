@@ -29,6 +29,7 @@
 					<a href="/moderation" class="text-sm text-muted-foreground hover:text-foreground">Moderation</a>
 				{/if}
 				{#if user.role === 'admin'}
+					<a href="/dashboard" class="text-sm text-muted-foreground hover:text-foreground">Dashboard</a>
 					<a href="/subscriptions" class="text-sm text-muted-foreground hover:text-foreground">Subscriptions</a>
 					<a href="/users" class="text-sm text-muted-foreground hover:text-foreground">Users</a>
 					<a href="/admin/comics" class="text-sm text-muted-foreground hover:text-foreground">Comics</a>
