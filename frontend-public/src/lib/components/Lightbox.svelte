@@ -8,6 +8,7 @@
 
 	let { images, open, startIndex = 0, onClose }: Props = $props();
 
+	// svelte-ignore state_referenced_locally
 	let currentIndex = $state(startIndex);
 
 	function handleKeydown(e: KeyboardEvent) {
@@ -24,8 +25,8 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
-	<div class="fixed inset-0 z-60 bg-black/95 flex flex-col" onclick={onClose} role="dialog" aria-label="Image lightbox">
-		<div class="flex items-center justify-between p-4 text-white/80 text-sm flex-shrink-0" onclick={(e) => e.stopPropagation()}>
+	<div class="fixed inset-0 z-60 bg-black/95 flex flex-col" onclick={onClose} role="dialog" tabindex="-1" aria-label="Image lightbox">
+		<div class="flex items-center justify-between p-4 text-white/80 text-sm flex-shrink-0" onclick={(e) => e.stopPropagation()} role="presentation">
 			<span>{currentIndex + 1} / {images.length}</span>
 			<div class="flex gap-1.5 mx-4">
 				{#each images as _, i}
@@ -34,9 +35,11 @@
 			</div>
 			<button onclick={onClose} class="hover:text-white" aria-label="Close">✕</button>
 		</div>
-		<div class="flex-1 flex items-center justify-center overflow-hidden relative" onclick={(e) => e.stopPropagation()}>
+		<div class="flex-1 flex items-center justify-center overflow-hidden relative" onclick={(e) => e.stopPropagation()} role="presentation">
 			<button onclick={prev} disabled={currentIndex === 0} class="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white disabled:opacity-30" aria-label="Previous">&larr;</button>
-			<img onclick={() => currentIndex < images.length - 1 && currentIndex++} src={images[currentIndex]} alt={`Image ${currentIndex + 1}`} class="max-h-[85vh] max-w-[90vw] object-contain select-none cursor-pointer" draggable="false" />
+			<button onclick={() => currentIndex < images.length - 1 && currentIndex++} class="p-0 border-0 bg-transparent" aria-label="Next image">
+				<img src={images[currentIndex]} alt={`Image ${currentIndex + 1}`} class="max-h-[85vh] max-w-[90vw] object-contain select-none cursor-pointer" draggable="false" />
+			</button>
 			<button onclick={next} disabled={currentIndex >= images.length - 1} class="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white disabled:opacity-30" aria-label="Next">&rarr;</button>
 		</div>
 	</div>

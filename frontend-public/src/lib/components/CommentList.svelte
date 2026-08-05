@@ -51,7 +51,7 @@
 				</div>
 
 				{#if comment.replies && comment.replies.length > 0}
-					<svelte:self comments={comment.replies} {onReply} {onDelete} {userId} {role} depth={depth + 1} />
+					<CommentList comments={comment.replies} {onReply} {onDelete} {userId} {role} depth={depth + 1} />
 				{/if}
 			</div>
 		{/each}
