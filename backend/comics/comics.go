@@ -643,3 +643,105 @@ func DeleteComment(ctx context.Context, id string) error {
 	_, err = db.Exec(ctx, `DELETE FROM comments WHERE id = $1`, id)
 	return err
 }
+
+// ----- Series -----
+
+type Series struct {
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	Slug        string    `json:"slug"`
+	Description string    `json:"description"`
+	UploaderID  string    `json:"uploader_id"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type CreateSeriesParams struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+}
+
+//encore:api auth method=POST path=/series
+func CreateSeries(ctx context.Context, p *CreateSeriesParams) (*Series, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "uploader" && ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "only uploaders can create series"}
+	}
+	if p.Title == "" {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "title is required"}
+	}
+
+	slug := generateSlug(p.Title)
+	var s Series
+	err := db.QueryRow(ctx, `
+		INSERT INTO series (title, slug, description, uploader_id)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, title, slug, description, uploader_id, created_at
+	`, p.Title, slug, p.Description, ad.UserID).Scan(&s.ID, &s.Title, &s.Slug, &s.Description, &s.UploaderID, &s.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+type ListSeriesResponse struct {
+	Series []Series `json:"series"`
+}
+
+//encore:api public method=GET path=/series
+func ListSeries(ctx context.Context) (*ListSeriesResponse, error) {
+	rows, err := db.Query(ctx, `SELECT id, title, slug, description, uploader_id, created_at FROM series ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []Series
+	for rows.Next() {
+		var s Series
+		if err := rows.Scan(&s.ID, &s.Title, &s.Slug, &s.Description, &s.UploaderID, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		result = append(result, s)
+	}
+	return &ListSeriesResponse{Series: result}, rows.Err()
+}
+
+//encore:api public method=GET path=/series/:id
+func GetSeries(ctx context.Context, id string) (*Series, error) {
+	var s Series
+	err := db.QueryRow(ctx, `SELECT id, title, slug, description, uploader_id, created_at FROM series WHERE id = $1`, id).Scan(&s.ID, &s.Title, &s.Slug, &s.Description, &s.UploaderID, &s.CreatedAt)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.NotFound, Message: "series not found"}
+	}
+	return &s, nil
+}
+
+//encore:api public method=GET path=/series/:id/comics
+func SeriesComics(ctx context.Context, id string) (*ListComicsResponse, error) {
+	rows, err := db.Query(ctx, `
+		SELECT id, uploader_id, title, slug, description, content_language, status,
+			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
+			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count,
+			created_at, updated_at
+		FROM comics WHERE series_id = $1 AND status = 'published'
+		ORDER BY series_order ASC, published_at ASC
+	`, id)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	comics, err := scanComics(rows)
+	if err != nil { return nil, err }
+	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
+}
+
+//encore:api auth method=POST path=/series/:id/follow
+func FollowSeries(ctx context.Context, id string) error {
+	ad := auth.Data().(*myauth.AuthData)
+	_, err := db.Exec(ctx, `INSERT INTO series_follows (user_id, series_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, ad.UserID, id)
+	return err
+}
+
+//encore:api auth method=DELETE path=/series/:id/follow
+func UnfollowSeries(ctx context.Context, id string) error {
+	ad := auth.Data().(*myauth.AuthData)
+	_, err := db.Exec(ctx, `DELETE FROM series_follows WHERE user_id = $1 AND series_id = $2`, ad.UserID, id)
+	return err
+}
