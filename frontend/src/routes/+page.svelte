@@ -6,13 +6,18 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 
 	const user = $derived($currentUser);
-	let comics = $state<any[]>([]);
+	let latestComics = $state<any[]>([]);
+	let popularComics = $state<any[]>([]);
 	let loading = $state(true);
 
 	onMount(async () => {
 		try {
-			const res = await api.get<{ comics: any[] }>('/comics?limit=8');
-			comics = res.comics;
+			const [latest, popular] = await Promise.all([
+				api.get<{ comics: any[] }>('/comics?limit=4&sort=newest'),
+				api.get<{ comics: any[] }>('/comics?limit=4&sort=popular')
+			]);
+			latestComics = latest.comics;
+			popularComics = popular.comics;
 		} catch {}
 		loading = false;
 	});
@@ -38,45 +43,39 @@
 	</div>
 </section>
 
-<!-- Latest Comics Rail -->
+<!-- Latest Comics -->
 <section class="py-8">
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-xl font-semibold">Latest Comics</h2>
 		<a href="/comics" class="text-sm text-primary hover:underline">View all</a>
 	</div>
-
 	{#if loading}
-		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+		<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
 			{#each Array(4) as _}
 				<div class="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden animate-pulse">
 					<div class="aspect-[3/4] bg-gray-200 dark:bg-gray-700"></div>
-					<div class="p-3 space-y-2">
-						<div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
-						<div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
-					</div>
+					<div class="p-3 space-y-2"><div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div><div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"></div></div>
 				</div>
 			{/each}
 		</div>
-	{:else if comics.length === 0}
-		<div class="text-center py-12">
-			<p class="text-muted-foreground">No comics published yet. Be the first!</p>
-		</div>
+	{:else if latestComics.length === 0}
+		<p class="text-muted-foreground text-center py-8">No comics published yet. Be the first!</p>
 	{:else}
-		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-			{#each comics.slice(0, 4) as comic}
-				<ComicCard {...comic} />
-			{/each}
+		<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+			{#each latestComics as comic}<ComicCard {...comic} />{/each}
 		</div>
 	{/if}
 </section>
 
-{#if comics.length > 4}
+<!-- Popular This Month -->
+{#if popularComics.length > 0}
 	<section class="py-8">
-		<h2 class="text-xl font-semibold mb-4">Popular This Month</h2>
-		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-			{#each comics.slice(4, 8) as comic}
-				<ComicCard {...comic} />
-			{/each}
+		<div class="flex items-center justify-between mb-4">
+			<h2 class="text-xl font-semibold">Popular This Month</h2>
+			<a href="/comics?sort=popular" class="text-sm text-primary hover:underline">View all</a>
+		</div>
+		<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
+			{#each popularComics as comic}<ComicCard {...comic} />{/each}
 		</div>
 	</section>
 {/if}

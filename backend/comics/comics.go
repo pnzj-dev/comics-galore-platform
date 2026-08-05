@@ -147,6 +147,8 @@ type ListComicsParams struct {
 	Limit    int    `query:"limit"`
 	Language string `query:"language"`
 	Search   string `query:"search"`
+	Tag      string `query:"tag"`
+	Sort     string `query:"sort"`
 }
 
 type ListComicsResponse struct {
@@ -171,10 +173,15 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 	args = append(args, "published")
 
 	if p.Language != "" {
-		where = "WHERE status = $1 AND content_language = $2"
+		where = "WHERE status = $1 AND content_language = $" + nextIdx(len(args)+1)
 		args = append(args, p.Language)
 	} else {
 		where = "WHERE status = $1"
+	}
+
+	if p.Tag != "" {
+		where += " AND tags @> $" + nextIdx(len(args)+1) + "::jsonb"
+		args = append(args, `["`+p.Tag+`"]`)
 	}
 
 	var total int
@@ -186,13 +193,23 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 	queryArgs := append(args, limit, offset)
 	limitIdx := len(args) + 1
 	offsetIdx := len(args) + 2
+	var orderBy string
+	switch p.Sort {
+	case "popular":
+		orderBy = "view_count DESC"
+	case "newest":
+		orderBy = "published_at DESC"
+	default:
+		orderBy = "published_at DESC"
+	}
+
 	rows, err := db.Query(ctx, `
 		SELECT id, uploader_id, title, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
 			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count,
 			created_at, updated_at
 		FROM comics `+where+`
-		ORDER BY published_at DESC
+		ORDER BY `+orderBy+`
 		LIMIT $`+nextIdx(limitIdx)+` OFFSET $`+nextIdx(offsetIdx), queryArgs...)
 	if err != nil {
 		return nil, err
