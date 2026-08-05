@@ -32,7 +32,25 @@
 		{ file: null, name: '', size: 0, key: '', progress: 0, uploading: false }
 	]);
 
-	async function uploadFile(file: File, onProgress: (pct: number) => void): Promise<string> {
+	async function uploadFile(file: File, onProgress: (pct: number) => void, endpoint?: string): Promise<string> {
+		// Cloudflare image upload (cover/preview)
+		if (endpoint) {
+			const res = await api.post<{ uploadURL: string; imageID: string }>(endpoint, {});
+			const uploadUrl = res.uploadURL.endsWith('/') ? res.uploadURL : res.uploadURL;
+			const xhr = new XMLHttpRequest();
+			await new Promise<void>((resolve, reject) => {
+				xhr.upload.addEventListener('progress', (e) => {
+					if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+				});
+				xhr.addEventListener('load', () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error('Upload failed')));
+				xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+				xhr.open('PUT', uploadUrl);
+				xhr.send(file);
+			});
+			return res.imageID;
+		}
+
+		// S3 upload session (archives)
 		const session = await api.post<{ id: string }>('/upload-sessions', { mode: 'manual' });
 		const presign = await api.post<{ url: string; key: string }>(`/upload-sessions/${session.id}/presign`, { number: 1, key: file.name });
 		const xhr = new XMLHttpRequest();
@@ -54,7 +72,7 @@
 		const file = (e.target as HTMLInputElement).files?.[0];
 		if (!file) return;
 		coverFile = file; coverPreview = URL.createObjectURL(file); coverUploading = true;
-		try { coverKey = await uploadFile(file, (pct) => coverProgress = pct); } catch (err) { error = 'Cover upload failed'; }
+		try { coverKey = await uploadFile(file, (pct) => coverProgress = pct, '/media/cloudflare/upload-url'); } catch (err) { error = 'Cover upload failed'; }
 		finally { coverUploading = false; }
 	}
 	function removeCover() { coverFile = null; coverPreview = ''; coverKey = ''; coverProgress = 0; }
@@ -63,7 +81,7 @@
 		const file = (e.target as HTMLInputElement).files?.[0];
 		if (!file) return;
 		previewSlots[i].file = file; previewSlots[i].preview = URL.createObjectURL(file); previewSlots[i].uploading = true;
-		try { previewSlots[i].key = await uploadFile(file, (pct) => previewSlots[i].progress = pct); } catch (err) { error = 'Preview upload failed'; }
+		try { previewSlots[i].key = await uploadFile(file, (pct) => previewSlots[i].progress = pct, '/media/cloudflare/upload-url'); } catch (err) { error = 'Preview upload failed'; }
 		finally { previewSlots[i].uploading = false; }
 	}
 	function addPreview() { if (previewSlots.length < 10) previewSlots.push({ file: null, preview: '', key: '', progress: 0, uploading: false }); }
@@ -204,7 +222,7 @@
 					{/if}
 				</div>
 				<div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-3">
-					{#each previewSlots as slot, i}
+					{#each previewSlots as slot, i (i)}
 						<div class="aspect-[2/3] rounded-lg border-2 border-dashed border-border overflow-hidden relative {slot.preview ? 'border-solid' : ''}">
 							{#if slot.preview}
 								<img src={slot.preview} alt="Preview" class="w-full h-full object-cover" />
@@ -235,7 +253,7 @@
 					{/if}
 				</div>
 				<div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
-					{#each archiveSlots as slot, i}
+					{#each archiveSlots as slot, i (i)}
 						<div class="aspect-square rounded-lg border-2 border-dashed border-border overflow-hidden relative {slot.key ? 'border-purple-300 bg-purple-50 dark:bg-purple-900/20 border-solid' : ''}">
 							{#if slot.key}
 								<div class="w-full h-full flex flex-col items-center justify-center p-2 text-center">
