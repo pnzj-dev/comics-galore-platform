@@ -30,8 +30,9 @@
 
 	const id = $derived($page.params.id);
 	const user = $derived($currentUser);
-	const coverSrc = $derived(comic?.cover_key ? `/media/${comic.cover_key}` : '');
-	const pageImages = $derived((comic?.page_keys || []).map((k: string) => `/media/${k}`));
+	const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+	const coverSrc = $derived(comic?.cover_key ? `${API}/media/${comic.cover_key}` : '');
+	const pageImages = $derived((comic?.page_keys || []).map((k: string) => `${API}/media/${k}`));
 	const previewSlots = $derived(pageImages.slice(0, 4));
 	const hasMorePreviews = $derived(pageImages.length > 4);
 

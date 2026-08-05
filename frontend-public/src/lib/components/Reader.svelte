@@ -21,7 +21,8 @@
 	let autosaveTimer: ReturnType<typeof setTimeout>;
 
 	const pageCount = $derived(totalPages || pageKeys.length || 1);
-	const pageImages = $derived(pageKeys.map(k => `/media/${k}`));
+	const API = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+	const pageImages = $derived(pageKeys.map(k => `${API}/media/${k}`));
 
 	const fitClass = $derived(fitMode === 'height' ? 'max-h-[85vh] w-auto object-contain' :
 		fitMode === 'width' ? 'w-full max-h-none object-contain' :
