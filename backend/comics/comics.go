@@ -405,6 +405,35 @@ func RejectComic(ctx context.Context, id string, p *RejectParams) error {
 	return nil
 }
 
+type BulkActionParams struct {
+	IDs    []string `json:"ids"`
+	Action string   `json:"action"`
+}
+
+//encore:api auth method=POST path=/moderation/bulk
+func BulkModerate(ctx context.Context, p *BulkActionParams) error {
+	ad, hasAuth := getAuthData(ctx)
+	if !hasAuth || (ad.Role != "moderator" && ad.Role != "admin") {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "requires moderator or admin"}
+	}
+
+	if p.Action != "approve" && p.Action != "reject" {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "action must be 'approve' or 'reject'"}
+	}
+
+	for _, id := range p.IDs {
+		if p.Action == "approve" {
+			db.Exec(ctx, `UPDATE comics SET status = 'published', published_at = now(), updated_at = now() WHERE id = $1 AND status = 'pending_review'`, id)
+			db.Exec(ctx, `INSERT INTO audit_logs (actor_id, action, target_type, target_id) VALUES ($1, 'approve_comic', 'comic', $2)`, ad.UserID, id)
+		} else {
+			db.Exec(ctx, `UPDATE comics SET status = 'rejected', updated_at = now() WHERE id = $1 AND status = 'pending_review'`, id)
+			db.Exec(ctx, `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details) VALUES ($1, 'reject_comic', 'comic', $2, '{"bulk":true}')`, ad.UserID, id)
+		}
+	}
+
+	return nil
+}
+
 type LikeStatus struct {
 	Liked     bool `json:"liked"`
 	Favorited bool `json:"favorited"`
