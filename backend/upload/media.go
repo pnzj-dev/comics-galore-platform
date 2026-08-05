@@ -1,11 +1,15 @@
 package upload
 
 import (
+	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"encore.dev/storage/objects"
 )
+
+var uuidRe = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 //encore:api public raw path=/media/:key method=GET
 func ServeMedia(w http.ResponseWriter, req *http.Request) {
@@ -13,7 +17,6 @@ func ServeMedia(w http.ResponseWriter, req *http.Request) {
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	// Handle seed/placeholder data — return a visible placeholder SVG
 	if strings.HasPrefix(key, "seed/") {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
@@ -21,7 +24,12 @@ func ServeMedia(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Try S3 presigned download URL for non-seed keys
+	if uuidRe.MatchString(key) && cfSecrets.CloudflareImagesHash != "" {
+		url := fmt.Sprintf("https://imagedelivery.net/%s/%s/public", cfSecrets.CloudflareImagesHash, key)
+		http.Redirect(w, req, url, http.StatusTemporaryRedirect)
+		return
+	}
+
 	url, err := ComicBucket.SignedDownloadURL(req.Context(), key, objects.WithTTL(3600))
 	if err != nil {
 		w.Header().Set("Content-Type", "image/svg+xml")
