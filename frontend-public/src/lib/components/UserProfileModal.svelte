@@ -1,8 +1,7 @@
 <script lang="ts">
-	import { currentUser, logout } from '$lib/stores/auth';
+	import { currentUser } from '$lib/stores/auth';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import CheckoutModal from '$lib/components/CheckoutModal.svelte';
-	import { LogOut, Settings } from 'lucide-svelte';
 
 	let { open, onClose }: { open: boolean; onClose: () => void } = $props();
 	let checkoutOpen = $state(false);
@@ -41,28 +40,21 @@
 					</div>
 				</div>
 
-				<div class="flex gap-2">
-					<span class="text-xs rounded-full px-2 py-0.5 bg-primary/10 text-primary">Role: {user?.role || 'user'}</span>
+			<div class="flex gap-2">
+				{#if user?.role !== 'admin'}
 					<span class="text-xs rounded-full px-2 py-0.5 capitalize bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Tier: {user?.tier || 'free'}</span>
-				</div>
-
-				<div class="rounded-xl border border-border p-3 space-y-2">
-					<p class="text-xs font-medium">Subscription</p>
-					<p class="text-xs text-muted-foreground">{user?.tier === 'free' ? 'Free plan · No active subscription' : `Active ${user?.tier} plan`}</p>
-					<Button size="sm" class="w-full mt-1" onclick={() => checkoutOpen = true}>
-						{user?.tier === 'free' ? 'Upgrade Plan' : 'Manage Subscription'}
-					</Button>
-				</div>
-
-				<div class="border-t pt-3 space-y-1">
-					<a href="/settings" class="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground p-2 rounded-lg hover:bg-muted transition-colors">
-						<Settings class="size-4" /> Notification Settings
-					</a>
-					<button onclick={() => { logout(); onClose(); }} class="w-full flex items-center gap-2 text-sm text-muted-foreground hover:text-destructive p-2 rounded-lg hover:bg-muted transition-colors">
-						<LogOut class="size-4" /> Logout
-					</button>
-				</div>
+				{/if}
+				<span class="text-xs rounded-full px-2 py-0.5 bg-primary/10 text-primary">Role: {user?.role || 'user'}</span>
 			</div>
+
+			<div class="rounded-xl border border-border p-3 space-y-2">
+				<p class="text-xs font-medium">Subscription</p>
+				<p class="text-xs text-muted-foreground">{user?.tier === 'free' ? 'Free plan · No active subscription' : `Active ${user?.tier} plan`}</p>
+				<Button size="sm" class="w-full mt-1" onclick={() => checkoutOpen = true}>
+					{user?.tier === 'free' ? 'Upgrade Plan' : 'Manage Subscription'}
+				</Button>
+			</div>
+		</div>
 		</div>
 	</div>
 {/if}

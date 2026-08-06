@@ -8,6 +8,10 @@
 		contentLanguage: 'en',
 		itemsPerPage: 12,
 		popularTagsLimit: 20,
+		emailFromFollowing: true,
+		emailSupportReplies: true,
+		emailMarketing: false,
+		inAppEnabled: true,
 	});
 	let saved = $state(false);
 
@@ -73,6 +77,28 @@
 							<label class="text-xs text-muted-foreground">Popular Tags Limit</label>
 							<input type="number" bind:value={settings.popularTagsLimit} min="5" max="50" class="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
 						</div>
+					</div>
+				</div>
+
+				<div>
+					<h3 class="text-sm font-medium mb-3">Notifications</h3>
+					<div class="space-y-2">
+						<label class="flex items-center gap-2 text-sm cursor-pointer">
+							<input type="checkbox" bind:checked={settings.emailFromFollowing} class="rounded" />
+							New comics from creators you follow
+						</label>
+						<label class="flex items-center gap-2 text-sm cursor-pointer">
+							<input type="checkbox" bind:checked={settings.emailSupportReplies} class="rounded" />
+							Support ticket replies
+						</label>
+						<label class="flex items-center gap-2 text-sm cursor-pointer">
+							<input type="checkbox" bind:checked={settings.emailMarketing} class="rounded" />
+							Marketing emails and promotions
+						</label>
+						<label class="flex items-center gap-2 text-sm cursor-pointer">
+							<input type="checkbox" bind:checked={settings.inAppEnabled} class="rounded" />
+							In-app notifications
+						</label>
 					</div>
 				</div>
 

@@ -571,8 +571,6 @@ When loading, show skeleton cards matching the ComicCard layout:
 
 ### Admin Control Panel (`frontend-admin/` — admin.comics-galore.com)
 
-Separate SvelteKit application with admin-only features. Login required (no register). All pages use **data tables** (not card grids) with consistent table styling.
-
 **Layout:**
 - Sticky admin navbar: Dashboard, Moderation, Users, Subscriptions, Comics
 - Persistent **red banner** when plan matrix is incomplete
@@ -624,6 +622,43 @@ Separate SvelteKit application with admin-only features. Login required (no regi
 - Delete with inline confirmation (button → Confirm/Cancel)
 - Edit button (disabled — API pending)
 - Skeleton: 8 table rows
+
+## Navigation & User Modals
+
+### Navbar (both apps)
+
+```
+┌─ Navbar ─────────────────────────────────────────────────────────┐
+│  [Logo]  Browse  Pricing  Upload  ...         ⚙  ☀  [U] email   │
+│                                               │      │           │
+│                                               │      └─ click → Profile modal
+│                                               └─ click → Settings modal
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Profile modal** — opened by clicking the user's email area in navbar:
+- Avatar (purple circle, first letter)
+- Email + member since date
+- Role badge (always shown)
+- Tier badge (hidden for admin role)
+- Subscription info + "Upgrade Plan" button (opens `CheckoutModal` in-place)
+- **No** logout button (logout is a `LogOut` icon in the navbar, directly accessible)
+
+**Settings modal** (public, ⚙ icon):
+- Language: default language + default content language selects
+- Display: items per page + popular tags limit
+- **Notifications**: email from following, support replies, marketing, in-app (4 checkboxes)
+- Quota boosts: +5 GB/$5, +10 GB/$8, +20 GB/$12 (display only)
+
+### Admin Settings Page (`/settings`)
+
+Full system-wide settings form (7 Card sections):
+- **Site**: name, maintenance toggle, registrations toggle
+- **Content**: language selects, max upload size, image serving mode
+- **Display**: items per page, popular tags limit
+- **Quotas**: per-tier GB inputs (Free/Bronze/Silver/Gold/Platinum)
+- **Quota Boosts**: 3 boost prices editable
+- **Security**: rate limit, email verification toggle, S3/CF presigned TTL
 
 ## Public experience (completed)
 

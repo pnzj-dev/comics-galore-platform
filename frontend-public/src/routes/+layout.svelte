@@ -42,8 +42,13 @@
 				<button onclick={() => profileOpen = true} class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-muted transition-colors text-left">
 					<span class="text-sm text-muted-foreground">{user.email}</span>
 				</button>
-				<span class="text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 capitalize">{user.tier}</span>
+				{#if user.role !== 'admin'}
+					<span class="text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 capitalize">{user.tier}</span>
+				{/if}
 				<span class="text-xs rounded-full bg-primary/10 text-primary px-2 py-0.5">{user.role}</span>
+				<button onclick={logout} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Logout">
+					<LogOut class="size-4" />
+				</button>
 			{:else}
 				<Button variant="ghost" size="sm" href="/login">Login</Button>
 				<Button size="sm" href="/register">Register</Button>
