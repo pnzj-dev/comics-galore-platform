@@ -35,9 +35,11 @@
 			{/if}
 		</div>
 		<div class="flex items-center gap-1">
-			<button onclick={() => settingsOpen = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Settings">
-				<Settings class="size-4" />
-			</button>
+			{#if authed && user}
+				<button onclick={() => settingsOpen = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Settings">
+					<Settings class="size-4" />
+				</button>
+			{/if}
 			<ThemeToggle />
 			{#if authed && user}
 				<button onclick={() => profileOpen = true} class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-muted transition-colors text-left">
