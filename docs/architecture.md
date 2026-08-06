@@ -254,8 +254,28 @@ Backend checks the user's NowPayments balance using `sub_partner_id` (stored on 
 
 ### Provider Abstraction
 - `PaymentsProvider` interface with single v1 implementation: `NowPaymentsProvider`.
-- Methods: `EstimatePrice`, `CheckBalance`, `CreateSubscription`, `CreateDeposit`.
+- Methods: `EstimatePrice`, `CheckBalance`, `CreateCustomer`, `CreateSubscription`, `CreateDeposit`.
 - `provider` field on relevant tables (`nowpayments`).
+
+### JWT Authentication (NowPayments API)
+
+Some NowPayments endpoints require a JWT in addition to the `x-api-key`. The JWT is obtained via `POST /v1/auth` (email + password) and expires in 5 minutes.
+
+**Token caching**: The `NowPaymentsProvider` caches the JWT for 4 minutes with a mutex lock. All JWT-requiring methods call `getAuthToken()` internally — no manual token management needed. On expiry, the next call auto-refreshes the token transparently.
+
+| Endpoint | Auth method | Go method |
+|----------|:---:|------|
+| `GET /v1/estimate` | API key only | `doRequest` |
+| `GET /v1/sub-partner/balance/{id}` | API key only | `doRequest` |
+| `POST /v1/sub-partner/balance` | JWT | `doJWTRequest` → `CreateCustomer` |
+| `POST /v1/subscriptions` | JWT + API key | `doJWTRequest` → `CreateSubscription` |
+| `POST /v1/sub-partner/payment` | JWT + API key | `doJWTRequest` → `CreateDeposit` |
+
+**Secrets required:**
+- `NowPaymentsAPIKey` — for all requests
+- `NowPaymentsIPNKey` — for webhook signature verification
+- `NowPaymentsEmail` — dashboard login for JWT auth
+- `NowPaymentsPassword` — dashboard password for JWT auth
 
 ### NowPayments API Reference
 
@@ -265,17 +285,14 @@ Key endpoints used in v1:
 
 | Endpoint | Method | Purpose | Auth |
 |----------|--------|---------|------|
+| `/v1/auth` | POST | Obtain JWT (email+password, 5min expiry) | — |
 | `/v1/status` | GET | API availability check | — |
 | `/v1/estimate` | GET | Live crypto price estimate | API key |
-| `/v1/payment` | POST | Create payment (returns pay_address + pay_amount) | API key |
-| `/v1/payment/{id}` | GET | Get payment status (polling) | API key |
-| `/v1/invoice` | POST | Create invoice (returns invoice_url) | API key |
 | `/v1/sub-partner/balance` | POST | Create customer account → `sub_partner_id` | JWT |
 | `/v1/sub-partner/balance/{id}` | GET | Check customer balance | API key |
 | `/v1/sub-partner/payment` | POST | Deposit with payment (top-up) | JWT + API key |
 | `/v1/subscriptions` | POST | Create recurring payment (subscription) | JWT + API key |
 | `/v1/subscriptions/plans` | POST/GET | Create/list subscription plans | JWT / API key |
-| `/v1/subscriptions/{id}` | GET/DELETE | Get/delete recurring payment | API key / JWT |
 
 ### All polling has timeouts
 - Subscription polling: 5 minutes max.
