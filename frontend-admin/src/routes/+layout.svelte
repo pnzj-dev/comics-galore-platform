@@ -3,10 +3,11 @@
 	import { onMount } from 'svelte';
 	import { currentUser, isAuthenticated, fetchMe, logout } from '$lib/stores/auth';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Settings } from 'lucide-svelte';
+	import { Settings, LogOut } from 'lucide-svelte';
 
 	let { children } = $props();
 	let profileOpen = $state(false);
+	let confirmLogout = $state(false);
 
 	onMount(() => { fetchMe(); });
 
@@ -33,6 +34,14 @@
 					<span class="text-xs text-muted-foreground">{user.email}</span>
 				</button>
 				<Button variant="ghost" size="sm" onclick={() => { logout(); }}>Logout</Button>
+				{#if confirmLogout}
+					<button onclick={() => { logout(); }} class="text-xs px-2 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/80">Yes, logout</button>
+					<button onclick={() => confirmLogout = false} class="text-xs px-2 py-1 rounded text-muted-foreground hover:bg-muted">Cancel</button>
+				{:else}
+					<button onclick={() => confirmLogout = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Logout">
+						<LogOut class="size-4" />
+					</button>
+				{/if}
 			</div>
 		</div>
 	</nav>

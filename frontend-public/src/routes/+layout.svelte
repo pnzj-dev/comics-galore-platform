@@ -11,6 +11,7 @@
 	let { children } = $props();
 	let profileOpen = $state(false);
 	let settingsOpen = $state(false);
+	let confirmLogout = $state(false);
 
 	onMount(() => { fetchMe(); });
 
@@ -46,9 +47,14 @@
 					<span class="text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 capitalize">{user.tier}</span>
 				{/if}
 				<span class="text-xs rounded-full bg-primary/10 text-primary px-2 py-0.5">{user.role}</span>
-				<button onclick={logout} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Logout">
-					<LogOut class="size-4" />
-				</button>
+				{#if confirmLogout}
+					<button onclick={logout} class="text-xs px-2 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/80">Yes, logout</button>
+					<button onclick={() => confirmLogout = false} class="text-xs px-2 py-1 rounded text-muted-foreground hover:bg-muted">Cancel</button>
+				{:else}
+					<button onclick={() => confirmLogout = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Logout">
+						<LogOut class="size-4" />
+					</button>
+				{/if}
 			{:else}
 				<Button variant="ghost" size="sm" href="/login">Login</Button>
 				<Button size="sm" href="/register">Register</Button>
