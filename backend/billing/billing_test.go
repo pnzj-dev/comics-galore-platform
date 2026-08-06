@@ -14,6 +14,7 @@ import (
 type mockProvider struct {
 	estimatePrice      func(ctx context.Context, req EstimateRequest) (*EstimateResponse, error)
 	checkBalance       func(ctx context.Context, subPartnerID string) (map[string]BalanceEntry, error)
+	createCustomer     func(ctx context.Context, name string) (string, error)
 	createSubscription func(ctx context.Context, req SubscriptionRequest) (*SubscriptionResponse, error)
 	createDeposit      func(ctx context.Context, req DepositRequest) (*DepositResponse, error)
 }
@@ -23,6 +24,13 @@ func (m *mockProvider) EstimatePrice(ctx context.Context, req EstimateRequest) (
 		return m.estimatePrice(ctx, req)
 	}
 	return nil, fmt.Errorf("EstimatePrice not implemented")
+}
+
+func (m *mockProvider) CreateCustomer(ctx context.Context, name string) (string, error) {
+	if m.createCustomer != nil {
+		return m.createCustomer(ctx, name)
+	}
+	return "", fmt.Errorf("CreateCustomer not implemented")
 }
 
 func (m *mockProvider) CheckBalance(ctx context.Context, subPartnerID string) (map[string]BalanceEntry, error) {

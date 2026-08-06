@@ -25,14 +25,17 @@ var db = sqldb.NewDatabase("billingdb", sqldb.DatabaseConfig{
 })
 
 var secrets struct {
-	NowPaymentsAPIKey string
-	NowPaymentsIPNKey string
+	NowPaymentsAPIKey   string
+	NowPaymentsIPNKey   string
+	NowPaymentsEmail    string
+	NowPaymentsPassword string
 }
 
 var provider PaymentsProvider
 
 func init() {
-	provider = NewNowPaymentsProvider(secrets.NowPaymentsAPIKey, secrets.NowPaymentsIPNKey)
+	provider = NewNowPaymentsProvider(secrets.NowPaymentsAPIKey, secrets.NowPaymentsIPNKey,
+		secrets.NowPaymentsEmail, secrets.NowPaymentsPassword)
 }
 
 // ----- Estimate Price -----

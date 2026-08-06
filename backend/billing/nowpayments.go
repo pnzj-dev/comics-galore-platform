@@ -13,24 +13,132 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 )
 
 const npBaseURL = "https://api.nowpayments.io/v1"
 
 type NowPaymentsProvider struct {
-	apiKey string
-	ipnKey string
-	http   *http.Client
+	apiKey   string
+	ipnKey   string
+	email    string
+	password string
+
+	jwtToken     string
+	jwtExpiresAt time.Time
+	jwtMutex     sync.Mutex
+
+	http *http.Client
 }
 
-func NewNowPaymentsProvider(apiKey, ipnKey string) *NowPaymentsProvider {
+func NewNowPaymentsProvider(apiKey, ipnKey, email, password string) *NowPaymentsProvider {
 	return &NowPaymentsProvider{
-		apiKey: apiKey,
-		ipnKey: ipnKey,
-		http:   &http.Client{Timeout: 30 * time.Second},
+		apiKey:   apiKey,
+		ipnKey:   ipnKey,
+		email:    email,
+		password: password,
+		http:     &http.Client{Timeout: 30 * time.Second},
 	}
 }
+
+// getAuthToken returns a cached JWT token, refreshing if expired.
+// Tokens from NowPayments expire in 5 minutes; we cache for 4 minutes.
+func (p *NowPaymentsProvider) getAuthToken(ctx context.Context) (string, error) {
+	p.jwtMutex.Lock()
+	defer p.jwtMutex.Unlock()
+
+	if p.jwtToken != "" && time.Now().Add(time.Minute).Before(p.jwtExpiresAt) {
+		return p.jwtToken, nil
+	}
+
+	body := map[string]string{"email": p.email, "password": p.password}
+	b, _ := json.Marshal(body)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", npBaseURL+"/auth", bytes.NewReader(b))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.http.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("nowpayments auth failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("nowpayments auth error %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return "", fmt.Errorf("nowpayments auth parse: %w", err)
+	}
+
+	p.jwtToken = result.Token
+	p.jwtExpiresAt = time.Now().Add(4 * time.Minute)
+	return p.jwtToken, nil
+}
+
+// doJWTRequest sends a request authenticated with both JWT (Bearer) and API key.
+func (p *NowPaymentsProvider) doJWTRequest(ctx context.Context, method, url string, body interface{}) ([]byte, error) {
+	token, err := p.getAuthToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return p.doRequestWithAuth(ctx, method, url, body, token)
+}
+
+func (p *NowPaymentsProvider) doRequest(ctx context.Context, method, url string, body interface{}) ([]byte, error) {
+	return p.doRequestWithAuth(ctx, method, url, body, "")
+}
+
+func (p *NowPaymentsProvider) doRequestWithAuth(ctx context.Context, method, url string, body interface{}, jwtToken string) ([]byte, error) {
+	var reqBody io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		reqBody = bytes.NewReader(b)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Set("x-api-key", p.apiKey)
+	if jwtToken != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+jwtToken)
+	}
+	if body != nil {
+		httpReq.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := p.http.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("nowpayments error %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return respBody, nil
+}
+
+// ----- EstimatePrice (API key only) -----
 
 func (p *NowPaymentsProvider) EstimatePrice(ctx context.Context, req EstimateRequest) (*EstimateResponse, error) {
 	url := fmt.Sprintf("%s/estimate?amount=%.2f&currency_from=%s&currency_to=%s",
@@ -58,6 +166,8 @@ func (p *NowPaymentsProvider) EstimatePrice(ctx context.Context, req EstimateReq
 	}, nil
 }
 
+// ----- CheckBalance (API key only) -----
+
 func (p *NowPaymentsProvider) CheckBalance(ctx context.Context, subPartnerID string) (map[string]BalanceEntry, error) {
 	url := fmt.Sprintf("%s/sub-partner/balance/%s", npBaseURL, subPartnerID)
 
@@ -83,6 +193,30 @@ func (p *NowPaymentsProvider) CheckBalance(ctx context.Context, subPartnerID str
 	return result, nil
 }
 
+// ----- CreateCustomer (JWT + API key) -----
+
+func (p *NowPaymentsProvider) CreateCustomer(ctx context.Context, name string) (string, error) {
+	body := map[string]interface{}{
+		"name": name,
+	}
+
+	resp, err := p.doJWTRequest(ctx, "POST", npBaseURL+"/sub-partner/balance", body)
+	if err != nil {
+		return "", err
+	}
+
+	var result struct {
+		ID json.Number `json:"id"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return "", fmt.Errorf("create customer parse: %w", err)
+	}
+
+	return result.ID.String(), nil
+}
+
+// ----- CreateSubscription (JWT + API key) -----
+
 func (p *NowPaymentsProvider) CreateSubscription(ctx context.Context, req SubscriptionRequest) (*SubscriptionResponse, error) {
 	planID, _ := strconv.Atoi(req.SubscriptionPlanID)
 	subPartnerID, _ := strconv.Atoi(req.SubPartnerID)
@@ -91,7 +225,7 @@ func (p *NowPaymentsProvider) CreateSubscription(ctx context.Context, req Subscr
 		"sub_partner_id":       subPartnerID,
 	}
 
-	resp, err := p.doRequest(ctx, "POST", npBaseURL+"/subscriptions", body)
+	resp, err := p.doJWTRequest(ctx, "POST", npBaseURL+"/subscriptions", body)
 	if err != nil {
 		return nil, err
 	}
@@ -110,18 +244,20 @@ func (p *NowPaymentsProvider) CreateSubscription(ctx context.Context, req Subscr
 	}, nil
 }
 
+// ----- CreateDeposit (JWT + API key) -----
+
 func (p *NowPaymentsProvider) CreateDeposit(ctx context.Context, req DepositRequest) (*DepositResponse, error) {
 	subPartnerID, _ := strconv.Atoi(req.SubPartnerID)
 	body := map[string]interface{}{
-		"currency":           req.Crypto,
-		"amount":             req.AmountUSD,
-		"sub_partner_id":     subPartnerID,
-		"ipn_callback_url":   req.IPNCallbackURL,
-		"is_fixed_rate":      false,
+		"currency":            req.Crypto,
+		"amount":              req.AmountUSD,
+		"sub_partner_id":      subPartnerID,
+		"ipn_callback_url":    req.IPNCallbackURL,
+		"is_fixed_rate":       false,
 		"is_fee_paid_by_user": false,
 	}
 
-	resp, err := p.doRequest(ctx, "POST", npBaseURL+"/sub-partner/payment", body)
+	resp, err := p.doJWTRequest(ctx, "POST", npBaseURL+"/sub-partner/payment", body)
 	if err != nil {
 		return nil, err
 	}
@@ -143,42 +279,4 @@ func (p *NowPaymentsProvider) CreateDeposit(ctx context.Context, req DepositRequ
 		PayAmount:  payAmt,
 		PayCurrency: result.PayCurrency,
 	}, nil
-}
-
-func (p *NowPaymentsProvider) doRequest(ctx context.Context, method, url string, body interface{}) ([]byte, error) {
-	var reqBody io.Reader
-	if body != nil {
-		b, err := json.Marshal(body)
-		if err != nil {
-			return nil, err
-		}
-		reqBody = bytes.NewReader(b)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, method, url, reqBody)
-	if err != nil {
-		return nil, err
-	}
-
-	httpReq.Header.Set("x-api-key", p.apiKey)
-	if body != nil {
-		httpReq.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := p.http.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("nowpayments error %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	return respBody, nil
 }
