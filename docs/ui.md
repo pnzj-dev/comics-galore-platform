@@ -649,10 +649,27 @@ When loading, show skeleton cards matching the ComicCard layout:
 - Display: items per page + popular tags limit
 - **Notifications**: email from following, support replies, marketing, in-app (4 checkboxes)
 - Quota boosts: +5 GB/$5, +10 GB/$8, +20 GB/$12 (display only)
+- **Persistence**: saved to `users.preferences` JSONB column via `PATCH /me/preferences`.
+  First load falls back to global defaults (`app_settings` table) → hardcoded defaults.
+
+**Logout flow:**
+- `LogOut` icon in navbar → click shows inline "Yes, logout" (red) + "Cancel"
+- Cancel restores the icon; no modal needed
+
+### Settings Persistence (DB-backed)
+
+Three-tier fallback — zero extra queries on auth: users.preferences → app_settings → hardcoded.
+
+| Endpoint | Auth | Purpose |
+|----------|:---:|---------|
+| `GET /me/preferences` | Auth | User prefs merged with global defaults |
+| `PATCH /me/preferences` | Auth | Saves user-specific overrides |
+| `GET /admin/settings` | Admin | Returns all global system settings |
+| `PATCH /admin/settings` | Admin | Updates global defaults |
 
 ### Admin Settings Page (`/settings`)
 
-Full system-wide settings form (7 Card sections):
+Full system-wide form (7 Card sections) loaded via `GET /admin/settings`:
 - **Site**: name, maintenance toggle, registrations toggle
 - **Content**: language selects, max upload size, image serving mode
 - **Display**: items per page, popular tags limit
