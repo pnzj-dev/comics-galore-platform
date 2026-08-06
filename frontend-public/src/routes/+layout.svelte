@@ -4,12 +4,15 @@
 	import { currentUser, isAuthenticated, fetchMe, logout } from '$lib/stores/auth';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import UserProfileModal from '$lib/components/UserProfileModal.svelte';
+	import AppSettingsModal from '$lib/components/AppSettingsModal.svelte';
+	import { Settings, LogOut } from 'lucide-svelte';
 
 	let { children } = $props();
+	let profileOpen = $state(false);
+	let settingsOpen = $state(false);
 
-	onMount(() => {
-		fetchMe();
-	});
+	onMount(() => { fetchMe(); });
 
 	const user = $derived($currentUser);
 	const authed = $derived($isAuthenticated);
@@ -30,13 +33,17 @@
 				{/if}
 			{/if}
 		</div>
-		<div class="flex items-center gap-2">
+		<div class="flex items-center gap-1">
+			<button onclick={() => settingsOpen = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Settings">
+				<Settings class="size-4" />
+			</button>
 			<ThemeToggle />
 			{#if authed && user}
-				<span class="text-sm text-muted-foreground mr-2">{user.email}</span>
+				<button onclick={() => profileOpen = true} class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-muted transition-colors text-left">
+					<span class="text-sm text-muted-foreground">{user.email}</span>
+				</button>
 				<span class="text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 capitalize">{user.tier}</span>
 				<span class="text-xs rounded-full bg-primary/10 text-primary px-2 py-0.5">{user.role}</span>
-				<Button variant="ghost" size="sm" onclick={logout}>Logout</Button>
 			{:else}
 				<Button variant="ghost" size="sm" href="/login">Login</Button>
 				<Button size="sm" href="/register">Register</Button>
@@ -54,3 +61,6 @@
 	<a href="/legal/privacy" class="hover:underline mx-2">Privacy</a>
 	<a href="/legal/dmca" class="hover:underline mx-2">DMCA</a>
 </footer>
+
+<UserProfileModal open={profileOpen} onClose={() => profileOpen = false} />
+<AppSettingsModal open={settingsOpen} onClose={() => settingsOpen = false} />

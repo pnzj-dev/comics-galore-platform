@@ -402,6 +402,32 @@ func getUserByID(ctx context.Context, id string) (*User, error) {
 	return &u, nil
 }
 
+// ----- Extended Profile -----
+
+type UserProfile struct {
+	ID        string `json:"id"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	Tier      string `json:"tier"`
+	CreatedAt string `json:"created_at"`
+}
+
+//encore:api auth method=GET path=/me/profile
+func GetProfile(ctx context.Context) (*UserProfile, error) {
+	data := auth.Data().(*AuthData)
+	user, err := getUserByID(ctx, data.UserID)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.NotFound, Message: "user not found"}
+	}
+	return &UserProfile{
+		ID:        user.ID,
+		Email:     user.Email,
+		Role:      user.Role,
+		Tier:      user.Tier,
+		CreatedAt: user.CreatedAt.Format(time.RFC3339),
+	}, nil
+}
+
 // ----- Admin endpoints -----
 
 type AdminUser struct {

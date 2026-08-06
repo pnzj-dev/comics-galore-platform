@@ -3,8 +3,10 @@
 	import { onMount } from 'svelte';
 	import { currentUser, isAuthenticated, fetchMe, logout } from '$lib/stores/auth';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { Settings } from 'lucide-svelte';
 
 	let { children } = $props();
+	let profileOpen = $state(false);
 
 	onMount(() => { fetchMe(); });
 
@@ -23,9 +25,14 @@
 				<a href="/subscriptions" class="text-sm text-muted-foreground hover:text-foreground">Subscriptions</a>
 				<a href="/comics" class="text-sm text-muted-foreground hover:text-foreground">Comics</a>
 			</div>
-			<div class="flex items-center gap-2">
-				<span class="text-xs text-muted-foreground">{user.email}</span>
-				<Button variant="ghost" size="sm" onclick={logout}>Logout</Button>
+			<div class="flex items-center gap-1">
+				<a href="/settings" class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Settings">
+					<Settings class="size-4" />
+				</a>
+				<button onclick={() => profileOpen = true} class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-muted transition-colors">
+					<span class="text-xs text-muted-foreground">{user.email}</span>
+				</button>
+				<Button variant="ghost" size="sm" onclick={() => { logout(); }}>Logout</Button>
 			</div>
 		</div>
 	</nav>
