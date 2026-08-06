@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { currentUser, logout } from '$lib/stores/auth';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import CheckoutModal from '$lib/components/CheckoutModal.svelte';
 	import { LogOut, Settings } from 'lucide-svelte';
 
 	let { open, onClose }: { open: boolean; onClose: () => void } = $props();
+	let checkoutOpen = $state(false);
 
 	const user = $derived($currentUser);
 
@@ -47,7 +49,7 @@
 				<div class="rounded-xl border border-border p-3 space-y-2">
 					<p class="text-xs font-medium">Subscription</p>
 					<p class="text-xs text-muted-foreground">{user?.tier === 'free' ? 'Free plan · No active subscription' : `Active ${user?.tier} plan`}</p>
-					<Button size="sm" class="w-full mt-1" href="/pricing">
+					<Button size="sm" class="w-full mt-1" onclick={() => checkoutOpen = true}>
 						{user?.tier === 'free' ? 'Upgrade Plan' : 'Manage Subscription'}
 					</Button>
 				</div>
@@ -64,3 +66,5 @@
 		</div>
 	</div>
 {/if}
+
+<CheckoutModal open={checkoutOpen} onClose={() => checkoutOpen = false} />
