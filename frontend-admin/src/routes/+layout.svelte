@@ -34,7 +34,7 @@
 		Action required: Configure the complete plan matrix in admin settings.
 	</div>
 
-	<main class="max-w-7xl mx-auto p-4">
+	<main class="max-w-7xl mx-auto p-4 flex-1 w-full">
 		{@render children()}
 	</main>
 {:else}
