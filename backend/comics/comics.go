@@ -2,11 +2,13 @@ package comics
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"encore.dev/beta/auth"
@@ -20,6 +22,42 @@ var db = sqldb.NewDatabase("comicsdb", sqldb.DatabaseConfig{
 	Migrations: "./migrations",
 })
 
+var (
+	commentMu      sync.Mutex
+	commentChannels = make(map[string][]chan CommentData)
+)
+
+func subscribeComments(comicID string) chan CommentData {
+	commentMu.Lock()
+	defer commentMu.Unlock()
+	ch := make(chan CommentData, 8)
+	commentChannels[comicID] = append(commentChannels[comicID], ch)
+	return ch
+}
+
+func unsubscribeComments(comicID string, ch chan CommentData) {
+	commentMu.Lock()
+	defer commentMu.Unlock()
+	list := commentChannels[comicID]
+	for i, c := range list {
+		if c == ch {
+			commentChannels[comicID] = append(list[:i], list[i+1:]...)
+			break
+		}
+	}
+}
+
+func publishComment(comicID string, c CommentData) {
+	commentMu.Lock()
+	defer commentMu.Unlock()
+	for _, ch := range commentChannels[comicID] {
+		select {
+		case ch <- c:
+		default:
+		}
+	}
+}
+
 var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
 
 // Comic is the public representation
@@ -27,6 +65,7 @@ type Comic struct {
 	ID              string    `json:"id"`
 	UploaderID      string    `json:"uploader_id"`
 	Title           string    `json:"title"`
+	Author          string    `json:"author"`
 	Slug            string    `json:"slug"`
 	Description     string    `json:"description"`
 	ContentLanguage string    `json:"content_language"`
@@ -44,6 +83,10 @@ type Comic struct {
 	DownloadCount   int64     `json:"download_count"`
 	LikeCount       int       `json:"like_count"`
 	FavCount        int       `json:"fav_count"`
+	DislikeCount    int       `json:"dislike_count"`
+	IsLiked         bool      `json:"is_liked"`
+	IsFavorited     bool      `json:"is_favorited"`
+	IsDisliked      bool      `json:"is_disliked"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 
@@ -54,6 +97,7 @@ type Comic struct {
 
 type CreateComicParams struct {
 	Title           string   `json:"title"`
+	Author          string   `json:"author"`
 	Description     string   `json:"description"`
 	ContentLanguage string   `json:"content_language"`
 	CoverKey        string   `json:"cover_key"`
@@ -121,20 +165,20 @@ func CreateComic(ctx context.Context, p *CreateComicParams) (*Comic, error) {
 	}
 
 	err := db.QueryRow(ctx, `
-		INSERT INTO comics (uploader_id, title, slug, description, content_language,
+		INSERT INTO comics (uploader_id, title, author, slug, description, content_language,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, tags)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		RETURNING id, uploader_id, title, slug, description, content_language, status,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		RETURNING id, uploader_id, title, author, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
-			tags, rejection_reason, view_count, download_count, like_count, fav_count,
+			tags, rejection_reason, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
-	`, ad.UserID, p.Title, slug, p.Description, lang,
+	`, ad.UserID, p.Title, p.Author, slug, p.Description, lang,
 		p.CoverKey, p.FileKey, pageKeys, p.FileSizeBytes, minTierID, ageRating, tags).Scan(
-		&comic.ID, &comic.UploaderID, &comic.Title, &comic.Slug, &comic.Description,
+		&comic.ID, &comic.UploaderID, &comic.Title, &comic.Author, &comic.Slug, &comic.Description,
 		&comic.ContentLanguage, &comic.Status, &comic.CoverKey, &comic.FileKey,
 		scanStringSlice(&comic.PageKeys), &comic.FileSizeBytes, nulString(&comic.MinTierID),
 		&comic.AgeRating, scanStringSlice(&comic.Tags), nulString(&comic.RejectionReason),
-		&comic.ViewCount, &comic.DownloadCount, &comic.LikeCount, &comic.FavCount,
+		&comic.ViewCount, &comic.DownloadCount, &comic.LikeCount, &comic.FavCount, &comic.DislikeCount,
 		&comic.CreatedAt, &comic.UpdatedAt,
 	)
 	if err != nil {
@@ -150,12 +194,13 @@ func CreateComic(ctx context.Context, p *CreateComicParams) (*Comic, error) {
 }
 
 type ListComicsParams struct {
-	Page     int    `query:"page"`
-	Limit    int    `query:"limit"`
-	Language string `query:"language"`
-	Search   string `query:"search"`
-	Tag      string `query:"tag"`
-	Sort     string `query:"sort"`
+	Page          int    `query:"page"`
+	Limit         int    `query:"limit"`
+	Language      string `query:"language"`
+	Search        string `query:"search"`
+	Tag           string `query:"tag"`
+	Sort          string `query:"sort"`
+	ExcludeMature string `query:"exclude_mature"`
 }
 
 type ListComicsResponse struct {
@@ -191,6 +236,11 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 		args = append(args, `["`+p.Tag+`"]`)
 	}
 
+	if p.ExcludeMature == "true" {
+		where += " AND age_rating NOT IN (" + nextIdx(len(args)+1) + ", " + nextIdx(len(args)+2) + ")"
+		args = append(args, "mature", "explicit")
+	}
+
 	var total int
 	err := db.QueryRow(ctx, `SELECT COUNT(*) FROM comics `+where, args...).Scan(&total)
 	if err != nil {
@@ -206,14 +256,16 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 		orderBy = "view_count DESC"
 	case "newest":
 		orderBy = "published_at DESC"
+	case "random":
+		orderBy = "RANDOM()"
 	default:
 		orderBy = "published_at DESC"
 	}
 
 	rows, err := db.Query(ctx, `
-		SELECT id, uploader_id, title, slug, description, content_language, status,
+		SELECT id, uploader_id, title, author, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
-			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count,
+			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
 		FROM comics `+where+`
 		ORDER BY `+orderBy+`
@@ -228,26 +280,30 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 		return nil, err
 	}
 
+	if ad, ok := getAuthData(ctx); ok {
+		enrichReactions(ctx, comics, string(ad.UserID))
+	}
+
 	return &ListComicsResponse{Comics: comics, Total: total}, nil
 }
 
-//encore:api public method=GET path=/comics/:id
-func GetComic(ctx context.Context, id string) (*Comic, error) {
+//encore:api public method=GET path=/comics/:slug
+func GetComic(ctx context.Context, slug string) (*Comic, error) {
 	ad, hasAuth := getAuthData(ctx)
 
 	var comic Comic
 	err := db.QueryRow(ctx, `
-		SELECT id, uploader_id, title, slug, description, content_language, status,
+		SELECT id, uploader_id, title, author, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
-			tags, rejection_reason, view_count, download_count, like_count, fav_count,
+			tags, rejection_reason, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
-		FROM comics WHERE id = $1
-	`, id).Scan(
-		&comic.ID, &comic.UploaderID, &comic.Title, &comic.Slug, &comic.Description,
+		FROM comics WHERE slug = $1
+	`, slug).Scan(
+		&comic.ID, &comic.UploaderID, &comic.Title, &comic.Author, &comic.Slug, &comic.Description,
 		&comic.ContentLanguage, &comic.Status, &comic.CoverKey, &comic.FileKey,
 		scanStringSlice(&comic.PageKeys), &comic.FileSizeBytes, nulString(&comic.MinTierID),
 		&comic.AgeRating, scanStringSlice(&comic.Tags), nulString(&comic.RejectionReason),
-		&comic.ViewCount, &comic.DownloadCount, &comic.LikeCount, &comic.FavCount,
+		&comic.ViewCount, &comic.DownloadCount, &comic.LikeCount, &comic.FavCount, &comic.DislikeCount,
 		&comic.CreatedAt, &comic.UpdatedAt,
 	)
 	if err != nil {
@@ -263,10 +319,52 @@ func GetComic(ctx context.Context, id string) (*Comic, error) {
 		}
 	}
 
-	db.Exec(ctx, `UPDATE comics SET view_count = view_count + 1 WHERE id = $1`, id)
+	db.Exec(ctx, `UPDATE comics SET view_count = view_count + 1 WHERE id = $1`, comic.ID)
+
+	if hasAuth {
+		enrichReactions(ctx, []Comic{comic}, string(ad.UserID))
+	}
 
 	resolveComicURLs(&comic)
 	return &comic, nil
+}
+
+type BatchComicsParams struct {
+	IDs []string `json:"ids"`
+}
+
+//encore:api public method=POST path=/comics-batch
+func BatchGetComics(ctx context.Context, p *BatchComicsParams) (*ListComicsResponse, error) {
+	if len(p.IDs) == 0 {
+		return &ListComicsResponse{Comics: []Comic{}, Total: 0}, nil
+	}
+	if len(p.IDs) > 50 {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "max 50 ids"}
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT id, uploader_id, title, author, slug, description, content_language, status,
+			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
+			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
+			created_at, updated_at
+		FROM comics WHERE id = ANY($1) AND status = 'published'
+		ORDER BY created_at DESC
+	`, p.IDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	comics, err := scanComics(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	if ad, ok := getAuthData(ctx); ok {
+		enrichReactions(ctx, comics, string(ad.UserID))
+	}
+
+	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
 }
 
 //encore:api auth method=GET path=/uploader/comics
@@ -274,9 +372,9 @@ func MyComics(ctx context.Context) (*ListComicsResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
 	rows, err := db.Query(ctx, `
-		SELECT id, uploader_id, title, slug, description, content_language, status,
+		SELECT id, uploader_id, title, author, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
-			tags, rejection_reason, view_count, download_count, like_count, fav_count,
+			tags, rejection_reason, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
 		FROM comics WHERE uploader_id = $1
 		ORDER BY created_at DESC
@@ -290,6 +388,8 @@ func MyComics(ctx context.Context) (*ListComicsResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	enrichReactions(ctx, comics, string(ad.UserID))
 
 	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
 }
@@ -356,6 +456,58 @@ func generateSlug(title string) string {
 		slug = "comic"
 	}
 	return slug + "-" + randomSuffix(6)
+}
+
+func enrichReactions(ctx context.Context, comics []Comic, userID string) {
+	if userID == "" || len(comics) == 0 {
+		return
+	}
+	ids := make([]string, len(comics))
+	for i, c := range comics {
+		ids[i] = c.ID
+	}
+
+	rows, err := db.Query(ctx, `SELECT comic_id FROM likes WHERE user_id = $1 AND comic_id = ANY($2)`, userID, ids)
+	if err == nil {
+		defer rows.Close()
+		liked := make(map[string]bool)
+		for rows.Next() {
+			var cid string
+			rows.Scan(&cid)
+			liked[cid] = true
+		}
+		for i := range comics {
+			comics[i].IsLiked = liked[comics[i].ID]
+		}
+	}
+
+	rows, err = db.Query(ctx, `SELECT comic_id FROM favorites WHERE user_id = $1 AND comic_id = ANY($2)`, userID, ids)
+	if err == nil {
+		defer rows.Close()
+		favd := make(map[string]bool)
+		for rows.Next() {
+			var cid string
+			rows.Scan(&cid)
+			favd[cid] = true
+		}
+		for i := range comics {
+			comics[i].IsFavorited = favd[comics[i].ID]
+		}
+	}
+
+	rows, err = db.Query(ctx, `SELECT comic_id FROM dislikes WHERE user_id = $1 AND comic_id = ANY($2)`, userID, ids)
+	if err == nil {
+		defer rows.Close()
+		disliked := make(map[string]bool)
+		for rows.Next() {
+			var cid string
+			rows.Scan(&cid)
+			disliked[cid] = true
+		}
+		for i := range comics {
+			comics[i].IsDisliked = disliked[comics[i].ID]
+		}
+	}
 }
 
 func getAuthData(ctx context.Context) (*myauth.AuthData, bool) {
@@ -499,17 +651,19 @@ func BulkModerate(ctx context.Context, p *BulkActionParams) error {
 type LikeStatus struct {
 	Liked     bool `json:"liked"`
 	Favorited bool `json:"favorited"`
+	Disliked  bool `json:"disliked"`
 }
 
 //encore:api auth method=GET path=/comics/:id/like-status
 func GetLikeStatus(ctx context.Context, id string) (*LikeStatus, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
-	var liked, favorited bool
+	var liked, favorited, disliked bool
 	db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM likes WHERE user_id = $1 AND comic_id = $2)`, ad.UserID, id).Scan(&liked)
 	db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM favorites WHERE user_id = $1 AND comic_id = $2)`, ad.UserID, id).Scan(&favorited)
+	db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM dislikes WHERE user_id = $1 AND comic_id = $2)`, ad.UserID, id).Scan(&disliked)
 
-	return &LikeStatus{Liked: liked, Favorited: favorited}, nil
+	return &LikeStatus{Liked: liked, Favorited: favorited, Disliked: disliked}, nil
 }
 
 type ToggleLikeResponse struct {
@@ -531,6 +685,9 @@ func ToggleLike(ctx context.Context, id string) (*ToggleLikeResponse, error) {
 		db.QueryRow(ctx, `SELECT like_count FROM comics WHERE id = $1`, id).Scan(&likeCount)
 		return &ToggleLikeResponse{Liked: false, LikeCount: likeCount}, nil
 	}
+
+	db.Exec(ctx, `DELETE FROM dislikes WHERE user_id = $1 AND comic_id = $2`, ad.UserID, id)
+	db.Exec(ctx, `UPDATE comics SET dislike_count = GREATEST(dislike_count - 1, 0) WHERE id = $1`, id)
 
 	_, err := db.Exec(ctx, `INSERT INTO likes (user_id, comic_id) VALUES ($1, $2)`, ad.UserID, id)
 	if err != nil {
@@ -574,6 +731,40 @@ func ToggleFavorite(ctx context.Context, id string) (*ToggleFavResponse, error) 
 	return &ToggleFavResponse{Favorited: true, FavCount: favCount}, nil
 }
 
+type ToggleDislikeResponse struct {
+	Disliked     bool `json:"disliked"`
+	DislikeCount int  `json:"dislike_count"`
+}
+
+//encore:api auth method=POST path=/comics/:id/dislike
+func ToggleDislike(ctx context.Context, id string) (*ToggleDislikeResponse, error) {
+	ad := auth.Data().(*myauth.AuthData)
+
+	var exists bool
+	db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM dislikes WHERE user_id = $1 AND comic_id = $2)`, ad.UserID, id).Scan(&exists)
+
+	if exists {
+		db.Exec(ctx, `DELETE FROM dislikes WHERE user_id = $1 AND comic_id = $2`, ad.UserID, id)
+		db.Exec(ctx, `UPDATE comics SET dislike_count = GREATEST(dislike_count - 1, 0) WHERE id = $1`, id)
+		var dislikeCount int
+		db.QueryRow(ctx, `SELECT dislike_count FROM comics WHERE id = $1`, id).Scan(&dislikeCount)
+		return &ToggleDislikeResponse{Disliked: false, DislikeCount: dislikeCount}, nil
+	}
+
+	db.Exec(ctx, `DELETE FROM likes WHERE user_id = $1 AND comic_id = $2`, ad.UserID, id)
+	db.Exec(ctx, `UPDATE comics SET like_count = GREATEST(like_count - 1, 0) WHERE id = $1`, id)
+
+	_, err := db.Exec(ctx, `INSERT INTO dislikes (user_id, comic_id) VALUES ($1, $2)`, ad.UserID, id)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.NotFound, Message: "comic not found"}
+	}
+	db.Exec(ctx, `UPDATE comics SET dislike_count = dislike_count + 1 WHERE id = $1`, id)
+
+	var dislikeCount int
+	db.QueryRow(ctx, `SELECT dislike_count FROM comics WHERE id = $1`, id).Scan(&dislikeCount)
+	return &ToggleDislikeResponse{Disliked: true, DislikeCount: dislikeCount}, nil
+}
+
 // ----- Admin comic list -----
 
 //encore:api auth method=GET path=/admin/comics
@@ -584,9 +775,9 @@ func AdminListComics(ctx context.Context) (*ListComicsResponse, error) {
 	}
 
 	rows, err := db.Query(ctx, `
-		SELECT id, uploader_id, title, slug, description, content_language, status,
+		SELECT id, uploader_id, title, author, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
-			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count,
+			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
 		FROM comics ORDER BY created_at DESC LIMIT 100
 	`)
@@ -599,6 +790,8 @@ func AdminListComics(ctx context.Context) (*ListComicsResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	enrichReactions(ctx, comics, string(ad.UserID))
 
 	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
 }
@@ -642,6 +835,9 @@ func ListComments(ctx context.Context, id string) (*ListCommentsResponse, error)
 	}
 
 	roots := buildThread(all)
+	if roots == nil {
+		roots = []CommentData{}
+	}
 	return &ListCommentsResponse{Comments: roots}, nil
 }
 
@@ -671,7 +867,43 @@ func CreateComment(ctx context.Context, id string, p *CreateCommentParams) (*Com
 	if err != nil {
 		return nil, err
 	}
+	publishComment(id, c)
 	return &c, nil
+}
+
+//encore:api public raw method=GET path=/comments-stream/:id
+func CommentStream(w http.ResponseWriter, req *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	comicID := req.PathValue("id")
+	ch := subscribeComments(comicID)
+	defer unsubscribeComments(comicID, ch)
+
+	heartbeat := time.NewTicker(15 * time.Second)
+	defer heartbeat.Stop()
+
+	for {
+		select {
+		case c := <-ch:
+			data, _ := json.Marshal(c)
+			fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		case <-heartbeat.C:
+			fmt.Fprintf(w, ":\n\n")
+			flusher.Flush()
+		case <-req.Context().Done():
+			return
+		}
+	}
 }
 
 func buildThread(comments []CommentData) []CommentData {
@@ -681,10 +913,20 @@ func buildThread(comments []CommentData) []CommentData {
 			children[c.ParentID] = append(children[c.ParentID], c)
 		}
 	}
+
+	var thread func(parentID string) []CommentData
+	thread = func(parentID string) []CommentData {
+		kids := children[parentID]
+		for i := range kids {
+			kids[i].Replies = thread(kids[i].ID)
+		}
+		return kids
+	}
+
 	var result []CommentData
 	for _, c := range comments {
 		if c.ParentID == "" {
-			c.Replies = children[c.ID]
+			c.Replies = thread(c.ID)
 			result = append(result, c)
 		}
 	}
@@ -735,9 +977,9 @@ func CreateSeries(ctx context.Context, p *CreateSeriesParams) (*Series, error) {
 	slug := generateSlug(p.Title)
 	var s Series
 	err := db.QueryRow(ctx, `
-		INSERT INTO series (title, slug, description, uploader_id)
+		INSERT INTO series (title, author, slug, description, uploader_id)
 		VALUES ($1, $2, $3, $4)
-		RETURNING id, title, slug, description, uploader_id, created_at
+		RETURNING id, title, author, slug, description, uploader_id, created_at
 	`, p.Title, slug, p.Description, ad.UserID).Scan(&s.ID, &s.Title, &s.Slug, &s.Description, &s.UploaderID, &s.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -751,7 +993,7 @@ type ListSeriesResponse struct {
 
 //encore:api public method=GET path=/series
 func ListSeries(ctx context.Context) (*ListSeriesResponse, error) {
-	rows, err := db.Query(ctx, `SELECT id, title, slug, description, uploader_id, created_at FROM series ORDER BY created_at DESC`)
+	rows, err := db.Query(ctx, `SELECT id, title, author, slug, description, uploader_id, created_at FROM series ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -770,7 +1012,7 @@ func ListSeries(ctx context.Context) (*ListSeriesResponse, error) {
 //encore:api public method=GET path=/series/:id
 func GetSeries(ctx context.Context, id string) (*Series, error) {
 	var s Series
-	err := db.QueryRow(ctx, `SELECT id, title, slug, description, uploader_id, created_at FROM series WHERE id = $1`, id).Scan(&s.ID, &s.Title, &s.Slug, &s.Description, &s.UploaderID, &s.CreatedAt)
+	err := db.QueryRow(ctx, `SELECT id, title, author, slug, description, uploader_id, created_at FROM series WHERE id = $1`, id).Scan(&s.ID, &s.Title, &s.Slug, &s.Description, &s.UploaderID, &s.CreatedAt)
 	if err != nil {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "series not found"}
 	}
@@ -780,9 +1022,9 @@ func GetSeries(ctx context.Context, id string) (*Series, error) {
 //encore:api public method=GET path=/series/:id/comics
 func SeriesComics(ctx context.Context, id string) (*ListComicsResponse, error) {
 	rows, err := db.Query(ctx, `
-		SELECT id, uploader_id, title, slug, description, content_language, status,
+		SELECT id, uploader_id, title, author, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
-			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count,
+			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
 		FROM comics WHERE series_id = $1 AND status = 'published'
 		ORDER BY series_order ASC, published_at ASC
@@ -852,4 +1094,117 @@ func escapeXML(s string) string {
 		}
 	}
 	return result
+}
+
+type ArchiveComicParams struct {
+	ID string `path:"id"`
+}
+
+//encore:api auth method=POST path=/admin/comics/:id/archive
+func ArchiveComic(ctx context.Context, id string) error {
+	ad, hasAuth := getAuthData(ctx)
+	if !hasAuth || (ad.Role != "admin" && ad.Role != "moderator") {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "admin or moderator only"}
+	}
+	if id == "" { return &errs.Error{Code: errs.InvalidArgument, Message: "id required"} }
+	_, err := db.Exec(ctx, `UPDATE comics SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`, id)
+	return err
+}
+
+//encore:api auth method=POST path=/admin/comics/:id/restore
+func RestoreComic(ctx context.Context, id string) error {
+	ad, hasAuth := getAuthData(ctx)
+	if !hasAuth || (ad.Role != "admin" && ad.Role != "moderator") {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "admin or moderator only"}
+	}
+	if id == "" { return &errs.Error{Code: errs.InvalidArgument, Message: "id required"} }
+	_, err := db.Exec(ctx, `UPDATE comics SET deleted_at = NULL WHERE id = $1`, id)
+	return err
+}
+
+//encore:api auth method=GET path=/admin/recycle-bin
+func RecycleBin(ctx context.Context) (*ListComicsResponse, error) {
+	ad, hasAuth := getAuthData(ctx)
+	if !hasAuth || (ad.Role != "admin" && ad.Role != "moderator") {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin or moderator only"}
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT c.id, c.uploader_id, c.title, c.slug, c.description, c.content_language, c.status,
+			c.cover_key, c.file_key, c.page_keys, c.file_size_bytes, c.min_tier_id, c.age_rating,
+			c.tags, c.rejection_reason, c.published_at, c.view_count, c.download_count, c.like_count, c.fav_count,
+			c.created_at, c.updated_at
+		FROM comics c
+		WHERE c.deleted_at IS NOT NULL
+		ORDER BY c.deleted_at DESC
+		LIMIT 50
+	`)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	comics, err := scanComics(rows)
+	if err != nil { return nil, err }
+	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
+}
+
+//encore:api auth method=DELETE path=/comics/:id
+func DeleteComic(ctx context.Context, id string) error {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" && ad.Role != "moderator" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "admin or moderator only"}
+	}
+
+	_, err := db.Exec(ctx, `DELETE FROM comics WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+type AuditLogEntry struct {
+	ID         string    `json:"id"`
+	ActorID    string    `json:"actor_id"`
+	Action     string    `json:"action"`
+	TargetType string    `json:"target_type"`
+	TargetID   string    `json:"target_id"`
+	Details    string    `json:"details,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type AuditLogsResponse struct {
+	Entries []AuditLogEntry `json:"entries"`
+}
+
+//encore:api auth method=GET path=/admin/audit-logs
+func AdminAuditLogs(ctx context.Context) (*AuditLogsResponse, error) {
+	ad, hasAuth := getAuthData(ctx)
+	if !hasAuth || ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	rows, err := db.Query(ctx, `SELECT id, actor_id, action, target_type, target_id, COALESCE(details::text, ''), created_at FROM audit_logs ORDER BY created_at DESC LIMIT 100`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []AuditLogEntry
+	for rows.Next() {
+		var e AuditLogEntry
+		var rawDetails string
+		if err := rows.Scan(&e.ID, &e.ActorID, &e.Action, &e.TargetType, &e.TargetID, &rawDetails, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		if rawDetails != "" && rawDetails != "{}" {
+			var parsed interface{}
+			if json.Unmarshal([]byte(rawDetails), &parsed) == nil {
+				e.Details = rawDetails
+			}
+		}
+		entries = append(entries, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return &AuditLogsResponse{Entries: entries}, nil
 }

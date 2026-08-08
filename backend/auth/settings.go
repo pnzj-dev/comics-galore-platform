@@ -17,6 +17,7 @@ type UserPreferences struct {
 	EmailSupportReplies  bool   `json:"email_support_replies"`
 	EmailMarketing       bool   `json:"email_marketing"`
 	InAppEnabled         bool   `json:"in_app_enabled"`
+	HideMature           bool   `json:"hide_mature"`
 }
 
 type AppSettings struct {
@@ -52,6 +53,7 @@ var defaultPreferences = UserPreferences{
 	EmailSupportReplies: true,
 	EmailMarketing:      false,
 	InAppEnabled:        true,
+	HideMature:          false,
 }
 
 //encore:api auth method=GET path=/me/preferences
@@ -108,6 +110,7 @@ func getGlobalDefaults(ctx context.Context) (*UserPreferences, error) {
 		EmailSupportReplies: true,
 		EmailMarketing:      false,
 		InAppEnabled:        true,
+		HideMature:          false,
 	}, nil
 }
 
@@ -147,6 +150,10 @@ func SaveAdminSettings(ctx context.Context, p *AppSettings) (*AppSettings, error
 	if err != nil {
 		return nil, err
 	}
+
+	db.Exec(ctx, `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details) VALUES ($1, 'update_settings', 'settings', 'global', 'settings updated')`,
+		ad.UserID)
+
 	return p, nil
 }
 

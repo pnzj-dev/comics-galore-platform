@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { BookOpenCheck } from 'lucide-svelte';
+
 	interface Props {
 		id: string;
 		title: string;
@@ -78,7 +80,7 @@
 		</a>
 		<div class="mt-auto pt-1.5 flex items-center justify-between">
 			<div class="flex items-center gap-1.5">
-				<span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium {statusColor(status)}">{status.replace('_', ' ')}</span>
+				<span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium flex items-center gap-0.5 {statusColor(status)}">{#if status === 'published'}<BookOpenCheck class="size-2.5" />{/if}{status.replace('_', ' ')}</span>
 				{#if uploader_name}
 					<span class="text-[10px] text-gray-400 truncate max-w-[80px]" title={uploader_name}>{uploader_name}</span>
 				{/if}

@@ -13,6 +13,7 @@
 
 	// Metadata form fields
 	let title = $state('');
+	let author = $state('');
 	let description = $state('');
 	let contentLanguage = $state('en');
 	let ageRating = $state('all_ages');
@@ -84,7 +85,7 @@
 		try {
 			const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
 			await api.post('/comics', {
-				title, description, content_language: contentLanguage,
+				title, author, description, content_language: contentLanguage,
 				cover_key: uploadKey, file_key: uploadKey,
 				page_keys: [uploadKey],
 				file_size_bytes: archiveFile?.size || 0,
@@ -166,6 +167,11 @@
 			<div class="space-y-1.5">
 				<Label for="title">Title *</Label>
 				<Input id="title" bind:value={title} placeholder="Comic title" required />
+			</div>
+
+			<div class="space-y-1.5">
+				<Label for="author">Author</Label>
+				<Input id="author" bind:value={author} placeholder="Author name" />
 			</div>
 
 			<div class="space-y-1.5">

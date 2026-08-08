@@ -89,6 +89,27 @@ Prefer `<button>` over `<div>` with `onclick`. If a `<div>` is necessary, add `r
 ```
 The inner content div can use `<div role="presentation" onclick={(e) => e.stopPropagation()}>`.
 
+**Accessibility: carousels / regions with keyboard nav**
+When a `<div>` needs `tabindex="0"` + `onkeydown` for interactive regions (image carousels, galleries), suppress the false-positive a11y warnings since `role="region"` makes it accessible:
+```svelte
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<div class="carousel" onkeydown={handleKeydown} tabindex="0" role="region" aria-label="Image carousel">
+```
+These two warnings fire because Svelte cannot statically verify `role="region"` constitutes proper interactivity — the region role paired with keyboard handlers is a valid ARIA pattern. Prefer a `<button>` wrapper when possible; use these ignores only for carousels/galleries.
+
+### Inline SVG for Toggleable Icons
+
+When an icon needs to switch between filled/outlined states (like, dislike, favorite), use inline SVG with `{#if}`:
+```svelte
+{#if active}
+  <svg class="size-3.5" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="..."/></svg>
+{:else}
+  <svg class="size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="..."/></svg>
+{/if}
+```
+Prefer lucide-svelte for all non-toggle icons; use inline SVGs only when fill toggling is needed.
+
 ## References
 
 - `docs/ui.md`, `docs/v1-scope.md`, ADR `0002-sveltekit.md`

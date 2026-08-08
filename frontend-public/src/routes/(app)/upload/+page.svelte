@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { api } from '$lib/api/client';
 	import { onMount } from 'svelte';
-	import { currentUser } from '$lib/stores/auth';
+	import { currentUser, fetchMe } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
 	import CompactCard from '$lib/components/CompactCard.svelte';
 	import ComicForm from '$lib/components/ComicForm.svelte';
@@ -16,7 +16,8 @@
 	const user = $derived($currentUser);
 
 	onMount(async () => {
-		if (!$currentUser || ($currentUser.role !== 'uploader' && $currentUser.role !== 'admin')) {
+		const me = await fetchMe();
+		if (!me || (me.role !== 'uploader' && me.role !== 'admin')) {
 			await goto('/');
 			return;
 		}
@@ -25,10 +26,14 @@
 	});
 
 	async function loadComics() {
+		const timeout = setTimeout(() => { loading = false; }, 5000);
 		try {
 			const res = await api.get<{ comics: any[] }>('/uploader/comics');
+			clearTimeout(timeout);
 			myComics = res.comics;
-		} catch {}
+		} catch {
+			clearTimeout(timeout);
+		}
 		loading = false;
 	}
 
@@ -58,12 +63,22 @@
 	</div>
 
 	{#if activeSessions.length > 0}
-		<div class="mb-6 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800">
-			<p class="text-sm font-medium text-yellow-700 dark:text-yellow-400">
-				You have {activeSessions.length} active upload session{activeSessions.length > 1 ? 's' : ''}.
-				{activeSessions[0].parts?.length > 0 ? ` ${activeSessions[0].parts.length} file(s) already uploaded.` : ''}
-			</p>
-			<p class="text-xs text-yellow-600 dark:text-yellow-500 mt-1">Return to the same tab to continue where you left off. Your uploaded files are preserved.</p>
+		<div class="mb-6 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 flex items-center justify-between">
+			<div>
+				<p class="text-sm font-medium text-yellow-700 dark:text-yellow-400">
+					You have {activeSessions.length} active upload session{activeSessions.length > 1 ? 's' : ''}.
+					{activeSessions[0]?.parts?.length > 0 ? ` ${activeSessions[0].parts.length} file(s) already uploaded.` : ''}
+				</p>
+				<p class="text-xs text-yellow-600 dark:text-yellow-500 mt-1">Switch to Manual or Archive tab to continue where you left off.</p>
+			</div>
+			<div class="flex gap-2 shrink-0">
+				{#if activeSessions[0]?.presigned_urls?.length > 0}
+					<Button size="sm" variant="outline" onclick={() => tab = 'manual'}>Resume Manual</Button>
+				{/if}
+				{#if activeSessions[0]?.archive_keys?.length > 0}
+					<Button size="sm" variant="outline" onclick={() => tab = 'archive'}>Resume Archive</Button>
+				{/if}
+			</div>
 		</div>
 	{/if}
 

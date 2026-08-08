@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"comics-galore/backend/fixtures"
+	comics "comics-galore/backend/comics"
 
 	"encore.dev/beta/errs"
 	"encore.dev/et"
@@ -92,6 +93,64 @@ func TestDownloadQuotaExceeded(t *testing.T) {
 	}
 	if resp.Allowed {
 		t.Fatal("expected download not allowed after 5 downloads on free tier")
+	}
+}
+
+func TestRecordDownload_IncrementsCounter(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+	_, _ = et.NewTestDatabase(context.Background(), "readingdb")
+
+	comic, err := comics.CreateComic(fixtures.UploaderCtx(), &comics.CreateComicParams{
+		Title:    "Download Count Comic",
+		CoverKey: "covers/dlc.jpg",
+		FileKey:  "files/dlc.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create comic error: %v", err)
+	}
+
+	dlCtx := fixtures.TierGatedCtx(fixtures.TestUserID, "user", "gold")
+	_, err = RecordDownload(dlCtx, comic.ID)
+	if err != nil {
+		t.Fatalf("download error: %v", err)
+	}
+
+	fetched, err := comics.GetComic(context.Background(), comic.ID)
+	if err != nil {
+		t.Fatalf("get comic error: %v", err)
+	}
+	if fetched.DownloadCount < 1 {
+		t.Errorf("expected download_count >= 1, got %d", fetched.DownloadCount)
+	}
+}
+
+func TestContinueReading_ExcludesCompleted(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "readingdb")
+	ctx := fixtures.UserCtx()
+
+	SaveProgress(ctx, testComicA, &SaveProgressParams{CurrentPage: 5, TotalPages: 10, Completed: true})
+	SaveProgress(ctx, testComicB, &SaveProgressParams{CurrentPage: 3, TotalPages: 20, Completed: false})
+
+	resp, err := ContinueReading(ctx)
+	if err != nil {
+		t.Fatalf("continue reading error: %v", err)
+	}
+
+	for _, item := range resp.Items {
+		if item.ComicID == testComicA {
+			t.Error("completed comic should not appear in continue reading")
+		}
+	}
+
+	found := false
+	for _, item := range resp.Items {
+		if item.ComicID == testComicB {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("in-progress comic should appear in continue reading")
 	}
 }
 

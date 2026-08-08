@@ -24,7 +24,6 @@ A working web app where users can discover and read comics, uploaders can submit
 ### Platform
 - Encore backend + **SvelteKit web** client  
 - Auth + roles: `user`, `uploader`, `moderator`, `admin`  
-- Bootstrap: refuse to start with zero admins  
 - PostgreSQL + Encore migrations + SQLC (or chosen ORM)  
 - Dark mode + basic accessibility on core flows  
 
@@ -44,8 +43,16 @@ A working web app where users can discover and read comics, uploaders can submit
 
 ### Social (minimal)
 - Like / unlike  
+- Dislike / undislike  
+- Like/Dislike mutual exclusivity: liking removes an existing dislike, disliking removes an existing like
 - Favorite / unfavorite  
-- Optional: simple star rating **or** skip ratings if time-constrained (prefer keep like+favorite)  
+- Per-user reaction status in list + detail responses  
+- Reaction counts displayed on ComicCards and detail stats  
+
+### Reader & media viewing
+- Lightbox carousel: fullscreen overlay with keyboard nav, dot indicators, page counter  
+- Cover section inline carousel: left/right arrows (disabled at bounds), thumbnail strip, page counter  
+- Thumbnail strip below cover: click to select image, highlighted current selection  
 
 ### Tiers & payments
 - Tiers table + seed (e.g. free + 1–2 paid)  
@@ -82,7 +89,7 @@ A working web app where users can discover and read comics, uploaders can submit
 - Archive + `comic.json` path (libarchive.js) reusing same `POST /comics`  
 - Upload Session resume for large files (if not fully solid in v1)  
 - Cloudflare Images for cover/preview + admin `image_serving_mode`  
-- Comments + flagging + moderator queue  
+- Comments + flagging + moderator queue + SSE live comments (`/comments-stream/:id` raw endpoint)  
 - Series entity + series pages + series follow  
 - Notification preferences + a few real emails (Resend)  
 - Admin: bulk actions, recycle bin, user detail drawer  
@@ -165,16 +172,15 @@ A working web app where users can discover and read comics, uploaders can submit
 
 ## V1 exit checklist (demoable)
 
-- [ ] Fresh install requires an admin (or seeds one in dev only with clear docs)  
-- [ ] User can register/login  
-- [ ] Uploader submits a comic (manual) → appears as pending  
-- [ ] Admin/moderator publishes it  
-- [ ] Anonymous/user can open public detail + reader  
-- [ ] Progress/Continue Reading works when logged in  
-- [ ] Like/favorite work  
-- [ ] Free tier quota enforced on download  
-- [ ] At least one paid plan can be purchased via NowPayments and unlocks tier  
-- [ ] Webhook activates subscription; raw webhook stored  
-- [ ] Basic admin lists work (users, comics, payments/subs)  
+- [x] User can register/login  
+- [x] Uploader submits a comic (manual) → appears as pending  
+- [x] Admin/moderator publishes it  
+- [x] Anonymous/user can open public detail + reader  
+- [x] Progress/Continue Reading works when logged in  
+- [x] Like/favorite/dislike work  
+- [x] Free tier quota enforced on download  
+- [~] At least one paid plan can be purchased via NowPayments and unlocks tier  
+- [x] Webhook activates subscription; raw webhook stored  
+- [x] Basic admin lists work (users, comics, payments/subs)  
 
 When all boxes are checked, v1 is done—then execute SOON.

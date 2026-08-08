@@ -8,8 +8,11 @@
 
 	let { images, open, startIndex = 0, onClose }: Props = $props();
 
-	// svelte-ignore state_referenced_locally
-	let currentIndex = $state(startIndex);
+	let currentIndex = $state(0);
+
+	$effect(() => {
+		if (open) currentIndex = startIndex;
+	});
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (!open) return;

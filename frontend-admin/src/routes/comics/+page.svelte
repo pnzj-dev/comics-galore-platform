@@ -4,6 +4,7 @@
 	import { currentUser } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { BookOpenCheck } from 'lucide-svelte';
 
 	let comics = $state<any[]>([]);
 	let loading = $state(true);
@@ -68,8 +69,8 @@
 				<tbody class="divide-y divide-border">
 					{#each comics as c}
 						<tr class="hover:bg-muted/30">
-							<td class="px-6 py-3"><a href={`http://localhost:5173/comics/${c.id}`} target="_blank" class="hover:text-primary">{c.title}</a></td>
-							<td class="px-6 py-3"><span class="text-xs px-2 py-0.5 rounded-full {statusClass(c.status)}">{c.status?.replace('_', ' ')}</span></td>
+							<td class="px-6 py-3"><a href={`http://localhost:5173/comics/${c.slug}`} target="_blank" class="hover:text-primary">{c.title}</a></td>
+							<td class="px-6 py-3"><span class="text-xs px-2 py-0.5 rounded-full flex items-center gap-1 w-fit {statusClass(c.status)}">{#if c.status === 'published'}<BookOpenCheck class="size-3" />{/if}{c.status?.replace('_', ' ')}</span></td>
 							<td class="px-6 py-3 text-xs">{c.view_count}</td>
 							<td class="px-6 py-3 text-xs">{c.download_count}</td>
 							<td class="px-6 py-3 text-xs text-muted-foreground">{new Date(c.created_at).toLocaleDateString()}</td>

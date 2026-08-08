@@ -94,15 +94,24 @@ Main Agent → QA Subagents (parallel)
   │   ├─ backend/auth/auth_test.go                        PASS/FAIL
   │   ├─ backend/comics/comics_test.go                    PASS/FAIL
   │   ├─ backend/billing/billing_test.go                  PASS/FAIL
-  │   └─ backend/tiers/tiers_test.go                      PASS/FAIL
+  │   ├─ backend/tiers/tiers_test.go                      PASS/FAIL
+  │   ├─ backend/reading/reading_test.go                  PASS/FAIL
+  │   └─ backend/upload/upload_test.go                    PASS/FAIL
   ├─ Frontend QA: runs `bun run test:unit --run`, reports:
-  │   ├─ tests/unit/stores/auth.test.ts                   PASS/FAIL
   │   ├─ tests/unit/api/client.test.ts                    PASS/FAIL
-  │   └─ tests/unit/utils.test.ts                         PASS/FAIL
+  │   ├─ tests/unit/stores/auth.test.ts                   PASS/FAIL
+  │   ├─ tests/unit/utils.test.ts                         PASS/FAIL
+  │   ├─ tests/unit/components/Lightbox.test.ts           PASS/FAIL
+  │   ├─ tests/unit/components/AgeGate.test.ts            PASS/FAIL
+  │   ├─ tests/unit/components/LikeButton.test.ts         PASS/FAIL
+  │   ├─ tests/unit/components/DislikeButton.test.ts       PASS/FAIL
+  │   └─ tests/unit/components/FavoriteButton.test.ts     PASS/FAIL
   └─ E2E QA: runs `bun run test:e2e`, reports:
       ├─ tests/e2e/public.spec.ts                         PASS/FAIL
       ├─ tests/e2e/auth.spec.ts                           PASS/FAIL
-      └─ tests/e2e/navigation.spec.ts                     PASS/FAIL
+      ├─ tests/e2e/auth-pages.spec.ts                     PASS/FAIL
+      ├─ tests/e2e/navigation.spec.ts                     PASS/FAIL
+      └─ tests/e2e/comic-detail.spec.ts                   PASS/FAIL
 
 Main Agent ← collects results → only proceeds if all green
 ```

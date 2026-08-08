@@ -62,9 +62,11 @@
 
 	<div class="flex justify-center">
 		<div class="bg-white p-4 rounded-xl inline-block">
-			<div class="w-40 h-40 bg-muted rounded-lg flex items-center justify-center text-muted-foreground text-xs">
-				QR Code
-			</div>
+			<img
+				src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={encodeURIComponent(payAddress)}"
+				alt="Payment QR Code"
+				class="w-40 h-40 rounded-lg"
+			/>
 		</div>
 	</div>
 

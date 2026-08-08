@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
@@ -27,8 +28,8 @@ func TestRegister_Valid(t *testing.T) {
 	if resp.User.Email != "test@example.com" {
 		t.Errorf("expected email test@example.com, got %s", resp.User.Email)
 	}
-	if resp.User.Role != "admin" {
-		t.Errorf("first user should be admin, got %s", resp.User.Role)
+	if resp.User.Role != "user" {
+		t.Errorf("expected role user, got %s", resp.User.Role)
 	}
 	if resp.User.Tier != "free" {
 		t.Errorf("expected tier free, got %s", resp.User.Tier)
@@ -254,5 +255,263 @@ func TestRenewToken(t *testing.T) {
 	}
 	if renewed.User.Email != "renew@example.com" {
 		t.Errorf("expected email renew@example.com, got %s", renewed.User.Email)
+	}
+}
+
+func TestAdminBanUser(t *testing.T) {
+	ctx := context.Background()
+	_, _ = et.NewTestDatabase(ctx, "authdb")
+
+	resp, err := Register(ctx, &RegisterParams{
+		Email:    "victim@example.com",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register error: %v", err)
+	}
+
+	adminCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
+		UserID: resp.User.ID,
+		Email:  resp.User.Email,
+		Role:   "admin",
+		Tier:   resp.User.Tier,
+	})
+
+	err = AdminBanUser(adminCtx, resp.User.ID, &BanUserParams{Reason: "spam"})
+	if err != nil {
+		t.Fatalf("ban error: %v", err)
+	}
+
+	var bannedAt *time.Time
+	err = db.QueryRow(ctx, `SELECT banned_at FROM users WHERE id = $1`, resp.User.ID).Scan(&bannedAt)
+	if err != nil {
+		t.Fatalf("query error: %v", err)
+	}
+	if bannedAt == nil {
+		t.Error("expected banned_at to be set")
+	}
+}
+
+func TestAdminUnbanUser(t *testing.T) {
+	ctx := context.Background()
+	_, _ = et.NewTestDatabase(ctx, "authdb")
+
+	resp, err := Register(ctx, &RegisterParams{
+		Email:    "pardoned@example.com",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register error: %v", err)
+	}
+
+	adminCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
+		UserID: resp.User.ID,
+		Email:  resp.User.Email,
+		Role:   "admin",
+		Tier:   resp.User.Tier,
+	})
+
+	err = AdminBanUser(adminCtx, resp.User.ID, &BanUserParams{Reason: "spam"})
+	if err != nil {
+		t.Fatalf("ban error: %v", err)
+	}
+
+	err = AdminUnbanUser(adminCtx, resp.User.ID)
+	if err != nil {
+		t.Fatalf("unban error: %v", err)
+	}
+
+	var bannedAt *time.Time
+	err = db.QueryRow(ctx, `SELECT banned_at FROM users WHERE id = $1`, resp.User.ID).Scan(&bannedAt)
+	if err != nil {
+		t.Fatalf("query error: %v", err)
+	}
+	if bannedAt != nil {
+		t.Error("expected banned_at to be NULL after unban")
+	}
+}
+
+func TestAdminBanUser_NonAdmin(t *testing.T) {
+	ctx := context.Background()
+	_, _ = et.NewTestDatabase(ctx, "authdb")
+
+	resp, err := Register(ctx, &RegisterParams{
+		Email:    "user@example.com",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register error: %v", err)
+	}
+
+	userCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
+		UserID: resp.User.ID,
+		Email:  resp.User.Email,
+		Role:   "user",
+		Tier:   resp.User.Tier,
+	})
+
+	err = AdminBanUser(userCtx, "some-other-id", &BanUserParams{Reason: "test"})
+	if err == nil {
+		t.Fatal("expected error for non-admin, got nil")
+	}
+	var e *errs.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("expected errs.Error, got %T", err)
+	}
+	if e.Code != errs.PermissionDenied {
+		t.Errorf("expected PermissionDenied, got %v", e.Code)
+	}
+}
+
+func TestAdminSuspendUser(t *testing.T) {
+	ctx := context.Background()
+	_, _ = et.NewTestDatabase(ctx, "authdb")
+
+	resp, err := Register(ctx, &RegisterParams{
+		Email:    "suspendme@example.com",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register error: %v", err)
+	}
+
+	adminCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
+		UserID: resp.User.ID,
+		Email:  resp.User.Email,
+		Role:   "admin",
+		Tier:   resp.User.Tier,
+	})
+
+	err = AdminSuspendUser(adminCtx, resp.User.ID, &BanUserParams{Reason: "violation"})
+	if err != nil {
+		t.Fatalf("suspend error: %v", err)
+	}
+
+	var suspendedAt *time.Time
+	err = db.QueryRow(ctx, `SELECT suspended_at FROM users WHERE id = $1`, resp.User.ID).Scan(&suspendedAt)
+	if err != nil {
+		t.Fatalf("query error: %v", err)
+	}
+	if suspendedAt == nil {
+		t.Error("expected suspended_at to be set")
+	}
+}
+
+func TestAdminUnsuspendUser(t *testing.T) {
+	ctx := context.Background()
+	_, _ = et.NewTestDatabase(ctx, "authdb")
+
+	resp, err := Register(ctx, &RegisterParams{
+		Email:    "unsuspendme@example.com",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register error: %v", err)
+	}
+
+	adminCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
+		UserID: resp.User.ID,
+		Email:  resp.User.Email,
+		Role:   "admin",
+		Tier:   resp.User.Tier,
+	})
+
+	err = AdminSuspendUser(adminCtx, resp.User.ID, &BanUserParams{Reason: "violation"})
+	if err != nil {
+		t.Fatalf("suspend error: %v", err)
+	}
+
+	err = AdminUnsuspendUser(adminCtx, resp.User.ID)
+	if err != nil {
+		t.Fatalf("unsuspend error: %v", err)
+	}
+
+	var suspendedAt *time.Time
+	err = db.QueryRow(ctx, `SELECT suspended_at FROM users WHERE id = $1`, resp.User.ID).Scan(&suspendedAt)
+	if err != nil {
+		t.Fatalf("query error: %v", err)
+	}
+	if suspendedAt != nil {
+		t.Error("expected suspended_at to be NULL after unsuspend")
+	}
+}
+
+func TestBannedUser_CannotLogin(t *testing.T) {
+	ctx := context.Background()
+	_, _ = et.NewTestDatabase(ctx, "authdb")
+
+	resp, err := Register(ctx, &RegisterParams{
+		Email:    "banned@example.com",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register error: %v", err)
+	}
+
+	adminCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
+		UserID: resp.User.ID,
+		Email:  resp.User.Email,
+		Role:   "admin",
+		Tier:   resp.User.Tier,
+	})
+
+	err = AdminBanUser(adminCtx, resp.User.ID, &BanUserParams{Reason: "spam"})
+	if err != nil {
+		t.Fatalf("ban error: %v", err)
+	}
+
+	_, err = Login(ctx, &LoginParams{
+		Email:    "banned@example.com",
+		Password: "password123",
+	})
+	if err == nil {
+		t.Fatal("expected error for banned user, got nil")
+	}
+	var e *errs.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("expected errs.Error, got %T", err)
+	}
+	if e.Code != errs.PermissionDenied {
+		t.Errorf("expected PermissionDenied, got %v", e.Code)
+	}
+}
+
+func TestSuspendedUser_CannotLogin(t *testing.T) {
+	ctx := context.Background()
+	_, _ = et.NewTestDatabase(ctx, "authdb")
+
+	resp, err := Register(ctx, &RegisterParams{
+		Email:    "suspended@example.com",
+		Password: "password123",
+	})
+	if err != nil {
+		t.Fatalf("register error: %v", err)
+	}
+
+	adminCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
+		UserID: resp.User.ID,
+		Email:  resp.User.Email,
+		Role:   "admin",
+		Tier:   resp.User.Tier,
+	})
+
+	err = AdminSuspendUser(adminCtx, resp.User.ID, &BanUserParams{Reason: "violation"})
+	if err != nil {
+		t.Fatalf("suspend error: %v", err)
+	}
+
+	_, err = Login(ctx, &LoginParams{
+		Email:    "suspended@example.com",
+		Password: "password123",
+	})
+	if err == nil {
+		t.Fatal("expected error for suspended user, got nil")
+	}
+	var e *errs.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("expected errs.Error, got %T", err)
+	}
+	if e.Code != errs.PermissionDenied {
+		t.Errorf("expected PermissionDenied, got %v", e.Code)
 	}
 }

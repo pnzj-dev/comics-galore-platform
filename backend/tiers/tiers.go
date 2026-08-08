@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"encore.dev/beta/auth"
+	myauth "comics-galore/backend/auth"
 	"encore.dev/beta/errs"
 	"encore.dev/storage/sqldb"
 )
@@ -119,4 +121,42 @@ func ListPlans(ctx context.Context) (*ListPlansResponse, error) {
 
 type ListPlansResponse struct {
 	Plans []Plan `json:"plans"`
+}
+
+type MatrixStatus struct {
+	Complete bool `json:"complete"`
+}
+
+//encore:api public method=GET path=/plans/ready
+func PlansReady(ctx context.Context) (*MatrixStatus, error) {
+	var count int
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM plans WHERE provider_plan_id IS NULL OR provider_plan_id = ''`).Scan(&count)
+	return &MatrixStatus{Complete: count == 0}, nil
+}
+
+//encore:api auth method=GET path=/admin/plans/matrix-status
+func PlanMatrixStatus(ctx context.Context) (*MatrixStatus, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	var count int
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM plans WHERE provider_plan_id IS NULL OR provider_plan_id = ''`).Scan(&count)
+	return &MatrixStatus{Complete: count == 0}, nil
+}
+
+type UpdatePlanProviderParams struct {
+	ProviderPlanID string `json:"provider_plan_id"`
+}
+
+//encore:api auth method=PATCH path=/admin/plans/:id
+func UpdatePlanProviderID(ctx context.Context, id string, p *UpdatePlanProviderParams) error {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	_, err := db.Exec(ctx, `UPDATE plans SET provider_plan_id = $1 WHERE id = $2`, p.ProviderPlanID, id)
+	return err
 }

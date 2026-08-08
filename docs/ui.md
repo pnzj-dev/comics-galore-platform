@@ -258,7 +258,10 @@ Route: `/comics/:slug`
 
 **Cover Gallery**
 - Main cover image (3:4 aspect, `object-cover`), click to open fullscreen overlay
-- Thumbnail strip below (4-5 images), dot indicators for pagination
+- Left/right nav arrows overlaid — always visible on hover, disabled at bounds (opacity-30)
+- Thumbnail strip below (cover + 4 page previews), highlighted border on current selection
+- Image counter badge (N / Total) at bottom-left; page count badge at bottom-right
+- Clicking thumbnail updates main image to that index
 - Fullscreen overlay: keyboard nav (ArrowLeft / ArrowRight / Escape), image counter header
 - No premium gating on images in v1 (all visible)
 
@@ -313,11 +316,13 @@ Route: `/comics/:slug`
 - Full synopsis text. For non-premium users on premium comics: truncated to 400 chars + "..." + blur gradient + "Subscribe to read more" banner with CTA to Plans modal
 
 **Comments**
-- Lazy-loaded list of threaded comments
-- Server-Sent Events (SSE) for real-time updates when new comments are posted
-- Comment form (auth-gated): textarea + "Post Comment" button with inline spinner
-- Per-comment reply toggle: nested reply form, indented replies with left border
-- Max nesting depth configurable (default 3)
+- Lazy-loaded list of threaded comments with 10-second timeout (`Promise.race`); shows "Retry" button on failure
+- Server-Sent Events (SSE) for real-time updates when new comments are posted (Encore raw endpoint `/comments-stream/:id` + `sveltekit-sse` client store)
+- Subscription starts reactively when loading completes; cleaned up on `onDestroy`
+- Parent comment deletion cascades to child replies (`ON DELETE CASCADE` in DB)
+- LikeButton and DislikeButton use inline SVGs (not lucide-svelte) to toggle `fill="currentColor"` (active/solid) vs `fill="none"` (inactive/outline)
+- Like/Dislike are mutually exclusive: like resets dislike and vice versa (via `resetKey` + `onToggleOn` props)
+- Published status badge uses `BookOpenCheck` icon from lucide-svelte
 
 **Plans Modal Trigger**
 - Same `CheckoutModal` from `/pricing` flow, triggered from "Subscribe" upsell on detail page
@@ -677,19 +682,19 @@ Full system-wide form (7 Card sections) loaded via `GET /admin/settings`:
 - **Quota Boosts**: 3 boost prices editable
 - **Security**: rate limit, email verification toggle, S3/CF presigned TTL
 
-## Public experience (completed)
+## Public experience (v1 implemented / v1.1 in progress)
 
-- Home rails: Staff Picks, New this week, Popular this month, Comic of the Day, Continue Reading
-- Tag pages as public routes
-- Series page: progress %, missing issues, series-follow button
-- Reader: thumbnails/scrubber, fit modes (width/height/original), optional dual-page
-- Age rating badge on cards/detail; age-gate modal when required
-- Static routes: Terms, Privacy, DMCA
-- Cookie consent banner (if analytics enabled)
-- Auth: verify-email, reset-password flows; notification preferences screen
-- Empty states + first-time guidance; quota-blocked upgrade state
-
-- Admin media settings: image serving mode (default direct), imgproxy base URL.
+- Home rails: Popular this month, Comic of the Day, Continue Reading ✓ (Staff Picks, New this week — v1.1)
+- Tag pages as public routes ✓
+- Series page: progress %, missing issues, series-follow button (v1.1)
+- Reader: keyboard nav, progress save, Continue Reading ✓ (thumbnails/scrubber, dual-page — v1.1)
+- Age rating badge on cards/detail ✓; age-gate modal ✓
+- Cover section inline carousel: left/right arrows, thumbnail strip, page counter ✓
+- Lightbox carousel: fullscreen overlay, keyboard nav, dot indicators ✓
+- Static routes: Terms, Privacy, DMCA ✓
+- Auth: verify-email, reset-password flows ✓
+- Notification preferences screen (v1.1)
+- Empty states + first-time guidance; quota-blocked upgrade state ✓
 
 
 ## Language & i18n UI

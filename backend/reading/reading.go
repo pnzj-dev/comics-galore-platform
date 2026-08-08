@@ -6,6 +6,7 @@ import (
 
 	"encore.dev/beta/auth"
 	myauth "comics-galore/backend/auth"
+	comics "comics-galore/backend/comics"
 
 	"encore.dev/beta/errs"
 	"encore.dev/storage/sqldb"
@@ -140,6 +141,8 @@ func RecordDownload(ctx context.Context, comicId string) (*DownloadResponse, err
 	if err != nil {
 		return nil, err
 	}
+
+	comics.IncrementDownloadCount(ctx, comicId)
 
 	return &DownloadResponse{
 		Allowed: true,

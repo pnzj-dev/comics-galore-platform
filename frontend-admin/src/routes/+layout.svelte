@@ -1,18 +1,45 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { currentUser, isAuthenticated, fetchMe, logout } from '$lib/stores/auth';
+	import { currentUser, isAuthenticated, fetchMe } from '$lib/stores/auth';
+	import { api } from '$lib/api/client';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { Settings, LogOut } from 'lucide-svelte';
+	import LogoutConfirmationModal from '$lib/components/LogoutConfirmationModal.svelte';
+	import NowPaymentsLinkWizard from '$lib/components/NowPaymentsLinkWizard.svelte';
+	import { Settings, LogOut, AlertTriangle } from 'lucide-svelte';
 
 	let { children } = $props();
 	let profileOpen = $state(false);
-	let confirmLogout = $state(false);
+	let logoutOpen = $state(false);
+	let wizardOpen = $state(false);
+	let planMatrixComplete = $state(true);
+	let wizardBlocked = $state(false);
 
 	onMount(() => { fetchMe(); });
 
 	const user = $derived($currentUser);
 	const authed = $derived($isAuthenticated);
+
+	async function checkPlanMatrix() {
+		try {
+			const res = await api.get<{ complete: boolean }>('/admin/plans/matrix-status');
+			planMatrixComplete = res.complete;
+			if (!res.complete && !wizardBlocked) {
+				wizardOpen = true;
+			}
+		} catch {
+			planMatrixComplete = true;
+		}
+	}
+
+	function onWizardClose() {
+		wizardOpen = false;
+		wizardBlocked = !planMatrixComplete;
+	}
+
+	$effect(() => {
+		if (authed) checkPlanMatrix();
+	});
 </script>
 
 {#if authed && user?.role === 'admin'}
@@ -33,26 +60,26 @@
 				<button onclick={() => profileOpen = true} class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-muted transition-colors">
 					<span class="text-xs text-muted-foreground">{user.email}</span>
 				</button>
-				<Button variant="ghost" size="sm" onclick={() => { logout(); }}>Logout</Button>
-				{#if confirmLogout}
-					<button onclick={() => { logout(); }} class="text-xs px-2 py-1 rounded bg-destructive text-destructive-foreground hover:bg-destructive/80">Yes, logout</button>
-					<button onclick={() => confirmLogout = false} class="text-xs px-2 py-1 rounded text-muted-foreground hover:bg-muted">Cancel</button>
-				{:else}
-					<button onclick={() => confirmLogout = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Logout">
-						<LogOut class="size-4" />
-					</button>
-				{/if}
+				<button onclick={() => logoutOpen = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Logout">
+					<LogOut class="size-4" />
+				</button>
 			</div>
 		</div>
 	</nav>
 
-	<div class="bg-red-600 text-white text-xs text-center py-1.5 font-medium">
-		Action required: Configure the complete plan matrix in admin settings.
-	</div>
+	{#if !planMatrixComplete}
+		<button onclick={() => { wizardOpen = true; wizardBlocked = true; }} class="w-full flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs text-center py-1.5 font-medium cursor-pointer border-0 transition-colors">
+			<AlertTriangle class="size-3" />
+			Unlinked NowPayments plans — Click here to configure
+		</button>
+	{/if}
 
 	<main class="max-w-7xl mx-auto p-4 flex-1 w-full">
 		{@render children()}
 	</main>
+
+	<LogoutConfirmationModal open={logoutOpen} onClose={() => logoutOpen = false} />
+	<NowPaymentsLinkWizard open={wizardOpen} onClose={onWizardClose} />
 {:else}
 	{@render children()}
 {/if}

@@ -113,7 +113,7 @@
 			const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
 			const previewKeys = previewSlots.filter(p => p.key).map(p => p.key);
 			await api.post('/comics', {
-				title, description, content_language: contentLanguage,
+				title, author, description, content_language: contentLanguage,
 				cover_key: coverKey, file_key: archiveKeys[0],
 				page_keys: [...previewKeys, ...archiveKeys],
 				file_size_bytes: archiveSlots.reduce((sum, a) => sum + (a.size || 0), 0),

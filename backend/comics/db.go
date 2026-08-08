@@ -1,6 +1,7 @@
 package comics
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -80,11 +81,11 @@ func scanComics(rows *sqldb.Rows) ([]Comic, error) {
 		var c Comic
 		var pubAt sql.NullTime
 		err := rows.Scan(
-			&c.ID, &c.UploaderID, &c.Title, &c.Slug, &c.Description,
+			&c.ID, &c.UploaderID, &c.Title, &c.Author, &c.Slug, &c.Description,
 			&c.ContentLanguage, &c.Status, &c.CoverKey, &c.FileKey,
 			scanStringSlice(&c.PageKeys), &c.FileSizeBytes, nulString(&c.MinTierID),
 			&c.AgeRating, scanStringSlice(&c.Tags), nulString(&c.RejectionReason),
-			&pubAt, &c.ViewCount, &c.DownloadCount, &c.LikeCount, &c.FavCount,
+			&pubAt, &c.ViewCount, &c.DownloadCount, &c.LikeCount, &c.FavCount, &c.DislikeCount,
 			&c.CreatedAt, &c.UpdatedAt,
 		)
 		if err != nil {
@@ -97,6 +98,11 @@ func scanComics(rows *sqldb.Rows) ([]Comic, error) {
 		comics = append(comics, c)
 	}
 	return comics, rows.Err()
+}
+
+func IncrementDownloadCount(ctx context.Context, comicID string) error {
+	_, err := db.Exec(ctx, `UPDATE comics SET download_count = download_count + 1 WHERE id = $1`, comicID)
+	return err
 }
 
 func randomSuffix(n int) string {

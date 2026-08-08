@@ -7,15 +7,29 @@
 	let comics = $state<any[]>([]);
 	let loading = $state(true);
 	let langFilter = $state('');
+	let hideMature = $state(false);
 
 	const languages = ['', 'en', 'ja', 'es', 'ko', 'fr', 'pt-BR', 'zh-CN', 'de', 'it', 'id'];
 
-	onMount(() => loadComics());
+	onMount(() => {
+		loadPrefs();
+	});
+
+	async function loadPrefs() {
+		try {
+			const prefs = await api.get<{ hide_mature: boolean }>('/me/preferences');
+			hideMature = prefs.hide_mature;
+		} catch {}
+		loadComics();
+	}
 
 	async function loadComics() {
 		loading = true;
 		try {
-			const query = langFilter ? `?language=${langFilter}` : '';
+			const params = new URLSearchParams();
+			if (langFilter) params.set('language', langFilter);
+			if (hideMature) params.set('exclude_mature', 'true');
+			const query = params.toString() ? `?${params.toString()}` : '';
 			const res = await api.get<{ comics: any[] }>('/comics' + query);
 			comics = res.comics;
 		} catch {}

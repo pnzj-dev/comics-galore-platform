@@ -2,6 +2,7 @@ package billing
 
 import (
 	"database/sql"
+	"errors"
 	"strconv"
 	"time"
 
@@ -9,8 +10,7 @@ import (
 )
 
 func isNoRows(err error) bool {
-	return err == sql.ErrNoRows || err == sqldb.ErrNoRows ||
-		err.Error() == "no rows in result set"
+	return errors.Is(err, sql.ErrNoRows) || errors.Is(err, sqldb.ErrNoRows)
 }
 
 func timePtr(t *time.Time) interface{} {

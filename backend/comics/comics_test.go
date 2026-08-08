@@ -308,6 +308,122 @@ func TestToggleFavorite(t *testing.T) {
 	}
 }
 
+func TestToggleDislike(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Dislike Comic",
+		CoverKey: "covers/dislike.jpg",
+		FileKey:  "files/dislike.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+
+	uCtx := userCtx
+
+	resp1, err := ToggleDislike(uCtx, comic.ID)
+	if err != nil {
+		t.Fatalf("toggle dislike error: %v", err)
+	}
+	if !resp1.Disliked {
+		t.Error("expected disliked=true after first toggle")
+	}
+	if resp1.DislikeCount != 1 {
+		t.Errorf("expected dislike_count 1, got %d", resp1.DislikeCount)
+	}
+
+	resp2, err := ToggleDislike(uCtx, comic.ID)
+	if err != nil {
+		t.Fatalf("toggle undislike error: %v", err)
+	}
+	if resp2.Disliked {
+		t.Error("expected disliked=false after second toggle")
+	}
+	if resp2.DislikeCount != 0 {
+		t.Errorf("expected dislike_count 0, got %d", resp2.DislikeCount)
+	}
+}
+
+func TestToggleLike_RemovesDislike(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title: "MutualEx Comic", CoverKey: "covers/mutual.jpg", FileKey: "files/mutual.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	uCtx := userCtx
+
+	dResp, err := ToggleDislike(uCtx, comic.ID)
+	if err != nil {
+		t.Fatalf("dislike error: %v", err)
+	}
+	if dResp.DislikeCount != 1 {
+		t.Errorf("expected dislike_count 1, got %d", dResp.DislikeCount)
+	}
+
+	lResp, err := ToggleLike(uCtx, comic.ID)
+	if err != nil {
+		t.Fatalf("like error: %v", err)
+	}
+	if !lResp.Liked {
+		t.Error("expected liked=true")
+	}
+	if lResp.LikeCount != 1 {
+		t.Errorf("expected like_count 1, got %d", lResp.LikeCount)
+	}
+
+	status, err := GetLikeStatus(uCtx, comic.ID)
+	if err != nil {
+		t.Fatalf("status error: %v", err)
+	}
+	if status.Disliked {
+		t.Error("expected disliked=false after like")
+	}
+	if !status.Liked {
+		t.Error("expected liked=true")
+	}
+}
+
+func TestToggleDislike_RemovesLike(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title: "MutualEx Comic2", CoverKey: "covers/mutual2.jpg", FileKey: "files/mutual2.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	uCtx := userCtx
+
+	ToggleLike(uCtx, comic.ID)
+
+	dResp, err := ToggleDislike(uCtx, comic.ID)
+	if err != nil {
+		t.Fatalf("dislike error: %v", err)
+	}
+	if !dResp.Disliked {
+		t.Error("expected disliked=true")
+	}
+	if dResp.DislikeCount != 1 {
+		t.Errorf("expected dislike_count 1, got %d", dResp.DislikeCount)
+	}
+
+	status, err := GetLikeStatus(uCtx, comic.ID)
+	if err != nil {
+		t.Fatalf("status error: %v", err)
+	}
+	if status.Liked {
+		t.Error("expected liked=false after dislike")
+	}
+	if !status.Disliked {
+		t.Error("expected disliked=true")
+	}
+}
+
 func TestApproveComic_ChangesStatusToPublished(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
@@ -465,5 +581,346 @@ func TestGetLikeStatus(t *testing.T) {
 	}
 	if !status.Liked {
 		t.Error("expected liked after toggle")
+	}
+}
+
+func TestArchiveComic(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Archive Comic",
+		CoverKey: "covers/archive.jpg",
+		FileKey:  "files/archive.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+
+	admCtx := adminCtx
+	if err := ArchiveComic(admCtx, comic.ID); err != nil {
+		t.Fatalf("archive error: %v", err)
+	}
+
+	resp, err := RecycleBin(admCtx)
+	if err != nil {
+		t.Fatalf("recycle bin error: %v", err)
+	}
+	found := false
+	for _, c := range resp.Comics {
+		if c.ID == comic.ID {
+			found = true; break
+		}
+	}
+	if !found {
+		t.Error("archived comic should appear in recycle bin")
+	}
+}
+
+func TestArchiveComic_RequiresAdmin(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Archive NoPerm",
+		CoverKey: "covers/ar-noperm.jpg",
+		FileKey:  "files/ar-noperm.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+
+	uCtx := userCtx
+	err = ArchiveComic(uCtx, comic.ID)
+	if err == nil {
+		t.Fatal("expected permission error, got nil")
+	}
+}
+
+func TestRestoreComic(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Restore Comic",
+		CoverKey: "covers/restore.jpg",
+		FileKey:  "files/restore.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+
+	admCtx := adminCtx
+	if err := ArchiveComic(admCtx, comic.ID); err != nil {
+		t.Fatalf("archive error: %v", err)
+	}
+	if err := RestoreComic(admCtx, comic.ID); err != nil {
+		t.Fatalf("restore error: %v", err)
+	}
+
+	resp, err := RecycleBin(admCtx)
+	if err != nil {
+		t.Fatalf("recycle bin error: %v", err)
+	}
+	for _, c := range resp.Comics {
+		if c.ID == comic.ID {
+			t.Error("restored comic should NOT appear in recycle bin")
+		}
+	}
+}
+
+func TestRecycleBin_ListsDeletedComics(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Bin Comic",
+		CoverKey: "covers/bin.jpg",
+		FileKey:  "files/bin.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+
+	admCtx := adminCtx
+	if err := ArchiveComic(admCtx, comic.ID); err != nil {
+		t.Fatalf("archive error: %v", err)
+	}
+
+	resp, err := RecycleBin(admCtx)
+	if err != nil {
+		t.Fatalf("recycle bin error: %v", err)
+	}
+	if resp.Total < 1 {
+		t.Error("expected at least 1 comic in recycle bin")
+	}
+}
+
+func TestRecycleBin_RequiresModeratorOrAdmin(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	uCtx := userCtx
+	_, err := RecycleBin(uCtx)
+	if err == nil {
+		t.Fatal("expected permission error, got nil")
+	}
+}
+
+func TestListComicsRandomSort(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	pubCtx := context.Background()
+	resp, err := ListComics(pubCtx, &ListComicsParams{Sort: "random", Limit: 1})
+	if err != nil {
+		t.Fatalf("list random error: %v", err)
+	}
+	if len(resp.Comics) > 1 {
+		t.Errorf("expected at most 1 comic, got %d", len(resp.Comics))
+	}
+}
+
+func TestDeleteComic_Valid(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Delete Me",
+		CoverKey: "covers/delete.jpg",
+		FileKey:  "files/delete.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+
+	admCtx := adminCtx
+	if err := DeleteComic(admCtx, comic.ID); err != nil {
+		t.Fatalf("delete error: %v", err)
+	}
+
+	_, err = GetComic(context.Background(), comic.ID)
+	if err == nil {
+		t.Fatal("expected not found error, got nil")
+	}
+	var e *errs.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("expected errs.Error, got %T", err)
+	}
+	if e.Code != errs.NotFound {
+		t.Errorf("expected NotFound, got %v", e.Code)
+	}
+}
+
+func TestDeleteComic_RequiresAdmin(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Delete NoPerm",
+		CoverKey: "covers/del-noperm.jpg",
+		FileKey:  "files/del-noperm.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+
+	uCtx := userCtx
+	err = DeleteComic(uCtx, comic.ID)
+	if err == nil {
+		t.Fatal("expected permission error, got nil")
+	}
+	var e *errs.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("expected errs.Error, got %T", err)
+	}
+	if e.Code != errs.PermissionDenied {
+		t.Errorf("expected PermissionDenied, got %v", e.Code)
+	}
+}
+
+func TestBatchGetComics(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	c1, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Batch Comic 1",
+		CoverKey: "covers/batch1.jpg",
+		FileKey:  "files/batch1.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	c2, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Batch Comic 2",
+		CoverKey: "covers/batch2.jpg",
+		FileKey:  "files/batch2.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	c3, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Batch Comic 3",
+		CoverKey: "covers/batch3.jpg",
+		FileKey:  "files/batch3.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+
+	modCtx := moderatorCtx
+	if err := ApproveComic(modCtx, c1.ID); err != nil {
+		t.Fatalf("approve error: %v", err)
+	}
+	if err := ApproveComic(modCtx, c2.ID); err != nil {
+		t.Fatalf("approve error: %v", err)
+	}
+	if err := ApproveComic(modCtx, c3.ID); err != nil {
+		t.Fatalf("approve error: %v", err)
+	}
+
+	pubCtx := context.Background()
+	resp, err := BatchGetComics(pubCtx, &BatchComicsParams{IDs: []string{c1.ID, c2.ID, c3.ID}})
+	if err != nil {
+		t.Fatalf("batch get error: %v", err)
+	}
+	if len(resp.Comics) != 3 {
+		t.Errorf("expected 3 comics, got %d", len(resp.Comics))
+	}
+
+	titles := map[string]bool{c1.Title: true, c2.Title: true, c3.Title: true}
+	for _, c := range resp.Comics {
+		if !titles[c.Title] {
+			t.Errorf("unexpected comic title: %s", c.Title)
+		}
+	}
+}
+
+func TestBatchGetComics_EmptyIds(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	pubCtx := context.Background()
+	resp, err := BatchGetComics(pubCtx, &BatchComicsParams{IDs: []string{}})
+	if err != nil {
+		t.Fatalf("batch get error: %v", err)
+	}
+	if len(resp.Comics) != 0 {
+		t.Errorf("expected empty slice, got %d comics", len(resp.Comics))
+	}
+}
+
+func TestBatchGetComics_LimitExceeded(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	ids := make([]string, 51)
+	for i := range ids {
+		ids[i] = "550e8400-e29b-41d4-a716-446655440099"
+	}
+
+	pubCtx := context.Background()
+	_, err := BatchGetComics(pubCtx, &BatchComicsParams{IDs: ids})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var e *errs.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("expected errs.Error, got %T", err)
+	}
+	if e.Code != errs.InvalidArgument {
+		t.Errorf("expected InvalidArgument, got %v", e.Code)
+	}
+}
+
+func TestAdminAuditLogs(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Audit Comic",
+		CoverKey: "covers/audit.jpg",
+		FileKey:  "files/audit.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+
+	modCtx := moderatorCtx
+	if err := ApproveComic(modCtx, comic.ID); err != nil {
+		t.Fatalf("approve error: %v", err)
+	}
+
+	admCtx := adminCtx
+	resp, err := AdminAuditLogs(admCtx)
+	if err != nil {
+		t.Fatalf("audit logs error: %v", err)
+	}
+	if len(resp.Entries) < 1 {
+		t.Fatal("expected at least 1 audit log entry")
+	}
+
+	found := false
+	for _, entry := range resp.Entries {
+		if entry.Action == "approve_comic" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected approve_comic audit log entry")
+	}
+}
+
+func TestAdminAuditLogs_RequiresAdmin(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	uCtx := userCtx
+	_, err := AdminAuditLogs(uCtx)
+	if err == nil {
+		t.Fatal("expected permission error, got nil")
+	}
+	var e *errs.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("expected errs.Error, got %T", err)
+	}
+	if e.Code != errs.PermissionDenied {
+		t.Errorf("expected PermissionDenied, got %v", e.Code)
 	}
 }

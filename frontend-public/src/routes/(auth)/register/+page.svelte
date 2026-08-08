@@ -9,6 +9,7 @@
 	let email = $state('');
 	let password = $state('');
 	let confirm = $state('');
+	let agreedToTerms = $state(false);
 	let error = $state('');
 	let loading = $state(false);
 
@@ -53,17 +54,25 @@
 				<div class="space-y-2">
 					<Label for="password">Password</Label>
 					<Input id="password" type="password" bind:value={password} required placeholder="Min 8 characters" />
+					{#if password.length > 0 && password.length < 8}
+						<p class="text-xs text-destructive">Password must be at least 8 characters</p>
+					{/if}
 				</div>
 				<div class="space-y-2">
 					<Label for="confirm">Confirm Password</Label>
 					<Input id="confirm" type="password" bind:value={confirm} required placeholder="Repeat password" />
 				</div>
 
+				<label class="flex items-center gap-2 text-sm cursor-pointer">
+					<input type="checkbox" bind:checked={agreedToTerms} class="rounded" />
+					I agree to the <a href="/legal/terms" class="text-primary hover:underline">Terms of Service</a> and <a href="/legal/privacy" class="text-primary hover:underline">Privacy Policy</a>
+				</label>
+
 				{#if error}
 					<p class="text-sm text-destructive">{error}</p>
 				{/if}
 
-				<Button type="submit" class="w-full" disabled={loading}>
+				<Button type="submit" class="w-full" disabled={loading || !agreedToTerms}>
 					{loading ? 'Creating account...' : 'Create account'}
 				</Button>
 			</form>

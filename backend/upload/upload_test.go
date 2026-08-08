@@ -131,3 +131,53 @@ func TestConfirmPart(t *testing.T) {
 }
 
 var _ = errs.NotFound
+
+func TestListActiveSessions(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "uploaddb")
+	ctx := fixtures.UploaderCtx()
+
+	s, _ := CreateSession(ctx, &CreateSessionParams{Mode: "manual"})
+
+	resp, err := ListActiveSessions(ctx)
+	if err != nil {
+		t.Fatalf("list active sessions error: %v", err)
+	}
+
+	found := false
+	for _, sess := range resp.Sessions {
+		if sess.ID == s.ID {
+			found = true
+			if sess.Status != "active" {
+				t.Errorf("expected status active, got %s", sess.Status)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("created session should appear in active sessions list")
+	}
+}
+
+func TestListActiveSessions_FiltersByUser(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "uploaddb")
+	upCtx := fixtures.UploaderCtx()
+	userCtx := fixtures.UserCtx()
+
+	s, _ := CreateSession(upCtx, &CreateSessionParams{Mode: "manual"})
+
+	usrResp, err := ListActiveSessions(userCtx)
+	if err != nil {
+		t.Fatalf("regular user should be able to list their sessions: %v", err)
+	}
+
+	found := false
+	for _, sess := range usrResp.Sessions {
+		if sess.ID == s.ID {
+			found = true
+			break
+		}
+	}
+	if found {
+		t.Error("regular user should not see uploader's sessions")
+	}
+}

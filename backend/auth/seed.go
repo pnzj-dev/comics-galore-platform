@@ -72,13 +72,6 @@ func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error
 		created++
 	}
 
-	// In dev, ensure at least one admin exists
-	var adminCount int
-	db.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount)
-	if adminCount == 0 {
-		return nil, fmt.Errorf("no admin user exists after seed")
-	}
-
 	return &SeedUsersResponse{
 		Created: created,
 		Skipped: skipped,

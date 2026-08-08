@@ -110,6 +110,9 @@ func CreateSubscription(ctx context.Context, p *CreateSubParams) (*CreateSubResp
 	if err != nil || subPartnerID == "" {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
 	}
+	if providerPlanID == "" {
+		return nil, &errs.Error{Code: errs.FailedPrecondition, Message: "this plan is not yet configured with a provider plan ID — contact admin"}
+	}
 
 	// Call NowPayments to create the subscription
 	npResp, err := provider.CreateSubscription(ctx, SubscriptionRequest{

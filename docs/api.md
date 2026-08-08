@@ -49,6 +49,15 @@
 | POST | `/moderation/comics/:id/approve` | Publish | Moderator/Admin |
 | POST | `/moderation/comics/:id/reject` | Reject with reason | Moderator/Admin |
 
+## Comments API
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/comics/:id/comments` | List threaded comments | No |
+| POST | `/comics/:id/comments` | Create comment (or reply) | Yes |
+| DELETE | `/comments/:id` | Delete comment (owner or mod/admin); cascades to replies | Yes |
+| GET (SSE) | `/comments-stream/:id` | SSE stream of new comments for a comic | No |
+
 ## Other domains
 Auth, users, tiers, intervals, plans, subscriptions, webhooks, settings, social, comments, messaging, support, admin KPIs & datalists remain as previously specified.
 

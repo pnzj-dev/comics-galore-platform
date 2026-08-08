@@ -2,11 +2,16 @@ package auth
 
 import (
 	"context"
+	"database/sql"
+	"encoding/base64"
+	"encoding/json"
+	"net/http"
 	"strings"
 	"time"
 
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
+	"encore.dev/storage/objects"
 	"encore.dev/storage/sqldb"
 )
 
@@ -17,6 +22,8 @@ var secrets struct {
 var db = sqldb.NewDatabase("authdb", sqldb.DatabaseConfig{
 	Migrations: "./migrations",
 })
+
+var AvatarBucket = objects.NewBucket("avatars", objects.BucketConfig{})
 
 type AuthParams struct {
 	Authorization string `header:"Authorization"`
@@ -54,6 +61,29 @@ func AuthHandler(ctx context.Context, p *AuthParams) (auth.UID, *AuthData, error
 		}
 	}
 
+	var maintenance bool
+	if e := db.QueryRow(ctx, `SELECT COALESCE((value::jsonb->>'maintenance_mode')::boolean, false) FROM app_settings WHERE key = 'defaults'`).Scan(&maintenance); e == nil && maintenance && claims.Role != "admin" {
+		return "", nil, &errs.Error{Code: errs.Unavailable, Message: "the platform is under maintenance, please try again later"}
+	}
+
+	var requireVerify bool
+	if e := db.QueryRow(ctx, `SELECT COALESCE((value::jsonb->>'require_email_verify')::boolean, false) FROM app_settings WHERE key = 'defaults'`).Scan(&requireVerify); e == nil && requireVerify {
+		var emailVerified sql.NullTime
+		if e2 := db.QueryRow(ctx, `SELECT email_verified_at FROM users WHERE id = $1`, claims.UserID).Scan(&emailVerified); e2 == nil && !emailVerified.Valid {
+			return "", nil, &errs.Error{Code: errs.PermissionDenied, Message: "email verification required"}
+		}
+	}
+
+	var bannedAt, suspendedAt sql.NullTime
+	if err := db.QueryRow(ctx, `SELECT banned_at, suspended_at FROM users WHERE id = $1`, claims.UserID).Scan(&bannedAt, &suspendedAt); err == nil {
+		if bannedAt.Valid {
+			return "", nil, &errs.Error{Code: errs.PermissionDenied, Message: "account is banned"}
+		}
+		if suspendedAt.Valid {
+			return "", nil, &errs.Error{Code: errs.PermissionDenied, Message: "account is suspended"}
+		}
+	}
+
 	return auth.UID(claims.UserID), &AuthData{
 		UserID: claims.UserID,
 		Email:  claims.Email,
@@ -88,6 +118,16 @@ func Register(ctx context.Context, p *RegisterParams) (*AuthResponse, error) {
 		}
 	}
 
+	var regOpen bool
+	if e := db.QueryRow(ctx, `SELECT COALESCE((value::jsonb->>'registrations_open')::boolean, true) FROM app_settings WHERE key = 'defaults'`).Scan(&regOpen); e == nil && !regOpen {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "registration is currently closed"}
+	}
+
+	var maintenance bool
+	if e := db.QueryRow(ctx, `SELECT COALESCE((value::jsonb->>'maintenance_mode')::boolean, false) FROM app_settings WHERE key = 'defaults'`).Scan(&maintenance); e == nil && maintenance {
+		return nil, &errs.Error{Code: errs.Unavailable, Message: "the platform is under maintenance, please try again later"}
+	}
+
 	existing, err := getUserByEmail(ctx, p.Email)
 	if err != nil && !isNoRows(err) {
 		return nil, err
@@ -105,14 +145,6 @@ func Register(ctx context.Context, p *RegisterParams) (*AuthResponse, error) {
 	}
 
 	role := "user"
-	var adminCount int
-	err = db.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount)
-	if err != nil {
-		return nil, err
-	}
-	if adminCount == 0 {
-		role = "admin"
-	}
 
 	var user User
 	err = db.QueryRow(ctx, `
@@ -173,6 +205,19 @@ func Login(ctx context.Context, p *LoginParams) (*AuthResponse, error) {
 		return nil, &errs.Error{
 			Code:    errs.Unauthenticated,
 			Message: "invalid email or password",
+		}
+	}
+
+	if user.BannedAt.Valid {
+		return nil, &errs.Error{
+			Code:    errs.PermissionDenied,
+			Message: "account is banned",
+		}
+	}
+	if user.SuspendedAt.Valid {
+		return nil, &errs.Error{
+			Code:    errs.PermissionDenied,
+			Message: "account is suspended",
 		}
 	}
 
@@ -366,6 +411,7 @@ type User struct {
 	Email     string    `json:"email"`
 	Role      string    `json:"role"`
 	Tier      string    `json:"tier"`
+	AvatarKey string    `json:"avatar_key,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -375,15 +421,18 @@ type userRow struct {
 	PasswordHash string
 	Role         string
 	Tier         string
+	AvatarKey    sql.NullString
+	BannedAt     sql.NullTime
+	SuspendedAt  sql.NullTime
 	CreatedAt    time.Time
 }
 
 func getUserByEmail(ctx context.Context, email string) (*userRow, error) {
 	var u userRow
 	err := db.QueryRow(ctx, `
-		SELECT id, email, password_hash, role, tier, created_at
+		SELECT id, email, password_hash, role, tier, COALESCE(avatar_key::text, ''), banned_at, suspended_at, created_at
 		FROM users WHERE email = $1
-	`, email).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.Tier, &u.CreatedAt)
+	`, email).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.Tier, &u.AvatarKey, &u.BannedAt, &u.SuspendedAt, &u.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -393,9 +442,9 @@ func getUserByEmail(ctx context.Context, email string) (*userRow, error) {
 func getUserByID(ctx context.Context, id string) (*User, error) {
 	var u User
 	err := db.QueryRow(ctx, `
-		SELECT id, email, role, tier, created_at
+		SELECT id, email, role, tier, COALESCE(avatar_key::text, ''), created_at
 		FROM users WHERE id = $1
-	`, id).Scan(&u.ID, &u.Email, &u.Role, &u.Tier, &u.CreatedAt)
+	`, id).Scan(&u.ID, &u.Email, &u.Role, &u.Tier, &u.AvatarKey, &u.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -409,6 +458,7 @@ type UserProfile struct {
 	Email     string `json:"email"`
 	Role      string `json:"role"`
 	Tier      string `json:"tier"`
+	AvatarKey string `json:"avatar_key,omitempty"`
 	CreatedAt string `json:"created_at"`
 }
 
@@ -424,18 +474,91 @@ func GetProfile(ctx context.Context) (*UserProfile, error) {
 		Email:     user.Email,
 		Role:      user.Role,
 		Tier:      user.Tier,
+		AvatarKey: user.AvatarKey,
 		CreatedAt: user.CreatedAt.Format(time.RFC3339),
 	}, nil
+}
+
+type UpdateAvatarParams struct {
+	AvatarData string `json:"avatar_data"`
+}
+
+type UpdateAvatarResponse struct {
+	AvatarKey string `json:"avatar_key"`
+}
+
+//encore:api auth method=POST path=/me/avatar
+func UpdateAvatar(ctx context.Context, p *UpdateAvatarParams) (*UpdateAvatarResponse, error) {
+	data := auth.Data().(*AuthData)
+
+	if !strings.HasPrefix(p.AvatarData, "data:image/") {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "invalid image format, must be data:image/... base64"}
+	}
+
+	// Parse the base64 portion after the comma
+	idx := strings.IndexByte(p.AvatarData, ',')
+	if idx < 0 {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "invalid data URI"}
+	}
+	b64 := p.AvatarData[idx+1:]
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "invalid base64 encoding"}
+	}
+
+	if len(decoded) > 500*1024 {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "avatar image too large (max 500KB)"}
+	}
+
+	key := "avatar-" + data.UserID + ".png"
+	uploadURL, err := AvatarBucket.SignedUploadURL(ctx, key, objects.WithTTL(7200*time.Second))
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "failed to generate upload URL"}
+	}
+
+	body := strings.NewReader(string(decoded))
+	req, err := http.NewRequestWithContext(ctx, "PUT", uploadURL.URL, body)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "upload request failed"}
+	}
+	req.Header.Set("Content-Type", "image/png")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "upload failed"}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		return nil, &errs.Error{Code: errs.Internal, Message: "upload rejected by storage"}
+	}
+
+	_, err = db.Exec(ctx, `UPDATE users SET avatar_key = $1 WHERE id = $2`, key, data.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &UpdateAvatarResponse{AvatarKey: key}, nil
+}
+
+//encore:api auth method=GET path=/me/avatar
+func GetAvatar(ctx context.Context) (*UpdateAvatarResponse, error) {
+	data := auth.Data().(*AuthData)
+	var key string
+	db.QueryRow(ctx, `SELECT COALESCE(avatar_key, '') FROM users WHERE id = $1`, data.UserID).Scan(&key)
+	return &UpdateAvatarResponse{AvatarKey: key}, nil
 }
 
 // ----- Admin endpoints -----
 
 type AdminUser struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Role      string    `json:"role"`
-	Tier      string    `json:"tier"`
-	CreatedAt time.Time `json:"created_at"`
+	ID          string     `json:"id"`
+	Email       string     `json:"email"`
+	Role        string     `json:"role"`
+	Tier        string     `json:"tier"`
+	CreatedAt   time.Time  `json:"created_at"`
+	BannedAt    *time.Time `json:"banned_at,omitempty"`
+	SuspendedAt *time.Time `json:"suspended_at,omitempty"`
 }
 
 type AdminUserListResponse struct {
@@ -454,7 +577,7 @@ func AdminListUsers(ctx context.Context) (*AdminUserListResponse, error) {
 	db.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&total)
 
 	rows, err := db.Query(ctx, `
-		SELECT id, email, role, tier, created_at
+		SELECT id, email, role, tier, created_at, banned_at, suspended_at
 		FROM users ORDER BY created_at DESC LIMIT 100
 	`)
 	if err != nil {
@@ -465,7 +588,7 @@ func AdminListUsers(ctx context.Context) (*AdminUserListResponse, error) {
 	var users []AdminUser
 	for rows.Next() {
 		var u AdminUser
-		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Tier, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.Tier, &u.CreatedAt, &u.BannedAt, &u.SuspendedAt); err != nil {
 			return nil, err
 		}
 		users = append(users, u)
@@ -485,8 +608,65 @@ func AdminUpdateUserRole(ctx context.Context, id string, p *UpdateUserRoleParams
 		return &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
 	}
 
+	validRoles := map[string]bool{"user": true, "uploader": true, "moderator": true, "admin": true}
+	if !validRoles[p.Role] {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "invalid role"}
+	}
+
 	_, err := db.Exec(ctx, `UPDATE users SET role = $1 WHERE id = $2 AND id != $3`,
 		p.Role, id, data.UserID)
+	if err != nil {
+		return err
+	}
+
+	details, _ := json.Marshal(map[string]string{"new_role": p.Role})
+	db.Exec(ctx, `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details) VALUES ($1, 'change_role', 'user', $2, $3)`,
+		data.UserID, id, string(details))
+
+	return nil
+}
+
+type BanUserParams struct {
+	Reason string `json:"reason"`
+}
+
+//encore:api auth method=POST path=/admin/users/:id/ban
+func AdminBanUser(ctx context.Context, id string, p *BanUserParams) error {
+	data := auth.Data().(*AuthData)
+	if data.Role != "admin" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+	_, err := db.Exec(ctx, `UPDATE users SET banned_at = now() WHERE id = $1 AND id != $2`, id, data.UserID)
+	return err
+}
+
+//encore:api auth method=POST path=/admin/users/:id/unban
+func AdminUnbanUser(ctx context.Context, id string) error {
+	data := auth.Data().(*AuthData)
+	if data.Role != "admin" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+	_, err := db.Exec(ctx, `UPDATE users SET banned_at = NULL WHERE id = $1`, id)
+	return err
+}
+
+//encore:api auth method=POST path=/admin/users/:id/suspend
+func AdminSuspendUser(ctx context.Context, id string, p *BanUserParams) error {
+	data := auth.Data().(*AuthData)
+	if data.Role != "admin" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+	_, err := db.Exec(ctx, `UPDATE users SET suspended_at = now() WHERE id = $1 AND id != $2`, id, data.UserID)
+	return err
+}
+
+//encore:api auth method=POST path=/admin/users/:id/unsuspend
+func AdminUnsuspendUser(ctx context.Context, id string) error {
+	data := auth.Data().(*AuthData)
+	if data.Role != "admin" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+	_, err := db.Exec(ctx, `UPDATE users SET suspended_at = NULL WHERE id = $1`, id)
 	return err
 }
 

@@ -46,6 +46,7 @@
 				<div class="space-y-2">
 					<Label for="password">Password</Label>
 					<Input id="password" type="password" bind:value={password} required placeholder="••••••••" />
+					<a href="/auth/reset-password" class="text-xs text-muted-foreground hover:text-primary underline underline-offset-4">Forgot password?</a>
 				</div>
 
 				{#if error}

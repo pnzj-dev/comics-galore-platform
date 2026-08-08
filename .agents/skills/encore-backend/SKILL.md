@@ -97,6 +97,30 @@ LIMIT $`+itoa(limitIdx)+` OFFSET $`+itoa(offsetIdx)
 ```
 Always verify: count the args slice and match each `$N` to the correct element.
 
+### Self-referential foreign keys with CASCADE
+When a table has a foreign key referencing itself (e.g. `comments.parent_id -> comments.id`), use `ON DELETE CASCADE` so parent deletion cascades to children:
+```sql
+ALTER TABLE comments ADD CONSTRAINT comments_parent_id_fkey 
+  FOREIGN KEY (parent_id) REFERENCES comments(id) ON DELETE CASCADE;
+```
+
+### Raw SSE (Server-Sent Events) endpoint
+Use a raw `encore:api public raw` endpoint with in-memory channels for real-time streams:
+```go
+var mu sync.Mutex
+var channels = make(map[string][]chan MyData)
+// subscribe, unsubscribe, publish helpers...
+
+//encore:api public raw method=GET path=/my-stream/:id
+func MyStream(w http.ResponseWriter, req *http.Request) {
+    flusher, _ := w.(http.Flusher)
+    w.Header().Set("Content-Type", "text/event-stream")
+    // ... loop reading from channel, writing SSE data.
+    case <-req.Context().Done(): return
+}
+```
+Raw endpoints must be `public` (not `auth`) and use `func(http.ResponseWriter, *http.Request)` signature.
+
 ## References
 
 - `docs/api.md`, `docs/database.md`, `docs/architecture.md`, `docs/v1-scope.md`

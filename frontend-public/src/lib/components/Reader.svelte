@@ -6,12 +6,13 @@
 
 	interface Props {
 		comicId: string;
+		comicSlug: string;
 		pageKeys: string[];
 		pageUrls?: string[];
 		totalPages: number;
 	}
 
-	let { comicId, pageKeys, pageUrls, totalPages }: Props = $props();
+	let { comicId, comicSlug, pageKeys, pageUrls, totalPages }: Props = $props();
 
 	type FitMode = 'height' | 'width' | 'original';
 
@@ -57,7 +58,7 @@
 		switch (e.key) {
 			case 'ArrowRight': case ' ': e.preventDefault(); nextPage(); saveProgress(); break;
 			case 'ArrowLeft': e.preventDefault(); prevPage(); saveProgress(); break;
-			case 'Escape': window.location.href = `/comics/${comicId}`; break;
+			case 'Escape': window.location.href = `/comics/${comicSlug}`; break;
 			case 'f': cycleFit(); break;
 			case 't': showThumbnails = !showThumbnails; break;
 		}
@@ -96,7 +97,7 @@
 			</div>
 		</div>
 
-		<Button variant="ghost" size="sm" class="text-white hover:text-white/80 text-xs" onclick={() => { window.location.href = `/comics/${comicId}`; }}>
+		<Button variant="ghost" size="sm" class="text-white hover:text-white/80 text-xs" onclick={() => { window.location.href = `/comics/${comicSlug}`; }}>
 			Close
 		</Button>
 	</div>
