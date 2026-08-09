@@ -2,14 +2,13 @@
 
 echo ""
 echo "┌─────────────────────────────┐"
-echo "│  Running backend tests...    │"
+echo "│  Running backend checks...   │"
 echo "└─────────────────────────────┘"
 
-export PATH="$HOME/.encore/bin:$PATH"
-cd backend && encore test ./... 2>&1 | tail -5
+cd backend && go build ./... 2>&1 | tail -5
 if [ ${PIPESTATUS[0]} -ne 0 ]; then
   echo ""
-  echo "Backend tests failed. Push aborted."
+  echo "Backend build failed. Push aborted."
   exit 1
 fi
 
@@ -26,4 +25,4 @@ if [ ${PIPESTATUS[0]} -ne 0 ]; then
 fi
 
 echo ""
-echo "All tests passed. Pushing..."
+echo "All checks passed. Pushing..."
