@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 
@@ -25,7 +25,7 @@
 			}
 
 			try {
-				const res = await api.get<{ active: boolean }>(`/billing/subscription/${subscriptionId}/poll`);
+				const res = await encore.billing.PollSubscription(subscriptionId);
 				if (res.active) {
 					clearInterval(interval);
 					onSuccess();

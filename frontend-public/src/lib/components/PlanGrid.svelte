@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { onMount } from 'svelte';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -29,8 +29,8 @@
 	onMount(async () => {
 		try {
 			const [tRes, pRes] = await Promise.all([
-				api.get<{ tiers: any[] }>('/tiers'),
-				api.get<{ plans: any[] }>('/plans')
+				encore.tiers.ListTiers(),
+				encore.tiers.ListPlans()
 			]);
 			tiers = tRes.tiers;
 			plans = pRes.plans;

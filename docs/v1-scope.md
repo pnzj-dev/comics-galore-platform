@@ -24,6 +24,7 @@ A working web app where users can discover and read comics, uploaders can submit
 ### Platform
 - Encore backend + **SvelteKit web** client  
 - Auth + roles: `user`, `uploader`, `moderator`, `admin`  
+- Cookie-based JWT auth with server-side SvelteKit route guards (no page flash)  
 - PostgreSQL + Encore migrations + SQLC (or chosen ORM)  
 - Dark mode + basic accessibility on core flows  
 
@@ -98,6 +99,7 @@ A working web app where users can discover and read comics, uploaders can submit
 - Additional UI locales (ja, es, ko, fr, pt-BR, …) as translation packs land
 - Language facet polished on public browse  
 - Soft quota warning at ~80%  
+- Migrate all data-fetching pages from `onMount` + client-side `api.get` to SvelteKit `load` functions (`+page.server.ts`). Currently 18 pages load data client-side only (no SSR data, search engines see empty pages, skeletons on every load). See `docs/architecture.md` for the required pattern.  
 
 ---
 

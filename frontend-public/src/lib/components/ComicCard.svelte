@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { currentUser } from '$lib/stores/auth';
 	import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '$lib/components/ui/card/index.js';
 	import { Badge } from '$lib/components/ui/badge/index.js';
@@ -74,7 +74,7 @@
 		favCount += next ? 1 : -1;
 		liking = true;
 		try {
-			const res = await api.post<{ favorited: boolean; fav_count: number }>(`/comics/${id}/favorite`);
+			const res = await encore.comics.ToggleFavorite(id);
 			favorited = res.favorited;
 			favCount = res.fav_count;
 		} catch {
@@ -101,7 +101,7 @@
 
 	function coverSrc(): string {
 		if (cover_url) return cover_url;
-		if (cover_key) return '';
+		if (cover_key) return '/media/${cover_key}';
 		return '';
 	}
 </script>

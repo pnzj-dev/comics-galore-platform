@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { currentUser } from '$lib/stores/auth';
 	import { Badge } from '$lib/components/ui/badge/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -7,6 +7,7 @@
 	interface Props {
 		id: string;
 		title: string;
+		slug?: string;
 		author?: string;
 		cover_key?: string;
 		cover_url?: string;
@@ -22,6 +23,7 @@
 	let {
 		id,
 		title,
+		slug = '',
 		author = '',
 		cover_key = '',
 		cover_url = '',
@@ -50,7 +52,7 @@
 		favorited = next;
 		liking = true;
 		try {
-			const res = await api.post<{ favorited: boolean; fav_count: number }>(`/comics/${id}/favorite`);
+			const res = await encore.comics.ToggleFavorite(id);
 			favorited = res.favorited;
 		} catch {
 			favorited = !next;

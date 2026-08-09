@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 
 	interface Props {
@@ -23,7 +23,7 @@
 		count += next ? 1 : -1;
 		loading = true;
 		try {
-			const res = await api.post<{ favorited: boolean; fav_count: number }>(`/comics/${comicId}/favorite`);
+			const res = await encore.comics.ToggleFavorite(comicId);
 			favorited = res.favorited;
 			count = res.fav_count;
 		} catch {

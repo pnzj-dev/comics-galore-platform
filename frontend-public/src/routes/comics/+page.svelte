@@ -1,36 +1,25 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import ComicCard from '$lib/components/ComicCard.svelte';
-	import { onMount } from 'svelte';
 	import { Label } from '$lib/components/ui/label/index.js';
 
-	let comics = $state<any[]>([]);
-	let loading = $state(true);
+	let { data } = $props();
+
+	// svelte-ignore state_referenced_locally
+	let comics = $state(data.comics);
+	let loading = $state(false);
 	let langFilter = $state('');
 	let hideMature = $state(false);
 
 	const languages = ['', 'en', 'ja', 'es', 'ko', 'fr', 'pt-BR', 'zh-CN', 'de', 'it', 'id'];
 
-	onMount(() => {
-		loadPrefs();
-	});
-
-	async function loadPrefs() {
-		try {
-			const prefs = await api.get<{ hide_mature: boolean }>('/me/preferences');
-			hideMature = prefs.hide_mature;
-		} catch {}
-		loadComics();
-	}
-
 	async function loadComics() {
 		loading = true;
 		try {
-			const params = new URLSearchParams();
-			if (langFilter) params.set('language', langFilter);
-			if (hideMature) params.set('exclude_mature', 'true');
-			const query = params.toString() ? `?${params.toString()}` : '';
-			const res = await api.get<{ comics: any[] }>('/comics' + query);
+			const q: any = {};
+			if (langFilter) q.language = langFilter;
+			if (hideMature) q.exclude_mature = 'true';
+			const res = await encore.comics.ListComics(q);
 			comics = res.comics;
 		} catch {}
 		loading = false;

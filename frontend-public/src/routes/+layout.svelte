@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { currentUser, isAuthenticated, fetchMe } from '$lib/stores/auth';
+	import { currentUser, isAuthenticated } from '$lib/stores/auth';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 	import UserProfileModal from '$lib/components/UserProfileModal.svelte';
@@ -9,15 +9,20 @@
 	import LogoutConfirmationModal from '$lib/components/LogoutConfirmationModal.svelte';
 	import { Settings, LogOut } from 'lucide-svelte';
 
-	let { children } = $props();
+	let { data, children } = $props();
 	let profileOpen = $state(false);
 	let settingsOpen = $state(false);
 	let logoutOpen = $state(false);
 
-	onMount(() => { fetchMe(); });
+	onMount(() => {
+		if (data.user) {
+			currentUser.set(data.user);
+			isAuthenticated.set(true);
+		}
+	});
 
-	const user = $derived($currentUser);
-	const authed = $derived($isAuthenticated);
+	const user = $derived(data.user || $currentUser);
+	const authed = $derived(!!(data.user) || $isAuthenticated);
 </script>
 
 <nav class="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

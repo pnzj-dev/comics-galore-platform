@@ -42,6 +42,10 @@ type AppSettings struct {
 	Boost5Price          float64 `json:"boost_5gb_price"`
 	Boost10Price         float64 `json:"boost_10gb_price"`
 	Boost20Price         float64 `json:"boost_20gb_price"`
+	ContactEmail         string  `json:"contact_email"`
+	HideMatureDefault    bool    `json:"hide_mature_default"`
+	EnableComments       bool    `json:"enable_comments"`
+	DefaultMetaDescription string `json:"default_meta_description"`
 }
 
 var defaultPreferences = UserPreferences{
@@ -178,5 +182,9 @@ func defaultAppSettings() *AppSettings {
 		Boost5Price:         5,
 		Boost10Price:        8,
 		Boost20Price:        12,
+		ContactEmail:         "",
+		HideMatureDefault:    false,
+		EnableComments:       true,
+		DefaultMetaDescription: "",
 	}
 }

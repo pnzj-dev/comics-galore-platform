@@ -100,12 +100,12 @@ func DevSeedComics(ctx context.Context, p *SeedParams) (*SeedComicsResponse, err
 
 		_, err := db.Exec(ctx, `
 			INSERT INTO comics (id, uploader_id, title, author, slug, description, content_language, status,
-				cover_key, file_key, page_keys, file_size_bytes, age_rating, tags,
+				cover_key, file_key, page_keys, file_size_bytes, age_rating, is_premium, tags,
 				published_at, view_count, download_count, like_count, fav_count, dislike_count, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $21)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $22)
 		`, c.ID, uploaderID, c.Title, c.Author, c.Slug, c.Description, c.Language, c.Status,
 			fmt.Sprintf("seed/%s/cover", c.Slug), fmt.Sprintf("seed/%s/archive", c.Slug),
-			pageKeys, 1234567, c.AgeRating, tags,
+			pageKeys, 1234567, c.AgeRating, c.IsPremium, tags,
 			publishedAt,
 			randomRange(50, 5000), randomRange(10, 300), randomRange(5, 200), randomRange(3, 80), randomRange(1, 40),
 			now.AddDate(0, 0, -c.DaysAgo))

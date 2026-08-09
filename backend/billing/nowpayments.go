@@ -280,3 +280,30 @@ func (p *NowPaymentsProvider) CreateDeposit(ctx context.Context, req DepositRequ
 		PayCurrency: result.PayCurrency,
 	}, nil
 }
+
+// ----- CreatePlan (JWT + API key) -----
+
+func (p *NowPaymentsProvider) CreatePlan(ctx context.Context, req CreatePlanRequest) (*CreatePlanResponse, error) {
+	body := map[string]interface{}{
+		"name":            req.Name,
+		"price_amount":    req.PriceAmount,
+		"price_currency":  "usd",
+		"period":          req.Period,
+	}
+
+	resp, err := p.doJWTRequest(ctx, "POST", npBaseURL+"/subscriptions/plans", body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		ID json.Number `json:"id"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("create plan parse: %w", err)
+	}
+
+	return &CreatePlanResponse{
+		ProviderPlanID: result.ID.String(),
+	}, nil
+}

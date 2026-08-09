@@ -44,10 +44,21 @@ type DepositResponse struct {
 	PayCurrency string
 }
 
+type CreatePlanRequest struct {
+	Name        string
+	PriceAmount float64
+	Period      string
+}
+
+type CreatePlanResponse struct {
+	ProviderPlanID string
+}
+
 type PaymentsProvider interface {
 	EstimatePrice(ctx context.Context, req EstimateRequest) (*EstimateResponse, error)
 	CheckBalance(ctx context.Context, subPartnerID string) (map[string]BalanceEntry, error)
 	CreateCustomer(ctx context.Context, name string) (string, error)
 	CreateSubscription(ctx context.Context, req SubscriptionRequest) (*SubscriptionResponse, error)
 	CreateDeposit(ctx context.Context, req DepositRequest) (*DepositResponse, error)
+	CreatePlan(ctx context.Context, req CreatePlanRequest) (*CreatePlanResponse, error)
 }

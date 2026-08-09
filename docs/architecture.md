@@ -78,6 +78,54 @@ Duplication of UI or validation logic is considered a bug.
 - Route groups: `(public)`, `(app)`, `(auth)`.
 - Uses `packages/ui` for almost all visual and form code.
 - Handles home, browse, detail, reader, series, tags, pricing, upload, settings, auth, SEO, RSS, Open Graph, legal pages, age gate.
+- **Server-side route guards**: `+layout.server.ts` and `+page.server.ts` load functions read the JWT from a cookie and `throw redirect(302)` before the page component renders. The `(app)` group requires authentication; the `upload` page requires `uploader`/`admin` role. See the cookie-based auth section below.
+
+### Cookie-based Auth
+
+The auth system uses a **non-HttpOnly cookie** (`token`) for JWT storage, enabling both:
+
+| Consumer | How it reads the token |
+|----------|----------------------|
+| SvelteKit server (SSR) | `cookies.get('token')` in `+layout.server.ts` / `+page.server.ts` — validates before rendering |
+| Browser API client | `document.cookie.match('token=...')` — sends as `Authorization: Bearer` to Encore |
+| Auth store (`login`/`logout`) | `document.cookie = 'token=...'` — sets/clears on login/logout |
+
+The cookie is set with `path=/`, `SameSite=Lax`, and `max-age=2592000` (30 days). Server-side guards decode the JWT payload to check roles before page rendering. Client-side `onMount` → `goto()` redirects have been removed from all protected pages.
+
+### Data Loading — SvelteKit `load` Pattern
+
+**Required for all pages that fetch external data.** Uses `+page.server.ts` load functions so data arrives at render time — no skeletons, SSR-friendly, search-engine readable.
+
+```ts
+// +page.server.ts
+import type { PageServerLoad } from './$types';
+
+const API = 'http://localhost:4000';
+
+export const load: PageServerLoad = async ({ cookies, fetch }) => {
+    const token = cookies.get('token');
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+    const res = await fetch(`${API}/comics?limit=4&sort=newest`, { headers });
+    const { comics } = await res.json();
+
+    return { comics };
+};
+```
+
+```svelte
+<!-- +page.svelte -->
+<script lang="ts">
+    let { data } = $props();
+    // data.comics is available immediately — no onMount, no loading state, no skeleton
+</script>
+```
+
+**Current state (v1):** Data loading uses `onMount` + client-side `api.get/post` across all 18 data-dependent pages. This means search engines see empty pages and users see skeletons on every load. Migrating to `load` functions is marked as SOON (v1.1).
+
+**For auth-required pages:** the `load` function reads the JWT cookie (same pattern as route guards) and passes it as `Authorization: Bearer <token>` to the Encore API.
+
+**Generated client alternative:** Encore's `encore gen client --lang typescript` command produces a typed TypeScript client that replaces raw `fetch()` calls in `+page.server.ts` files — eliminating manual URL building and header construction. See `.agents/skills/sveltekit-encore-client/SKILL.md` for setup and usage. The current 18 server files use raw `fetch()`; migrating to the generated client is marked as SOON (v1.1).
 
 ### Admin (`frontend-admin/` — admin.comics-galore.com)
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -13,7 +13,6 @@
 
 	// Metadata form fields
 	let title = $state('');
-	let author = $state('');
 	let description = $state('');
 	let contentLanguage = $state('en');
 	let ageRating = $state('all_ages');
@@ -36,8 +35,8 @@
 		error = '';
 
 		try {
-			const session = await api.post<{ id: string }>('/upload-sessions', { mode: 'archive' });
-			const presign = await api.post<{ url: string; key: string }>(`/upload-sessions/${session.id}/presign`, { number: 1, key: file.name });
+			const session = await encore.upload.CreateSession({ mode: 'archive' });
+			const presign = await encore.upload.PresignUpload(session.id, { number: 1, key: file.name });
 
 			const xhr = new XMLHttpRequest();
 			await new Promise<void>((resolve, reject) => {
@@ -51,7 +50,7 @@
 				xhr.send(file);
 			});
 
-			await api.post(`/upload-sessions/${session.id}/parts`, { number: 1, key: presign.key, size: file.size, etag: xhr.getResponseHeader('ETag') || '' });
+			await encore.upload.ConfirmPart(session.id, { number: 1, key: presign.key, size: file.size, etag: xhr.getResponseHeader('ETag') || '' });
 			uploadKey = presign.key;
 
 			// Auto-fill title from filename
@@ -84,14 +83,14 @@
 
 		try {
 			const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
-			await api.post('/comics', {
-				title, author, description, content_language: contentLanguage,
+			await encore.comics.CreateComic({
+				title, description, content_language: contentLanguage,
 				cover_key: uploadKey, file_key: uploadKey,
 				page_keys: [uploadKey],
 				file_size_bytes: archiveFile?.size || 0,
-				age_rating: ageRating, tags: tagList
+				age_rating: ageRating as any, tags: tagList
 			});
-			await goto('/upload');
+			await goto('/upload?tab=list');
 		} catch (err) {
 			error = (err as Error).message;
 		} finally {
@@ -167,11 +166,6 @@
 			<div class="space-y-1.5">
 				<Label for="title">Title *</Label>
 				<Input id="title" bind:value={title} placeholder="Comic title" required />
-			</div>
-
-			<div class="space-y-1.5">
-				<Label for="author">Author</Label>
-				<Input id="author" bind:value={author} placeholder="Author name" />
 			</div>
 
 			<div class="space-y-1.5">

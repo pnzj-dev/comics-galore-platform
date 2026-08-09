@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-	import { api } from '$lib/api/client';
-	import { onMount, onDestroy } from 'svelte';
+	import { page } from '$app/state';
+	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import LikeButton from '$lib/components/LikeButton.svelte';
 	import FavoriteButton from '$lib/components/FavoriteButton.svelte';
@@ -17,34 +16,36 @@
 	import { createCommentStream } from '$lib/stores/live-comments';
 	import { Eye, Download, BookOpen, Globe, Clock, ThumbsDown, BookOpenCheck } from 'lucide-svelte';
 
-	let comic = $state<any>(null);
-	let loading = $state(true);
+	let { data } = $props();
+
+	let comic = $derived(data.comic);
+	let loading = $state(false);
 	let error = $state('');
 	let reading = $state(false);
 	let lightboxOpen = $state(false);
 	let lightboxIndex = $state(0);
 	let coverIndex = $state(0);
-	let likeStatus = $state<{ liked: boolean; favorited: boolean; disliked: boolean } | null>(null);
+	
+	let likeStatus = $derived(data.likeStatus);
 
-	let reactionLiked = $state(false);
-	let reactionDisliked = $state(false);
-	let likeCount = $state(0);
-	let dislikeCount = $state(0);
+	let reactionLiked = $derived(data.likeStatus?.liked ?? false);
+	let reactionDisliked = $derived(data.likeStatus?.disliked ?? false);
+	let likeCount = $derived(data.comic?.like_count ?? 0);
+	let dislikeCount = $derived(data.comic?.dislike_count ?? 0);
 	let likeLoading = $state(false);
 	let dislikeLoading = $state(false);
 
-	let related = $state<any[]>([]);
-	let relatedLoading = $state(true);
+
+	let related = $derived(data.related);
+	let relatedLoading = $state(false);
 	let relatedPage = $state(1);
 	let relatedTotal = $state(0);
 	let relatedHasMore = $state(false);
 
-	let comments = $state<Comment[]>([]);
+	let comments = $derived<Comment[]>(data.comments);
 	let replyTarget = $state('');
 
-	let commentStreamStop: (() => void) | null = null;
-
-	const slug = $derived($page.params.slug!);
+	const slug = $derived(page.params.slug!);
 	const user = $derived($currentUser);
 	const coverSrc = $derived(comic?.cover_url || '');
 	const pageImages = $derived(comic?.page_urls || []);
@@ -87,26 +88,19 @@
 		if (e.key === 'ArrowRight') { e.preventDefault(); coverNext(); }
 	}
 
-	onMount(async () => {
-		try {
-			comic = await api.get(`/comics/${slug}`);
-			if (user) { try { likeStatus = await api.get(`/comics/${comic.id}/like-status`); } catch {} }
-			reactionLiked = likeStatus?.liked ?? false;
-			reactionDisliked = likeStatus?.disliked ?? false;
-			likeCount = comic?.like_count ?? 0;
-			dislikeCount = comic?.dislike_count ?? 0;
-			loading = false;
-			await loadRelated();
-			startCommentStream();
-			await loadCommentsFallback();
-		} catch (err) { error = (err as Error).message; loading = false; }
+	$effect(() => {
+		const stream = createCommentStream(comic.id);
+		const unsub = stream.subscribe(() => {
+			loadCommentsFallback();
+		});
+		return () => { stream.close(); unsub(); };
 	});
 
 	async function toggleLike() {
 		if (likeLoading) return;
 		likeLoading = true;
 		try {
-			const res = await api.post<{ liked: boolean; like_count: number }>(`/comics/${comic.id}/like`);
+			const res = await encore.comics.ToggleLike(comic.id);
 			reactionLiked = res.liked;
 			likeCount = res.like_count;
 			if (res.liked) { reactionDisliked = false; dislikeCount = Math.max(0, dislikeCount - 1); }
@@ -117,36 +111,11 @@
 		if (dislikeLoading) return;
 		dislikeLoading = true;
 		try {
-			const res = await api.post<{ disliked: boolean; dislike_count: number }>(`/comics/${comic.id}/dislike`);
+			const res = await encore.comics.ToggleDislike(comic.id);
 			reactionDisliked = res.disliked;
 			dislikeCount = res.dislike_count;
 			if (res.disliked) { reactionLiked = false; likeCount = Math.max(0, likeCount - 1); }
 		} catch {} finally { dislikeLoading = false; }
-	}
-
-	onDestroy(() => {
-		if (commentStreamStop) commentStreamStop();
-	});
-
-	function startCommentStream() {
-		try {
-			const stream = createCommentStream(comic.id);
-			const unsub = stream.subscribe((data: any) => {
-				if (Array.isArray(data)) {
-					comments = data as Comment[];
-				} else if (data && data.id && !comments.some(c => c.id === data.id)) {
-					comments = [data as Comment, ...comments];
-				}
-			});
-			commentStreamStop = () => { stream.close(); unsub(); };
-		} catch {}
-	}
-
-	async function loadCommentsFallback() {
-		try {
-			const res = await api.get<{ comments: Comment[] }>(`/comics/${comic.id}/comments`);
-			comments = res.comments || [];
-		} catch {}
 	}
 
 	async function loadRelated(page?: number) {
@@ -154,16 +123,16 @@
 		if (p === 1) relatedLoading = true;
 		const timeout = setTimeout(() => { relatedLoading = false; }, 5000);
 		try {
-			const res = await api.get<{ comics: any[]; total: number }>(`/comics?limit=4&page=${p}`);
+			const relRes = await encore.comics.ListComics({ Limit: 4, Page: p, Language: '', Search: '', Tag: '', ExcludeMature: '', Sort: '' });
 			clearTimeout(timeout);
-			const filtered = res.comics.filter((c: any) => c.id !== comic.id);
+			const filtered = relRes.comics.filter((c) => c.id !== comic.id);
 			if (p === 1) {
 				related = filtered;
 			} else {
 				related = [...related, ...filtered];
 			}
-			relatedTotal = res.total;
-			relatedHasMore = filtered.length >= 4 && related.length < res.total;
+			relatedTotal = relRes.total;
+			relatedHasMore = filtered.length >= 4 && related.length < relRes.total;
 			relatedPage = p;
 		} catch {
 			clearTimeout(timeout);
@@ -175,38 +144,35 @@
 		await loadRelated(relatedPage + 1);
 	}
 
+	async function loadCommentsFallback() {
+		try {
+			const commentRes = await encore.comics.ListComments(comic.id);
+			comments = commentRes.comments || [];
+		} catch {}
+	}
+
 	async function submitComment(bodyText: string, parentId?: string) {
-		const prev = comments;
 		replyTarget = '';
 		try {
-			const newComment = await api.post<Comment>(`/comics/${comic.id}/comments`, { body_text: bodyText, parent_id: parentId || '' });
-			comments = [newComment, ...comments];
+			await encore.comics.CreateComment(comic.id, { body_text: bodyText, parent_id: parentId || '' });
+			await loadCommentsFallback();
 		} catch (e) {
 			console.error('[comments] submit failed:', e);
-			comments = prev;
 		}
 	}
 
-	function removeComment(list: Comment[], id: string): Comment[] {
-		return list.filter(c => c.id !== id).map(c =>
-			c.replies ? { ...c, replies: removeComment(c.replies, id) } : c
-		);
-	}
-
 	async function deleteComment(commentId: string) {
-		const prev = comments;
-		comments = removeComment(comments, commentId);
 		try {
-			await api.delete(`/comments/${commentId}`);
+			await encore.comics.DeleteComment(commentId);
+			await loadCommentsFallback();
 		} catch (e) {
 			console.error('[comments] delete failed:', e);
-			comments = prev;
 		}
 	}
 
 	async function handleDownload() {
 		try {
-			const res = await api.post<{ allowed: boolean; used: number; limit: number; message: string }>(`/comics/${comic.id}/download`);
+			const res = await encore.reading.RecordDownload(comic.id);
 			if (!res.allowed) {
 				alert(`${res.message}\nYou've used ${res.used} of ${res.limit} downloads.`);
 			} else if (res.used >= res.limit * 0.8) {

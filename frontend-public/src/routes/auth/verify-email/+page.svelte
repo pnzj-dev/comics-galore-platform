@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 

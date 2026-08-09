@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { onMount } from 'svelte';
 
 	let { open, onClose }: { open: boolean; onClose: () => void } = $props();
@@ -20,7 +20,7 @@
 
 	async function load() {
 		try {
-			const res = await api.get<typeof settings>('/me/preferences');
+			const res: any = await encore.auth.GetPreferences();
 			settings = res;
 		} catch {}
 		loading = false;
@@ -31,7 +31,7 @@
 	$effect(() => { if (open) { loading = true; load(); } });
 
 	async function save() {
-		await api.patch('/me/preferences', settings);
+		await encore.auth.SavePreferences(settings);
 		saved = true;
 		setTimeout(() => saved = false, 2000);
 	}

@@ -33,6 +33,7 @@ auth, users, tiers/intervals/plans, comics, upload sessions, social, moderation,
 ## Client
 
 - Prefer the generated Encore TypeScript client for SvelteKit and desktop frontends.
+- See `.agents/skills/sveltekit-encore-client/SKILL.md` for the full integration guide (generation, instantiation, usage in `+page.server.ts` load functions).
 
 ## Common Pitfalls & Fixes
 

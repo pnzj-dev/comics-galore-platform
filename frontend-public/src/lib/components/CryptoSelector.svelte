@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 
 	let { planId, onBack, onContinue }: {
@@ -30,10 +30,7 @@
 		estimating = true;
 		error = '';
 		try {
-			const res = await api.post<{ estimated_amount: number }>('/billing/estimate-price', {
-				plan_id: planId,
-				crypto: code
-			});
+			const res = await encore.billing.EstimatePrice({ plan_id: planId, crypto: code });
 			estimate = res.estimated_amount;
 		} catch (err) {
 			error = (err as Error).message;

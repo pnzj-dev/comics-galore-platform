@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import PlanGrid from '$lib/components/PlanGrid.svelte';
 	import CryptoSelector from '$lib/components/CryptoSelector.svelte';
 	import ProcessingScreen from '$lib/components/ProcessingScreen.svelte';
@@ -27,7 +27,7 @@
 	async function goToCheckout(crypto: string) {
 		selectedCrypto = crypto;
 		try {
-			const res = await api.get<{ balances: Record<string, { amount: number }> }>('/billing/check-balance');
+			const res = await encore.billing.CheckBalance();
 			const balances = res.balances || {};
 			const balance = balances[crypto] || balances[crypto.toUpperCase()];
 			const hasBalance = (balance?.amount || 0) > 0;
@@ -45,9 +45,7 @@
 
 	async function fundSubscription() {
 		try {
-			const subRes = await api.post<{ subscription_id: string }>('/billing/create-subscription', {
-				plan_id: selectedPlanId
-			});
+			const subRes = await encore.billing.CreateSubscription({ plan_id: selectedPlanId });
 			subscriptionId = subRes.subscription_id;
 			screen = 'processing';
 		} catch {
@@ -57,13 +55,7 @@
 
 	async function createDeposit() {
 		try {
-			const res = await api.post<{
-				deposit_id: string;
-				pay_address: string;
-				pay_amount: number;
-				pay_currency: string;
-				plan_id: string;
-			}>('/billing/create-deposit', {
+			const res: any = await encore.billing.CreateDeposit({
 				plan_id: selectedPlanId,
 				crypto: selectedCrypto
 			});

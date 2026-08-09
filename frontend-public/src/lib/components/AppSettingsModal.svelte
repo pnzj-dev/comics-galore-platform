@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { onMount } from 'svelte';
-	import { LoaderCircle, CheckCircle } from 'lucide-svelte';
 
 	let { open, onClose }: { open: boolean; onClose: () => void } = $props();
 
@@ -15,15 +14,13 @@
 		email_support_replies: true,
 		email_marketing: false,
 		in_app_enabled: true,
-		hide_mature: false,
 	});
 	let saved = $state(false);
-	let saving = $state(false);
 	let loading = $state(true);
 
 	async function load() {
 		try {
-			const res = await api.get<typeof settings>('/me/preferences');
+			const res: any = await encore.auth.GetPreferences();
 			settings = res;
 		} catch {}
 		loading = false;
@@ -34,13 +31,9 @@
 	$effect(() => { if (open) { loading = true; load(); } });
 
 	async function save() {
-		saving = true;
-		try {
-			await api.patch('/me/preferences', settings);
-			saved = true;
-			setTimeout(() => saved = false, 2000);
-		} catch {}
-		saving = false;
+		await encore.auth.SavePreferences(settings);
+		saved = true;
+		setTimeout(() => saved = false, 2000);
 	}
 
 	function handleKeydown(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
@@ -57,90 +50,96 @@
 				<button onclick={onClose} class="hover:bg-muted rounded-lg p-1" aria-label="Close">✕</button>
 			</div>
 
-			<div class="p-4 space-y-4">
-				<!-- General -->
-				<div class="rounded-xl border border-border p-3 space-y-3">
-					<h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">General</h3>
-					<div class="space-y-2.5">
-						<label class="flex items-center justify-between gap-3 text-sm">
-							<span class="text-muted-foreground">Language</span>
-							<select bind:value={settings.language} class="rounded-md border border-input bg-background px-2 py-1 text-sm w-32">
+			<div class="p-4 space-y-5">
+				<div>
+					<h3 class="text-sm font-medium mb-3">Language</h3>
+					<div class="grid grid-cols-2 gap-3">
+						<div class="space-y-1">
+							<label class="text-xs text-muted-foreground" for="settings-language">Default Language</label>
+							<select id="settings-language" bind:value={settings.language} class="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm">
 								<option value="en">English</option>
 								<option value="ja">Japanese</option>
 								<option value="es">Spanish</option>
 								<option value="ko">Korean</option>
 								<option value="fr">French</option>
 							</select>
-						</label>
-						<label class="flex items-center justify-between gap-3 text-sm">
-							<span class="text-muted-foreground">Content Language</span>
-							<select bind:value={settings.content_language} class="rounded-md border border-input bg-background px-2 py-1 text-sm w-32">
+						</div>
+						<div class="space-y-1">
+							<label class="text-xs text-muted-foreground" for="settings-content-language">Content Language</label>
+							<select id="settings-content-language" bind:value={settings.content_language} class="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm">
 								<option value="en">en</option>
 								<option value="ja">ja</option>
 								<option value="es">es</option>
 								<option value="ko">ko</option>
 								<option value="fr">fr</option>
 							</select>
-						</label>
-						<label class="flex items-center justify-between gap-3 text-sm">
-							<span class="text-muted-foreground">Items Per Page</span>
-							<select bind:value={settings.items_per_page} class="rounded-md border border-input bg-background px-2 py-1 text-sm w-32">
+						</div>
+					</div>
+				</div>
+
+				<div>
+					<h3 class="text-sm font-medium mb-3">Display</h3>
+					<div class="grid grid-cols-2 gap-3">
+						<div class="space-y-1">
+							<label class="text-xs text-muted-foreground" for="settings-items-per-page">Items Per Page</label>
+							<select id="settings-items-per-page" bind:value={settings.items_per_page} class="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm">
 								<option value={12}>12</option>
 								<option value={24}>24</option>
 								<option value={48}>48</option>
 							</select>
-						</label>
-						<label class="flex items-center justify-between gap-3 text-sm">
-							<span class="text-muted-foreground">Tags Limit</span>
-							<input type="number" bind:value={settings.popular_tags_limit} min="5" max="50" class="w-20 rounded-md border border-input bg-background px-2 py-1 text-sm" />
-						</label>
+						</div>
+						<div class="space-y-1">
+							<label class="text-xs text-muted-foreground" for="settings-popular-tags-limit">Popular Tags Limit</label>
+							<input id="settings-popular-tags-limit" type="number" bind:value={settings.popular_tags_limit} min="5" max="50" class="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
+						</div>
 					</div>
 				</div>
 
-				<!-- Content -->
-				<div class="rounded-xl border border-border p-3">
-					<h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Content</h3>
-					<label class="flex items-center justify-between gap-2 text-sm cursor-pointer">
-						<span class="text-muted-foreground">Hide mature content</span>
-						<input type="checkbox" bind:checked={settings.hide_mature} class="rounded" />
-					</label>
-				</div>
-
-				<!-- Notifications -->
-				<div class="rounded-xl border border-border p-3">
-					<h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Notifications</h3>
-					<div class="space-y-2.5">
-						<label class="flex items-center justify-between gap-2 text-sm cursor-pointer">
-							<span class="text-muted-foreground">New comics from creators you follow</span>
+				<div>
+					<h3 class="text-sm font-medium mb-3">Notifications</h3>
+					<div class="space-y-2">
+						<label class="flex items-center gap-2 text-sm cursor-pointer">
 							<input type="checkbox" bind:checked={settings.email_from_following} class="rounded" />
+							New comics from creators you follow
 						</label>
-						<label class="flex items-center justify-between gap-2 text-sm cursor-pointer">
-							<span class="text-muted-foreground">Support ticket replies</span>
+						<label class="flex items-center gap-2 text-sm cursor-pointer">
 							<input type="checkbox" bind:checked={settings.email_support_replies} class="rounded" />
+							Support ticket replies
 						</label>
-						<label class="flex items-center justify-between gap-2 text-sm cursor-pointer">
-							<span class="text-muted-foreground">Marketing emails and promotions</span>
+						<label class="flex items-center gap-2 text-sm cursor-pointer">
 							<input type="checkbox" bind:checked={settings.email_marketing} class="rounded" />
+							Marketing emails and promotions
 						</label>
-						<label class="flex items-center justify-between gap-2 text-sm cursor-pointer">
-							<span class="text-muted-foreground">In-app notifications</span>
+						<label class="flex items-center gap-2 text-sm cursor-pointer">
 							<input type="checkbox" bind:checked={settings.in_app_enabled} class="rounded" />
+							In-app notifications
 						</label>
 					</div>
 				</div>
 
-				<Button onclick={save} class="w-full" disabled={saving}>
-						{#if saving}
-							<LoaderCircle class="size-4 animate-spin" />
-							Saving...
-						{:else if saved}
-							<CheckCircle class="size-4 text-green-500" />
-							Save Settings
-						{:else}
-							Save Settings
-						{/if}
-					</Button>
+				<div>
+					<h3 class="text-sm font-medium mb-3">Quota Boosts</h3>
+					<div class="grid grid-cols-3 gap-2">
+						<div class="rounded-lg border border-border p-2 text-center">
+							<p class="text-xs font-medium">+5 GB</p>
+							<p class="text-xs text-muted-foreground">$5.00</p>
+						</div>
+						<div class="rounded-lg border border-border p-2 text-center">
+							<p class="text-xs font-medium">+10 GB</p>
+							<p class="text-xs text-muted-foreground">$8.00</p>
+						</div>
+						<div class="rounded-lg border border-border p-2 text-center">
+							<p class="text-xs font-medium">+20 GB</p>
+							<p class="text-xs text-muted-foreground">$12.00</p>
+						</div>
+					</div>
+				</div>
+
+				<div class="flex items-center gap-3 pt-2">
+					<Button onclick={save} class="w-full">Save Settings</Button>
+					{#if saved}<span class="text-sm text-green-500 flex-shrink-0">Saved!</span>{/if}
 				</div>
 			</div>
 		</div>
+	</div>
 {/if}

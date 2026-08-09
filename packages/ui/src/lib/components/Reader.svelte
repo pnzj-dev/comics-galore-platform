@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { onMount } from 'svelte';
 	import { Maximize, Columns, ArrowDownToLine } from 'lucide-svelte';
 
@@ -43,7 +43,7 @@
 		clearTimeout(autosaveTimer);
 		autosaveTimer = setTimeout(async () => {
 			try {
-				await api.post(`/reading/${comicId}`, {
+				await encore.reading.SaveProgress(comicId, {
 					current_page: currentPage,
 					total_pages: pageCount,
 					completed: currentPage >= pageCount - 1
@@ -71,7 +71,7 @@
 
 	onMount(async () => {
 		try {
-			const progress = await api.get<{ current_page: number }>(`/reading/${comicId}`);
+			const progress = await encore.reading.GetProgress(comicId);
 			currentPage = progress.current_page || 0;
 		} catch {}
 	});

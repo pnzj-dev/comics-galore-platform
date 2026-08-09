@@ -1,40 +1,23 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
-	import { onMount } from 'svelte';
-	import { currentUser } from '$lib/stores/auth';
-	import { goto } from '$app/navigation';
+	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card/index.js';
 
-	let pending = $state<any[]>([]);
-	let loading = $state(true);
+	let { data } = $props();
+
+	// svelte-ignore state_referenced_locally
+	let pending = $state(data.pending);
 	let selected = $state<Set<string>>(new Set());
 
-	onMount(async () => {
-		if (!$currentUser || ($currentUser.role !== 'moderator' && $currentUser.role !== 'admin')) {
-			await goto('/');
-			return;
-		}
-		await loadPending();
-	});
-
-	async function loadPending() {
-		try {
-			const res = await api.get<{ comics: any[] }>('/moderation/comics');
-			pending = res.comics;
-		} catch {}
-		loading = false;
-	}
-
 	async function approve(id: string) {
-		await api.post(`/moderation/comics/${id}/approve`);
+		await encore.comics.ApproveComic(id);
 		pending = pending.filter(c => c.id !== id);
 	}
 
 	async function rejectWithReason(id: string) {
 		const reason = prompt('Rejection reason:');
 		if (!reason) return;
-		await api.post(`/moderation/comics/${id}/reject`, { reason });
+		await encore.comics.RejectComic(id, { reason });
 		pending = pending.filter(c => c.id !== id);
 	}
 
@@ -50,13 +33,13 @@
 	}
 
 	async function bulkApprove() {
-		await api.post('/moderation/bulk', { ids: [...selected], action: 'approve' });
+		await encore.comics.BulkModerate({ ids: [...selected], action: 'approve' as any });
 		pending = pending.filter(c => !selected.has(c.id));
 		selected = new Set();
 	}
 
 	async function bulkReject() {
-		await api.post('/moderation/bulk', { ids: [...selected], action: 'reject' });
+		await encore.comics.BulkModerate({ ids: [...selected], action: 'reject' as any });
 		pending = pending.filter(c => !selected.has(c.id));
 		selected = new Set();
 	}
@@ -67,24 +50,8 @@
 <section class="py-8">
 	<h1 class="text-3xl font-bold mb-6">Moderation Queue</h1>
 
-	{#if loading}
-		<div class="space-y-3">
-			{#each Array(4) as _}
-				<div class="rounded-xl border border-border p-4 animate-pulse">
-					<div class="flex gap-3">
-						<div class="w-4 h-4 rounded bg-gray-200 dark:bg-gray-700 mt-1"></div>
-						<div class="flex-1 space-y-2">
-							<div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
-							<div class="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
-						</div>
-					</div>
-				</div>
-			{/each}
-		</div>
-	{:else if pending.length === 0}
-		<div class="text-center py-12">
-			<p class="text-lg text-muted-foreground">No comics pending review.</p>
-		</div>
+	{#if pending.length === 0}
+		<div class="text-center py-12"><p class="text-lg text-muted-foreground">No comics pending review.</p></div>
 	{:else}
 		{#if selected.size > 0}
 			<div class="flex items-center gap-3 mb-4 p-3 bg-muted rounded-lg">
@@ -93,32 +60,14 @@
 				<Button size="sm" variant="destructive" onclick={bulkReject}>Reject All</Button>
 			</div>
 		{/if}
-
 		<div class="space-y-3">
 			<div class="flex items-center gap-2 mb-2">
-				<label class="flex items-center gap-2 text-sm cursor-pointer">
-					<input type="checkbox" checked={selected.size === pending.length} onchange={selectAll} class="rounded" />
-					Select all
-				</label>
+				<label class="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={selected.size === pending.length} onchange={selectAll} class="rounded" /> Select all</label>
 			</div>
-
 			{#each pending as comic}
 				<Card class={selected.has(comic.id) ? 'ring-2 ring-primary' : ''}>
-					<CardHeader>
-						<div class="flex items-start gap-3">
-							<input type="checkbox" checked={selected.has(comic.id)} onchange={() => toggleSelect(comic.id)} class="mt-1.5 rounded" />
-							<div class="flex-1">
-								<CardTitle>{comic.title}</CardTitle>
-								<p class="text-sm text-muted-foreground">Submitted: {new Date(comic.created_at).toLocaleDateString()}</p>
-							</div>
-						</div>
-					</CardHeader>
-					<CardContent>
-						<div class="flex gap-2">
-							<Button size="sm" onclick={() => approve(comic.id)}>Approve</Button>
-							<Button size="sm" variant="destructive" onclick={() => rejectWithReason(comic.id)}>Reject</Button>
-						</div>
-					</CardContent>
+					<CardHeader><div class="flex items-start gap-3"><input type="checkbox" checked={selected.has(comic.id)} onchange={() => toggleSelect(comic.id)} class="mt-1.5 rounded" /><div class="flex-1"><CardTitle>{comic.title}</CardTitle><p class="text-sm text-muted-foreground">Submitted: {new Date(comic.created_at).toLocaleDateString()}</p></div></div></CardHeader>
+					<CardContent><div class="flex gap-2"><Button size="sm" onclick={() => approve(comic.id)}>Approve</Button><Button size="sm" variant="destructive" onclick={() => rejectWithReason(comic.id)}>Reject</Button></div></CardContent>
 				</Card>
 			{/each}
 		</div>

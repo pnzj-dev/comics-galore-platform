@@ -84,7 +84,7 @@ func scanComics(rows *sqldb.Rows) ([]Comic, error) {
 			&c.ID, &c.UploaderID, &c.Title, &c.Author, &c.Slug, &c.Description,
 			&c.ContentLanguage, &c.Status, &c.CoverKey, &c.FileKey,
 			scanStringSlice(&c.PageKeys), &c.FileSizeBytes, nulString(&c.MinTierID),
-			&c.AgeRating, scanStringSlice(&c.Tags), nulString(&c.RejectionReason),
+			&c.AgeRating, &c.IsPremium, scanStringSlice(&c.Tags), nulString(&c.RejectionReason),
 			&pubAt, &c.ViewCount, &c.DownloadCount, &c.LikeCount, &c.FavCount, &c.DislikeCount,
 			&c.CreatedAt, &c.UpdatedAt,
 		)

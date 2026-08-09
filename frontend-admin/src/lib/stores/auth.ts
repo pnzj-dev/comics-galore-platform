@@ -1,35 +1,41 @@
 import { writable } from 'svelte/store';
-import { api, ApiError } from '$lib/api/client';
+import { encore } from '$lib/api/encore';
+import type { User } from '$lib/api/encore-client';
 
-export interface User {
-	id: string;
-	email: string;
-	role: string;
-	tier: string;
-	created_at: string;
-}
+export type { User };
 
 export const currentUser = writable<User | null>(null);
 export const isAuthenticated = writable<boolean>(false);
 
+function setToken(value: string) {
+	document.cookie = `token=${value}; path=/; SameSite=Lax; max-age=2592000`;
+}
+function getToken(): string | null {
+	const m = document.cookie.match(/(?:^|;\s*)token=([^;]*)/);
+	return m ? m[1] : null;
+}
+function clearToken() {
+	document.cookie = 'token=; path=/; max-age=0';
+}
+
 export async function login(email: string, password: string): Promise<User> {
-	const res = await api.post<{ token: string; user: User }>('/auth/login', { email, password });
-	localStorage.setItem('token', res.token);
+	const res = await encore.auth.Login({ email, password });
+	setToken(res.token);
 	currentUser.set(res.user);
 	isAuthenticated.set(true);
 	return res.user;
 }
 
 export async function register(email: string, password: string): Promise<User> {
-	const res = await api.post<{ token: string; user: User }>('/auth/register', { email, password });
-	localStorage.setItem('token', res.token);
+	const res = await encore.auth.Register({ email, password });
+	setToken(res.token);
 	currentUser.set(res.user);
 	isAuthenticated.set(true);
 	return res.user;
 }
 
 export async function fetchMe(): Promise<User | null> {
-	const token = localStorage.getItem('token');
+	const token = getToken();
 	if (!token) {
 		currentUser.set(null);
 		isAuthenticated.set(false);
@@ -37,13 +43,13 @@ export async function fetchMe(): Promise<User | null> {
 	}
 
 	try {
-		const user = await api.get<User>('/auth/me');
+		const user = await encore.auth.Me();
 		currentUser.set(user);
 		isAuthenticated.set(true);
 		return user;
-	} catch (e) {
-		if (e instanceof ApiError && e.status === 401) {
-			localStorage.removeItem('token');
+	} catch (e: any) {
+		if (e?.status === 401) {
+			clearToken();
 		}
 		currentUser.set(null);
 		isAuthenticated.set(false);
@@ -52,7 +58,7 @@ export async function fetchMe(): Promise<User | null> {
 }
 
 export function logout() {
-	localStorage.removeItem('token');
+	clearToken();
 	currentUser.set(null);
 	isAuthenticated.set(false);
 }

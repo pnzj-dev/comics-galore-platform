@@ -18,6 +18,7 @@ description: Build Comics Galore SvelteKit web UI with shadcn-svelte, Tailwind, 
 - Prefer shared code under `packages/ui` when desktop will consume the same components.
 - Public routes lean on SSR and minimal JS.
 - Admin routes may be richer.
+- **Data loading must use SvelteKit `load` functions** (`+page.server.ts` / `+layout.server.ts`), not `onMount` + client-side `api.get`. This ensures SSR data, no skeletons, and search-engine readability. See `docs/architecture.md` for the pattern.  
 
 ## V1 screens priority
 

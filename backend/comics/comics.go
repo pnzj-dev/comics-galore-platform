@@ -76,6 +76,7 @@ type Comic struct {
 	FileSizeBytes   int64     `json:"file_size_bytes"`
 	MinTierID       string    `json:"min_tier_id,omitempty"`
 	AgeRating       string    `json:"age_rating"`
+	IsPremium       bool      `json:"is_premium"`
 	Tags            []string  `json:"tags"`
 	RejectionReason string    `json:"rejection_reason,omitempty"`
 	PublishedAt     time.Time `json:"published_at,omitempty"`
@@ -106,6 +107,7 @@ type CreateComicParams struct {
 	FileSizeBytes   int64    `json:"file_size_bytes"`
 	MinTierID       string   `json:"min_tier_id"`
 	AgeRating       string   `json:"age_rating"`
+	IsPremium       bool     `json:"is_premium"`
 	Tags            []string `json:"tags"`
 	UploadSessionID string   `json:"upload_session_id"`
 }
@@ -166,18 +168,18 @@ func CreateComic(ctx context.Context, p *CreateComicParams) (*Comic, error) {
 
 	err := db.QueryRow(ctx, `
 		INSERT INTO comics (uploader_id, title, author, slug, description, content_language,
-			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, tags)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium, tags)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		RETURNING id, uploader_id, title, author, slug, description, content_language, status,
-			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
+			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
 			tags, rejection_reason, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
 	`, ad.UserID, p.Title, p.Author, slug, p.Description, lang,
-		p.CoverKey, p.FileKey, pageKeys, p.FileSizeBytes, minTierID, ageRating, tags).Scan(
+		p.CoverKey, p.FileKey, pageKeys, p.FileSizeBytes, minTierID, ageRating, p.IsPremium, tags).Scan(
 		&comic.ID, &comic.UploaderID, &comic.Title, &comic.Author, &comic.Slug, &comic.Description,
 		&comic.ContentLanguage, &comic.Status, &comic.CoverKey, &comic.FileKey,
 		scanStringSlice(&comic.PageKeys), &comic.FileSizeBytes, nulString(&comic.MinTierID),
-		&comic.AgeRating, scanStringSlice(&comic.Tags), nulString(&comic.RejectionReason),
+		&comic.AgeRating, &comic.IsPremium, scanStringSlice(&comic.Tags), nulString(&comic.RejectionReason),
 		&comic.ViewCount, &comic.DownloadCount, &comic.LikeCount, &comic.FavCount, &comic.DislikeCount,
 		&comic.CreatedAt, &comic.UpdatedAt,
 	)
@@ -264,7 +266,7 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 
 	rows, err := db.Query(ctx, `
 		SELECT id, uploader_id, title, author, slug, description, content_language, status,
-			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
+			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
 			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
 		FROM comics `+where+`
@@ -294,7 +296,7 @@ func GetComic(ctx context.Context, slug string) (*Comic, error) {
 	var comic Comic
 	err := db.QueryRow(ctx, `
 		SELECT id, uploader_id, title, author, slug, description, content_language, status,
-			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
+			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
 			tags, rejection_reason, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
 		FROM comics WHERE slug = $1
@@ -302,7 +304,7 @@ func GetComic(ctx context.Context, slug string) (*Comic, error) {
 		&comic.ID, &comic.UploaderID, &comic.Title, &comic.Author, &comic.Slug, &comic.Description,
 		&comic.ContentLanguage, &comic.Status, &comic.CoverKey, &comic.FileKey,
 		scanStringSlice(&comic.PageKeys), &comic.FileSizeBytes, nulString(&comic.MinTierID),
-		&comic.AgeRating, scanStringSlice(&comic.Tags), nulString(&comic.RejectionReason),
+		&comic.AgeRating, &comic.IsPremium, scanStringSlice(&comic.Tags), nulString(&comic.RejectionReason),
 		&comic.ViewCount, &comic.DownloadCount, &comic.LikeCount, &comic.FavCount, &comic.DislikeCount,
 		&comic.CreatedAt, &comic.UpdatedAt,
 	)
@@ -344,7 +346,7 @@ func BatchGetComics(ctx context.Context, p *BatchComicsParams) (*ListComicsRespo
 
 	rows, err := db.Query(ctx, `
 		SELECT id, uploader_id, title, author, slug, description, content_language, status,
-			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
+			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
 			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
 		FROM comics WHERE id = ANY($1) AND status = 'published'
@@ -373,7 +375,7 @@ func MyComics(ctx context.Context) (*ListComicsResponse, error) {
 
 	rows, err := db.Query(ctx, `
 		SELECT id, uploader_id, title, author, slug, description, content_language, status,
-			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
+			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
 			tags, rejection_reason, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
 		FROM comics WHERE uploader_id = $1
@@ -776,7 +778,7 @@ func AdminListComics(ctx context.Context) (*ListComicsResponse, error) {
 
 	rows, err := db.Query(ctx, `
 		SELECT id, uploader_id, title, author, slug, description, content_language, status,
-			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
+			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
 			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
 		FROM comics ORDER BY created_at DESC LIMIT 100
@@ -1023,7 +1025,7 @@ func GetSeries(ctx context.Context, id string) (*Series, error) {
 func SeriesComics(ctx context.Context, id string) (*ListComicsResponse, error) {
 	rows, err := db.Query(ctx, `
 		SELECT id, uploader_id, title, author, slug, description, content_language, status,
-			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating,
+			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
 			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
 		FROM comics WHERE series_id = $1 AND status = 'published'

@@ -1,40 +1,23 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
-	import { onMount } from 'svelte';
-	import { currentUser } from '$lib/stores/auth';
-	import { goto } from '$app/navigation';
+	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card/index.js';
 
-	let pending = $state<any[]>([]);
-	let loading = $state(true);
+	let { data } = $props();
+
+	// svelte-ignore state_referenced_locally
+	let pending = $state(data.pending);
 	let selected = $state<Set<string>>(new Set());
 
-	onMount(async () => {
-		if (!$currentUser || ($currentUser.role !== 'moderator' && $currentUser.role !== 'admin')) {
-			await goto('/');
-			return;
-		}
-		await loadPending();
-	});
-
-	async function loadPending() {
-		try {
-			const res = await api.get<{ comics: any[] }>('/moderation/comics');
-			pending = res.comics;
-		} catch {}
-		loading = false;
-	}
-
 	async function approve(id: string) {
-		await api.post(`/moderation/comics/${id}/approve`);
+		await encore.comics.ApproveComic(id);
 		pending = pending.filter(c => c.id !== id);
 	}
 
 	async function rejectWithReason(id: string) {
 		const reason = prompt('Rejection reason:');
 		if (!reason) return;
-		await api.post(`/moderation/comics/${id}/reject`, { reason });
+		await encore.comics.RejectComic(id, { reason });
 		pending = pending.filter(c => c.id !== id);
 	}
 
@@ -50,13 +33,13 @@
 	}
 
 	async function bulkApprove() {
-		await api.post('/moderation/bulk', { ids: [...selected], action: 'approve' });
+		await encore.comics.BulkModerate({ ids: [...selected], action: 'approve' as any });
 		pending = pending.filter(c => !selected.has(c.id));
 		selected = new Set();
 	}
 
 	async function bulkReject() {
-		await api.post('/moderation/bulk', { ids: [...selected], action: 'reject' });
+		await encore.comics.BulkModerate({ ids: [...selected], action: 'reject' as any });
 		pending = pending.filter(c => !selected.has(c.id));
 		selected = new Set();
 	}
@@ -67,9 +50,7 @@
 <section class="py-8">
 	<h1 class="text-3xl font-bold mb-6">Moderation Queue</h1>
 
-	{#if loading}
-		<p class="text-muted-foreground">Loading...</p>
-	{:else if pending.length === 0}
+	{#if pending.length === 0}
 		<div class="text-center py-12">
 			<p class="text-lg text-muted-foreground">No comics pending review.</p>
 		</div>

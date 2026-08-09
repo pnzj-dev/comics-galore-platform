@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -25,9 +25,9 @@
 		error = '';
 
 		try {
-			const session = await api.post<{ id: string; s3_prefix: string }>('/upload-sessions', { mode: 'manual' });
+			const session = await encore.upload.CreateSession({ mode: 'manual' });
 			const key = file.name;
-			const presign = await api.post<{ url: string; key: string }>(`/upload-sessions/${session.id}/presign`, { number: 1, key });
+			const presign = await encore.upload.PresignUpload(session.id, { number: 1, key });
 
 			uploadProgress = 'Uploading file...';
 			const uploadRes = await fetch(presign.url, {
@@ -41,7 +41,7 @@
 			}
 
 			uploadProgress = 'Confirming upload...';
-			await api.post(`/upload-sessions/${session.id}/parts`, {
+			await encore.upload.ConfirmPart(session.id, {
 				number: 1,
 				key: presign.key,
 				size: file.size,
@@ -52,7 +52,7 @@
 
 			const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
 
-			await api.post('/comics', {
+			await encore.comics.CreateComic({
 				title,
 				description,
 				content_language: contentLanguage,
@@ -60,7 +60,7 @@
 				file_key: presign.key,
 				page_keys: [presign.key],
 				file_size_bytes: file.size,
-				age_rating: ageRating,
+				age_rating: ageRating as any,
 				tags: tagList,
 				upload_session_id: session.id
 			});

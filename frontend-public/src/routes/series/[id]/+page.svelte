@@ -1,52 +1,36 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-	import { api } from '$lib/api/client';
-	import { onMount } from 'svelte';
+	import { encore } from '$lib/api/encore';
 	import ComicCard from '$lib/components/ComicCard.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { currentUser } from '$lib/stores/auth';
 
-	let series = $state<any>(null);
-	let comics = $state<any[]>([]);
-	let loading = $state(true);
+	let { data } = $props();
+
+	// svelte-ignore state_referenced_locally
+	let comics = $state(data.comics);
 	let following = $state(false);
 
-	const id = $derived($page.params.id);
 	const user = $derived($currentUser);
-
-	onMount(async () => {
-		try {
-			series = await api.get(`/series/${id}`);
-			const res = await api.get<{ comics: any[] }>(`/series/${id}/comics`);
-			comics = res.comics;
-		} catch {}
-		loading = false;
-	});
 
 	async function toggleFollow() {
 		if (following) {
-			await api.delete(`/series/${id}/follow`);
+			await encore.comics.UnfollowSeries(data.series.id);
 			following = false;
 		} else {
-			await api.post(`/series/${id}/follow`);
+			await encore.comics.FollowSeries(data.series.id);
 			following = true;
 		}
 	}
 </script>
 
-<svelte:head><title>{series?.title || 'Series'} — Comics Galore</title></svelte:head>
+<svelte:head><title>{data.series?.title || 'Series'} — Comics Galore</title></svelte:head>
 
 <section class="py-8">
-	{#if loading}
-		<div class="animate-pulse space-y-4">
-			<div class="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
-			<div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
-		</div>
-	{:else if series}
+	{#if data.series}
 		<div class="mb-8">
 			<a href="/series" class="text-sm text-muted-foreground hover:text-foreground">&larr; All series</a>
-			<h1 class="text-3xl font-bold mt-2">{series.title}</h1>
-			<p class="text-muted-foreground mt-1">{series.description}</p>
+			<h1 class="text-3xl font-bold mt-2">{data.series.title}</h1>
+			<p class="text-muted-foreground mt-1">{data.series.description}</p>
 			{#if user}
 				<Button size="sm" variant="outline" class="mt-3" onclick={toggleFollow}>
 					{following ? 'Unfollow' : 'Follow'} Series

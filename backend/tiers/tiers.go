@@ -2,10 +2,12 @@ package tiers
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"encore.dev/beta/auth"
 	myauth "comics-galore/backend/auth"
+	billing "comics-galore/backend/billing"
 	"encore.dev/beta/errs"
 	"encore.dev/storage/sqldb"
 )
@@ -157,6 +159,93 @@ func UpdatePlanProviderID(ctx context.Context, id string, p *UpdatePlanProviderP
 		return &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
 	}
 
-	_, err := db.Exec(ctx, `UPDATE plans SET provider_plan_id = $1 WHERE id = $2`, p.ProviderPlanID, id)
+	var existing string
+	err := db.QueryRow(ctx, `SELECT COALESCE(provider_plan_id, '') FROM plans WHERE id = $1`, id).Scan(&existing)
+	if err != nil {
+		if isNoRows(err) {
+			return &errs.Error{Code: errs.NotFound, Message: "plan not found"}
+		}
+		return err
+	}
+	if existing != "" {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "plan already linked to provider plan ID: " + existing}
+	}
+
+	_, err = db.Exec(ctx, `UPDATE plans SET provider_plan_id = $1 WHERE id = $2`, p.ProviderPlanID, id)
 	return err
+}
+
+type AutoLinkPlanResponse struct {
+	ProviderPlanID string `json:"provider_plan_id"`
+	PlanName       string `json:"plan_name"`
+}
+
+//encore:api auth method=POST path=/admin/plans/:id/auto-link
+func AutoLinkPlan(ctx context.Context, id string) (*AutoLinkPlanResponse, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	var plan struct {
+		Name          string
+		TierID        string
+		Interval      string
+		PriceUsdCents int
+		ProviderPlanID string
+	}
+	err := db.QueryRow(ctx, `
+		SELECT COALESCE(plans.name, ''), plans.tier_id, plans.interval,
+			plans.price_usd_cents, COALESCE(plans.provider_plan_id, '')
+		FROM plans WHERE id = $1
+	`, id).Scan(&plan.Name, &plan.TierID, &plan.Interval, &plan.PriceUsdCents, &plan.ProviderPlanID)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found"}
+		}
+		return nil, err
+	}
+	if plan.ProviderPlanID != "" {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "plan already linked to provider plan ID: " + plan.ProviderPlanID}
+	}
+
+	period := intervalToPeriod(plan.Interval)
+	displayName := plan.Name
+	if displayName == "" {
+		displayName = plan.TierID + " - " + plan.Interval
+	}
+
+	resp, err := billing.CreatePlan(ctx, billing.CreatePlanRequest{
+		Name:        displayName,
+		PriceAmount: float64(plan.PriceUsdCents) / 100.0,
+		Period:      period,
+	})
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "nowpayments plan creation failed: " + err.Error()}
+	}
+
+	_, err = db.Exec(ctx, `UPDATE plans SET provider_plan_id = $1 WHERE id = $2`, resp.ProviderPlanID, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &AutoLinkPlanResponse{
+		ProviderPlanID: resp.ProviderPlanID,
+		PlanName:       displayName,
+	}, nil
+}
+
+func intervalToPeriod(interval string) string {
+	switch strings.ToLower(interval) {
+	case "daily":
+		return "day"
+	case "weekly":
+		return "week"
+	case "monthly":
+		return "month"
+	case "yearly":
+		return "year"
+	default:
+		return "month"
+	}
 }

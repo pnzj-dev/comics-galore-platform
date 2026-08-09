@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -33,9 +33,8 @@
 	]);
 
 	async function uploadFile(file: File, onProgress: (pct: number) => void, endpoint?: string): Promise<string> {
-		// Cloudflare image upload (cover/preview)
 		if (endpoint) {
-			const res = await api.post<{ uploadURL: string; imageID: string }>(endpoint, {});
+			const res = await encore.upload.CloudflarePresignedUpload();
 			const uploadUrl = res.uploadURL.endsWith('/') ? res.uploadURL : res.uploadURL;
 			const xhr = new XMLHttpRequest();
 			await new Promise<void>((resolve, reject) => {
@@ -50,9 +49,8 @@
 			return res.imageID;
 		}
 
-		// S3 upload session (archives)
-		const session = await api.post<{ id: string }>('/upload-sessions', { mode: 'manual' });
-		const presign = await api.post<{ url: string; key: string }>(`/upload-sessions/${session.id}/presign`, { number: 1, key: file.name });
+		const session = await encore.upload.CreateSession({ mode: 'manual' });
+		const presign = await encore.upload.PresignUpload(session.id, { number: 1, key: file.name });
 		const xhr = new XMLHttpRequest();
 		await new Promise<void>((resolve, reject) => {
 			xhr.upload.addEventListener('progress', (e) => {
@@ -64,7 +62,8 @@
 			xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
 			xhr.send(file);
 		});
-		await api.post(`/upload-sessions/${session.id}/parts`, { number: 1, key: presign.key, size: file.size, etag: xhr.getResponseHeader('ETag') || '' });
+		const etag = xhr.getResponseHeader('ETag') || '';
+		await encore.upload.ConfirmPart(session.id, { number: 1, key: presign.key, size: file.size, etag });
 		return presign.key;
 	}
 
@@ -72,7 +71,7 @@
 		const file = (e.target as HTMLInputElement).files?.[0];
 		if (!file) return;
 		coverFile = file; coverPreview = URL.createObjectURL(file); coverUploading = true;
-		try { coverKey = await uploadFile(file, (pct) => coverProgress = pct, '/media/cloudflare/upload-url'); } catch (err) { error = 'Cover upload failed'; }
+		try { coverKey = await uploadFile(file, (pct) => coverProgress = pct, 'cf'); } catch (err) { error = 'Cover upload failed'; }
 		finally { coverUploading = false; }
 	}
 	function removeCover() { coverFile = null; coverPreview = ''; coverKey = ''; coverProgress = 0; }
@@ -81,7 +80,7 @@
 		const file = (e.target as HTMLInputElement).files?.[0];
 		if (!file) return;
 		previewSlots[i].file = file; previewSlots[i].preview = URL.createObjectURL(file); previewSlots[i].uploading = true;
-		try { previewSlots[i].key = await uploadFile(file, (pct) => previewSlots[i].progress = pct, '/media/cloudflare/upload-url'); } catch (err) { error = 'Preview upload failed'; }
+		try { previewSlots[i].key = await uploadFile(file, (pct) => previewSlots[i].progress = pct, 'cf'); } catch (err) { error = 'Preview upload failed'; }
 		finally { previewSlots[i].uploading = false; }
 	}
 	function addPreview() { if (previewSlots.length < 10) previewSlots.push({ file: null, preview: '', key: '', progress: 0, uploading: false }); }
@@ -112,29 +111,32 @@
 		try {
 			const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
 			const previewKeys = previewSlots.filter(p => p.key).map(p => p.key);
-			await api.post('/comics', {
-				title, author, description, content_language: contentLanguage,
-				cover_key: coverKey, file_key: archiveKeys[0],
+			await encore.comics.CreateComic({
+				title,
+				author,
+				description,
+				content_language: contentLanguage,
+				cover_key: coverKey,
+				file_key: archiveKeys[0],
 				page_keys: [...previewKeys, ...archiveKeys],
 				file_size_bytes: archiveSlots.reduce((sum, a) => sum + (a.size || 0), 0),
-				age_rating: ageRating, tags: tagList
+				age_rating: ageRating as any,
+				tags: tagList
 			});
-			await goto('/upload');
+			await goto('/upload?tab=list');
 		} catch (err) { error = (err as Error).message; }
 		finally { submitting = false; }
 	}
 </script>
 
-<Card class="max-w-5xl mx-auto">
+<Card>
 	<CardHeader>
 		<CardTitle>Create New Comic</CardTitle>
 	</CardHeader>
 	<CardContent>
 		<form class="space-y-6" onsubmit={(e) => e.preventDefault()}>
 
-			<!-- Row 1: Metadata left + Cover right -->
 			<div class="grid md:grid-cols-[1fr_320px] gap-8">
-				<!-- Metadata column -->
 				<div class="space-y-3">
 					<div class="space-y-1.5">
 						<Label for="title">Title *</Label>
@@ -189,7 +191,6 @@
 					</div>
 				</div>
 
-				<!-- Cover column -->
 				<div class="space-y-1.5">
 					<Label>Cover Image *</Label>
 					<div class="aspect-[3/4] rounded-lg border-2 border-dashed border-border overflow-hidden relative bg-muted/30">
@@ -213,7 +214,6 @@
 				</div>
 			</div>
 
-			<!-- Row 2: Preview Images (full width) -->
 			<div class="space-y-2">
 				<div class="flex items-center justify-between">
 					<Label>Preview Images (min 2)</Label>
@@ -244,7 +244,6 @@
 				</div>
 			</div>
 
-			<!-- Row 3: Archive Files (full width) -->
 			<div class="space-y-2">
 				<div class="flex items-center justify-between">
 					<Label>Archive Files (min 1)</Label>
@@ -284,7 +283,7 @@
 			{/if}
 
 			<Button type="submit" class="w-full" disabled={submitting || !title} onclick={submit}>
-				{submitting ? 'Creating...' : 'Publish Comic'}
+				{submitting ? 'Publishing...' : 'Publish Comic'}
 			</Button>
 		</form>
 	</CardContent>

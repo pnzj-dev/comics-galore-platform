@@ -1,82 +1,105 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { currentUser, isAuthenticated, fetchMe } from '$lib/stores/auth';
-	import { api } from '$lib/api/client';
-	import { Button } from '$lib/components/ui/button/index.js';
+	import { page } from '$app/stores';
+	import { currentUser, isAuthenticated } from '$lib/stores/auth';
+	import { encore } from '$lib/api/encore';
 	import LogoutConfirmationModal from '$lib/components/LogoutConfirmationModal.svelte';
 	import NowPaymentsLinkWizard from '$lib/components/NowPaymentsLinkWizard.svelte';
-	import { Settings, LogOut, AlertTriangle } from 'lucide-svelte';
+	import { LayoutDashboard, Shield, Users, CreditCard, BookOpen, Trash2, Settings, LogOut, AlertTriangle } from 'lucide-svelte';
 
-	let { children } = $props();
-	let profileOpen = $state(false);
+	let { data, children } = $props();
 	let logoutOpen = $state(false);
 	let wizardOpen = $state(false);
 	let planMatrixComplete = $state(true);
 	let wizardBlocked = $state(false);
 
-	onMount(() => { fetchMe(); });
+	onMount(() => {
+		if (data.user) {
+			currentUser.set(data.user);
+			isAuthenticated.set(true);
+		}
+	});
 
-	const user = $derived($currentUser);
-	const authed = $derived($isAuthenticated);
+	const user = $derived(data.user || $currentUser);
+	const authed = $derived(!!(data.user) || $isAuthenticated);
+	const path = $derived($page.url.pathname);
 
 	async function checkPlanMatrix() {
 		try {
-			const res = await api.get<{ complete: boolean }>('/admin/plans/matrix-status');
+			const res = await encore.tiers.PlanMatrixStatus();
 			planMatrixComplete = res.complete;
-			if (!res.complete && !wizardBlocked) {
-				wizardOpen = true;
-			}
-		} catch {
-			planMatrixComplete = true;
-		}
+			if (!res.complete && !wizardBlocked) wizardOpen = true;
+		} catch { planMatrixComplete = true; }
 	}
 
-	function onWizardClose() {
-		wizardOpen = false;
-		wizardBlocked = !planMatrixComplete;
-	}
+	function onWizardClose() { wizardOpen = false; wizardBlocked = !planMatrixComplete; }
 
-	$effect(() => {
-		if (authed) checkPlanMatrix();
-	});
+	$effect(() => { if (authed) checkPlanMatrix(); });
+
+	const navItems = $derived([
+		{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+		{ href: '/moderation', label: 'Moderation', icon: Shield },
+		{ href: '/users', label: 'Users', icon: Users },
+		{ href: '/subscriptions', label: 'Subscriptions', icon: CreditCard },
+		{ href: '/comics', label: 'Comics', icon: BookOpen },
+		{ href: '/comics/recycle-bin', label: 'Recycle Bin', icon: Trash2 },
+		{ href: '/settings', label: 'Settings', icon: Settings },
+	]);
+
+	function isActive(href: string): boolean {
+		if (href === '/dashboard') return path === '/dashboard' || path === '/';
+		return path.startsWith(href);
+	}
 </script>
 
 {#if authed && user?.role === 'admin'}
-	<nav class="sticky top-0 z-50 border-b bg-background/95 backdrop-blur">
-		<div class="flex h-14 items-center justify-between px-4 max-w-7xl mx-auto">
-			<div class="flex items-center gap-4">
-				<a href="/dashboard" class="font-semibold text-sm">Admin</a>
-				<a href="/dashboard" class="text-sm text-muted-foreground hover:text-foreground">Dashboard</a>
-				<a href="/moderation" class="text-sm text-muted-foreground hover:text-foreground">Moderation</a>
-				<a href="/users" class="text-sm text-muted-foreground hover:text-foreground">Users</a>
-				<a href="/subscriptions" class="text-sm text-muted-foreground hover:text-foreground">Subscriptions</a>
-				<a href="/comics" class="text-sm text-muted-foreground hover:text-foreground">Comics</a>
+	<div class="flex h-screen overflow-hidden">
+		<!-- Sidebar -->
+		<aside class="w-60 flex-shrink-0 bg-slate-900 dark:bg-slate-950 text-white flex flex-col">
+			<div class="p-4 border-b border-slate-700/50">
+				<a href="/dashboard" class="text-sm font-bold tracking-wide text-white">Comics Galore</a>
+				<p class="text-[10px] text-slate-400 mt-0.5">Admin Panel</p>
 			</div>
-			<div class="flex items-center gap-1">
-				<a href="/settings" class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Settings">
-					<Settings class="size-4" />
-				</a>
-				<button onclick={() => profileOpen = true} class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-muted transition-colors">
-					<span class="text-xs text-muted-foreground">{user.email}</span>
-				</button>
-				<button onclick={() => logoutOpen = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Logout">
-					<LogOut class="size-4" />
-				</button>
+
+			<nav class="flex-1 p-3 space-y-0.5 overflow-y-auto">
+				{#each navItems as item}
+					<a
+						href={item.href}
+						class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors
+							{isActive(item.href)
+								? 'bg-white/10 text-white font-medium'
+								: 'text-slate-300 hover:text-white hover:bg-white/5'}"
+					>
+						<item.icon class="size-4" />
+						{item.label}
+					</a>
+				{/each}
+			</nav>
+
+			<div class="p-3 border-t border-slate-700/50">
+				<div class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer" onclick={() => logoutOpen = true}>
+					<LogOut class="size-4 text-slate-400" />
+					<button class="text-sm text-slate-300 hover:text-white bg-transparent border-0 p-0 cursor-pointer">Sign out</button>
+				</div>
+				<p class="px-3 pt-2 text-[10px] text-slate-500 truncate">{user.email}</p>
 			</div>
+		</aside>
+
+		<!-- Main content -->
+		<div class="flex-1 flex flex-col overflow-y-auto">
+			{#if !planMatrixComplete}
+				<button onclick={() => { wizardOpen = true; wizardBlocked = true; }} class="w-full flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs text-center py-1.5 font-medium cursor-pointer border-0 transition-colors flex-shrink-0">
+					<AlertTriangle class="size-3" />
+					Unlinked NowPayments plans — Click here to configure
+				</button>
+			{/if}
+
+			<main class="flex-1 p-6">
+				{@render children()}
+			</main>
 		</div>
-	</nav>
-
-	{#if !planMatrixComplete}
-		<button onclick={() => { wizardOpen = true; wizardBlocked = true; }} class="w-full flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs text-center py-1.5 font-medium cursor-pointer border-0 transition-colors">
-			<AlertTriangle class="size-3" />
-			Unlinked NowPayments plans — Click here to configure
-		</button>
-	{/if}
-
-	<main class="max-w-7xl mx-auto p-4 flex-1 w-full">
-		{@render children()}
-	</main>
+	</div>
 
 	<LogoutConfirmationModal open={logoutOpen} onClose={() => logoutOpen = false} />
 	<NowPaymentsLinkWizard open={wizardOpen} onClose={onWizardClose} />

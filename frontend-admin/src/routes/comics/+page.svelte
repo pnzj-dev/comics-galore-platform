@@ -1,27 +1,23 @@
 <script lang="ts">
-	import { api } from '$lib/api/client';
-	import { onMount } from 'svelte';
-	import { currentUser } from '$lib/stores/auth';
-	import { goto } from '$app/navigation';
+	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { BookOpenCheck } from 'lucide-svelte';
 
-	let comics = $state<any[]>([]);
-	let loading = $state(true);
+	let { data } = $props();
+
+	// svelte-ignore state_referenced_locally
+	let comics = $state(data.comics);
+	let loading = $state(false);
 	let confirmDelete = $state('');
 
-	onMount(async () => {
-		if (!$currentUser || $currentUser.role !== 'admin') { await goto('/login'); return; }
-		await loadComics();
-	});
-
 	async function loadComics() {
-		try { const res = await api.get<{ comics: any[] }>('/admin/comics'); comics = res.comics; } catch {}
+		loading = true;
+		try { 	const res = await encore.comics.AdminListComics(); comics = res.comics; } catch {}
 		loading = false;
 	}
 
 	async function deleteComic(id: string) {
-		await api.delete(`/comics/${id}`);
+		await encore.comics.DeleteComic(id);
 		comics = comics.filter(c => c.id !== id);
 		confirmDelete = '';
 	}
@@ -57,14 +53,7 @@
 		<div class="rounded-xl border border-border overflow-hidden">
 			<table class="w-full text-sm">
 				<thead>
-					<tr class="border-b bg-muted/50 text-left">
-						<th class="px-6 py-3 font-medium">Title</th>
-						<th class="px-6 py-3 font-medium">Status</th>
-						<th class="px-6 py-3 font-medium">Views</th>
-						<th class="px-6 py-3 font-medium">Downloads</th>
-						<th class="px-6 py-3 font-medium">Created</th>
-						<th class="px-6 py-3 font-medium w-40">Actions</th>
-					</tr>
+					<tr class="border-b bg-muted/50 text-left"><th class="px-6 py-3 font-medium">Title</th><th class="px-6 py-3 font-medium">Status</th><th class="px-6 py-3 font-medium">Views</th><th class="px-6 py-3 font-medium">Downloads</th><th class="px-6 py-3 font-medium">Created</th><th class="px-6 py-3 font-medium w-40">Actions</th></tr>
 				</thead>
 				<tbody class="divide-y divide-border">
 					{#each comics as c}

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { api } from '$lib/api/client';
+	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import CheckoutModal from '$lib/components/CheckoutModal.svelte';
 	import { currentUser } from '$lib/stores/auth';
@@ -12,7 +12,7 @@
 
 	onMount(async () => {
 		try {
-			const res = await api.get<{ complete: boolean }>('/plans/ready');
+			const res = await encore.tiers.PlansReady();
 			plansReady = res.complete;
 		} catch {}
 	});

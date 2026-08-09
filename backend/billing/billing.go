@@ -445,3 +445,7 @@ func sortObject(obj map[string]interface{}) map[string]interface{} {
 func fmtNum(n float64) string {
 	return strconv.FormatFloat(n, 'f', -1, 64)
 }
+
+func CreatePlan(ctx context.Context, req CreatePlanRequest) (*CreatePlanResponse, error) {
+	return provider.CreatePlan(ctx, req)
+}
