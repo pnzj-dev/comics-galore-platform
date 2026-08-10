@@ -55,11 +55,17 @@
 	// svelte-ignore state_referenced_locally
 	let searchTerm = $state(search);
 	let searchTimer = $state<ReturnType<typeof setTimeout>>();
+	let filterTimers = $state<Record<string, ReturnType<typeof setTimeout>>>({});
 
 	function handleSearchInput(value: string) {
 		searchTerm = value;
 		if (searchTimer) clearTimeout(searchTimer);
 		searchTimer = setTimeout(() => onSearch(value), 300);
+	}
+
+	function handleFilterInput(key: string, value: string) {
+		if (filterTimers[key]) clearTimeout(filterTimers[key]);
+		filterTimers[key] = setTimeout(() => onFilter(key, value), 300);
 	}
 
 	function handleSort(key: string) {
@@ -139,7 +145,7 @@
 										type="text"
 										placeholder={col.filterPlaceholder || col.label}
 										value={filters[col.key] || ''}
-										oninput={(e) => onFilter(col.key, (e.target as HTMLInputElement).value)}
+										oninput={(e) => handleFilterInput(col.key, (e.target as HTMLInputElement).value)}
 										class="w-full rounded border border-input bg-background px-2 py-1 text-xs"
 									/>
 								{:else if col.filterable && col.filterType === 'select' && col.filterOptions}
