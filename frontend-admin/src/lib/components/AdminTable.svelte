@@ -56,15 +56,7 @@
 	let searchTerm = $state(search);
 	let searchTimer = $state<ReturnType<typeof setTimeout>>();
 	let filterTimers = $state<Record<string, ReturnType<typeof setTimeout>>>({});
-	let filterValues = $state<Record<string, string>>({});
-
-	$effect(() => {
-		const next: Record<string, string> = {};
-		for (const [k, v] of Object.entries(filters)) {
-			if (v) next[k] = v;
-		}
-		filterValues = next;
-	});
+	let filterValues = $state(filters);
 
 	function handleSearchInput(value: string) {
 		searchTerm = value;
