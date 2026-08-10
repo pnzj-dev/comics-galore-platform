@@ -20,6 +20,12 @@
 	let saving = $state(false);
 	let loading = $state(true);
 
+	let boostInfo = $state([
+		{ gb: 5, price: 5 },
+		{ gb: 10, price: 8 },
+		{ gb: 20, price: 12 },
+	]);
+
 	async function load() {
 		try {
 			const res = await encore.auth.GetPreferences();
@@ -132,18 +138,12 @@
 				<div>
 					<h3 class="text-sm font-medium mb-3">Quota Boosts</h3>
 					<div class="grid grid-cols-3 gap-2">
-						<div class="rounded-lg border border-border p-2 text-center">
-							<p class="text-xs font-medium">+5 GB</p>
-							<p class="text-xs text-muted-foreground">$5.00</p>
-						</div>
-						<div class="rounded-lg border border-border p-2 text-center">
-							<p class="text-xs font-medium">+10 GB</p>
-							<p class="text-xs text-muted-foreground">$8.00</p>
-						</div>
-						<div class="rounded-lg border border-border p-2 text-center">
-							<p class="text-xs font-medium">+20 GB</p>
-							<p class="text-xs text-muted-foreground">$12.00</p>
-						</div>
+						{#each boostInfo as boost}
+							<div class="rounded-lg border border-border p-2 text-center">
+								<p class="text-xs font-medium">+{boost.gb} GB</p>
+								<p class="text-xs text-muted-foreground">${boost.price.toFixed(2)}</p>
+							</div>
+						{/each}
 					</div>
 				</div>
 

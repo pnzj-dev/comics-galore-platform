@@ -39,9 +39,12 @@ type AppSettings struct {
 	QuotaSilverGB        int     `json:"quota_silver_gb"`
 	QuotaGoldGB          int     `json:"quota_gold_gb"`
 	QuotaPlatinumGB      int     `json:"quota_platinum_gb"`
-	Boost5Price          float64 `json:"boost_5gb_price"`
-	Boost10Price         float64 `json:"boost_10gb_price"`
-	Boost20Price         float64 `json:"boost_20gb_price"`
+	Boost1GB             int     `json:"boost_1_gb"`
+	Boost1Price          float64 `json:"boost_1_price"`
+	Boost2GB             int     `json:"boost_2_gb"`
+	Boost2Price          float64 `json:"boost_2_price"`
+	Boost3GB             int     `json:"boost_3_gb"`
+	Boost3Price          float64 `json:"boost_3_price"`
 	ContactEmail         string  `json:"contact_email"`
 	HideMatureDefault    bool    `json:"hide_mature_default"`
 	EnableComments       bool    `json:"enable_comments"`
@@ -135,6 +138,24 @@ func GetAdminSettings(ctx context.Context) (*AppSettings, error) {
 
 	var settings AppSettings
 	json.Unmarshal(raw, &settings)
+
+	// Migrate old boost keys to indexed format
+	if settings.Boost1GB == 0 && settings.Boost1Price == 0 {
+		var old struct {
+			Boost5Price  float64 `json:"boost_5gb_price"`
+			Boost10Price float64 `json:"boost_10gb_price"`
+			Boost20Price float64 `json:"boost_20gb_price"`
+		}
+		if json.Unmarshal(raw, &old) == nil && old.Boost5Price > 0 {
+			settings.Boost1GB = 5
+			settings.Boost1Price = old.Boost5Price
+			settings.Boost2GB = 10
+			settings.Boost2Price = old.Boost10Price
+			settings.Boost3GB = 20
+			settings.Boost3Price = old.Boost20Price
+		}
+	}
+
 	return &settings, nil
 }
 
@@ -179,9 +200,12 @@ func defaultAppSettings() *AppSettings {
 		QuotaSilverGB:       50,
 		QuotaGoldGB:         200,
 		QuotaPlatinumGB:     1000,
-		Boost5Price:         5,
-		Boost10Price:        8,
-		Boost20Price:        12,
+		Boost1GB:             5,
+		Boost1Price:          5,
+		Boost2GB:             10,
+		Boost2Price:          8,
+		Boost3GB:             20,
+		Boost3Price:          12,
 		ContactEmail:         "",
 		HideMatureDefault:    false,
 		EnableComments:       true,
