@@ -208,6 +208,9 @@ func AutoLinkPlan(ctx context.Context, id string) (*AutoLinkPlanResponse, error)
 	if plan.ProviderPlanID != "" {
 		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "plan already linked to provider plan ID: " + plan.ProviderPlanID}
 	}
+	if plan.PriceUsdCents <= 0 {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "free plan cannot be linked to NowPayments (zero price)"}
+	}
 
 	period := intervalToPeriod(plan.Interval)
 	displayName := plan.Name

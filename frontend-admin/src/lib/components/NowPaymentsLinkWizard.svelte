@@ -66,7 +66,7 @@
 		try {
 			const res = await encore.tiers.ListPlans();
 			const plans = res.plans || [];
-			const missing = plans.filter(p => !p.provider_plan_id);
+			const missing = plans.filter(p => !p.provider_plan_id && p.price_usd_cents > 0);
 			unlinked = missing;
 			allLinked = missing.length === 0;
 			inputs = {};
