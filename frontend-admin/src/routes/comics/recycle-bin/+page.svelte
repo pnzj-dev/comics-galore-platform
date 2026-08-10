@@ -85,15 +85,13 @@
 		{onPage}
 		emptyMessage="Recycle bin is empty."
 	>
-		{#snippet children(row)}
-			{#if row.title}
+		{#snippet children(row, col)}
+			{#if col.key === 'title'}
 				<a href={`http://localhost:5173/comics/${row.slug}`} target="_blank" class="hover:text-primary text-xs">{row.title as string}</a>
-			{:else if row.author}
-				<span class="text-xs text-muted-foreground">{row.author as string}</span>
-			{:else if row.status}
+			{:else if col.key === 'author'}
+				<span class="text-xs text-muted-foreground">{row.author as string || '—'}</span>
+			{:else if col.key === 'status'}
 				<span class="text-xs px-2 py-0.5 rounded-full w-fit {(row.status as string) === 'published' ? 'bg-green-100 text-green-700' : (row.status as string) === 'pending_review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}">{(row.status as string)?.replace('_', ' ')}</span>
-			{:else}
-				<span class="text-xs">{String(row[Object.keys(row)[0]] || '')}</span>
 			{/if}
 		{/snippet}
 		{#snippet actions(row)}

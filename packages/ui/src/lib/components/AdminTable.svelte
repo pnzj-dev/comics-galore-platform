@@ -27,7 +27,7 @@
 		onSearch: (value: string) => void;
 		onFilter: (key: string, value: string) => void;
 		onPage: (page: number) => void;
-		children: import('svelte').Snippet<[item: Record<string, unknown>]>;
+		children: import('svelte').Snippet<[item: Record<string, unknown>, col: Column]>;
 		actions: import('svelte').Snippet<[item: Record<string, unknown>]>;
 	}
 
@@ -52,6 +52,7 @@
 	}: Props = $props();
 
 	const totalPages = $derived(Math.max(1, Math.ceil(total / limit)));
+	// svelte-ignore state_referenced_locally
 	let searchTerm = $state(search);
 	let searchTimer = $state<ReturnType<typeof setTimeout>>();
 
@@ -171,7 +172,7 @@
 								{#each columns as col}
 									<td class="px-4 py-2.5">
 										{#if children}
-											{@render children(row)}
+											{@render children(row, col)}
 										{:else}
 											<span class="text-xs">{row[col.key] as string}</span>
 										{/if}

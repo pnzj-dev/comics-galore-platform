@@ -87,22 +87,22 @@
 		{onFilter}
 		{onPage}
 	>
-		{#snippet children(row)}
-			{#if row.status}
+		{#snippet children(row, col)}
+			{#if col.key === 'title'}
+				<a href={`http://localhost:5173/comics/${row.slug}`} target="_blank" class="hover:text-primary text-xs">{row.title as string}</a>
+			{:else if col.key === 'author'}
+				<span class="text-xs text-muted-foreground">{row.author as string || '—'}</span>
+			{:else if col.key === 'status'}
 				<span class="text-xs px-2 py-0.5 rounded-full flex items-center gap-1 w-fit {statusClass(row.status as string)}">
 					{#if row.status === 'published'}<BookOpenCheck class="size-3" />{/if}
 					{(row.status as string)?.replace('_', ' ')}
 				</span>
-			{:else if row.view_count !== undefined}
+			{:else if col.key === 'view_count'}
 				<span class="text-xs">{row.view_count as number}</span>
-			{:else if row.download_count !== undefined}
+			{:else if col.key === 'download_count'}
 				<span class="text-xs">{row.download_count as number}</span>
-			{:else if row.created_at}
+			{:else if col.key === 'created_at'}
 				<span class="text-xs text-muted-foreground">{new Date(row.created_at as string).toLocaleDateString()}</span>
-			{:else if row.title}
-				<a href={`http://localhost:5173/comics/${row.slug}`} target="_blank" class="hover:text-primary text-xs">{row.title as string}</a>
-			{:else}
-				<span class="text-xs">{row[columns[0].key] as string}</span>
 			{/if}
 		{/snippet}
 		{#snippet actions(row)}

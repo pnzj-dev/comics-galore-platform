@@ -109,23 +109,23 @@
 		{onFilter}
 		{onPage}
 	>
-		{#snippet children(row)}
-			{#if row.role}
+		{#snippet children(row, col)}
+			{#if col.key === 'email'}
+				<span class="text-xs">{row.email as string}</span>
+			{:else if col.key === 'role'}
 				<select value={row.role as string} onchange={(e) => changeRole(row.id as string, (e.target as HTMLSelectElement).value)} class="rounded border border-input bg-background px-2 py-1 text-xs">
 					<option value="user">user</option><option value="uploader">uploader</option><option value="moderator">moderator</option><option value="admin">admin</option>
 				</select>
-			{:else if row.tier}
+			{:else if col.key === 'tier'}
 				<span class="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 capitalize">{row.tier as string}</span>
-			{:else if row.banned_at !== undefined || row.suspended_at !== undefined}
+			{:else if col.key === 'status'}
 				{@const st = statusBadge(row)}
 				{#if st === 'banned'}<span class="px-2 py-0.5 rounded-full text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">Banned</span>
 				{:else if st === 'suspended'}<span class="px-2 py-0.5 rounded-full text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">Suspended</span>
 				{:else}<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Active</span>
 				{/if}
-			{:else if row.created_at}
+			{:else if col.key === 'created_at'}
 				<span class="text-xs text-muted-foreground">{new Date(row.created_at as string).toLocaleDateString()}</span>
-			{:else}
-				<span class="text-xs">{row.email as string}</span>
 			{/if}
 		{/snippet}
 		{#snippet actions(row)}

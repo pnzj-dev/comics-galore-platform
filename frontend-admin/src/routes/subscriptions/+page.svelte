@@ -74,16 +74,16 @@
 		{onFilter}
 		{onPage}
 	>
-		{#snippet children(row)}
-			{#if row.user_id}
+		{#snippet children(row, col)}
+			{#if col.key === 'user_id'}
 				<span class="font-mono text-xs">{String(row.user_id).slice(0, 8)}...</span>
-				{:else if row.plan_id}
+			{:else if col.key === 'plan_id'}
 				<span class="font-mono text-xs">{String(row.plan_id).slice(0, 8)}...</span>
-			{:else if row.status}
+			{:else if col.key === 'status'}
 				<span class="text-xs px-2 py-0.5 rounded-full {row.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}">{row.status as string}</span>
-			{:else if row.tier}
+			{:else if col.key === 'tier'}
 				<span class="text-xs capitalize">{row.tier as string}</span>
-			{:else if row.expires_at || row.created_at}
+			{:else if col.key === 'expires_at' || col.key === 'created_at'}
 				<span class="text-xs text-muted-foreground">{row.expires_at ? new Date(row.expires_at as string).toLocaleDateString() : row.created_at ? new Date(row.created_at as string).toLocaleDateString() : '-'}</span>
 			{/if}
 		{/snippet}
