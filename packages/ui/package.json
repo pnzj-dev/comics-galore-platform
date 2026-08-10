@@ -11,5 +11,8 @@
 	},
 	"peerDependencies": {
 		"svelte": "^5.0.0"
+	},
+	"dependencies": {
+		"@tanstack/svelte-table": "^9.1.2"
 	}
 }
