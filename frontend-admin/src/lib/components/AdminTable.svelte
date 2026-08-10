@@ -52,6 +52,7 @@
 	}: Props = $props();
 
 	const totalPages = $derived(Math.max(1, Math.ceil(total / limit)));
+	// svelte-ignore state_referenced_locally
 	let searchTerm = $state(search);
 	let searchTimer = $state<ReturnType<typeof setTimeout>>();
 

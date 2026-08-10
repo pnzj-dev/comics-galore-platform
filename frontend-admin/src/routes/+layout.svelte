@@ -78,10 +78,10 @@
 			</nav>
 
 			<div class="p-3 border-t border-slate-700/50">
-				<div class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer" onclick={() => logoutOpen = true}>
+				<button class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer w-full text-left" onclick={() => logoutOpen = true}>
 					<LogOut class="size-4 text-slate-400" />
-					<button class="text-sm text-slate-300 hover:text-white bg-transparent border-0 p-0 cursor-pointer">Sign out</button>
-				</div>
+					<span class="text-sm text-slate-300 hover:text-white">Sign out</span>
+				</button>
 				<p class="px-3 pt-2 text-[10px] text-slate-500 truncate">{user.email}</p>
 			</div>
 		</aside>

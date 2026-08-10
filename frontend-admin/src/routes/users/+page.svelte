@@ -38,19 +38,19 @@
 		return url.pathname + url.search;
 	}
 
-	async function handleSort(key: string, dir: 'asc' | 'desc') {
+	async function onSort(key: string, dir: 'asc' | 'desc') {
 		await goto(buildUrl({ sort: key, sort_dir: dir }));
 	}
 
-	async function handleSearch(value: string) {
+	async function onSearch(value: string) {
 		await goto(buildUrl({ search: value || undefined }));
 	}
 
-	async function handleFilter(key: string, value: string) {
+	async function onFilter(key: string, value: string) {
 		await goto(buildUrl({ [`filter_${key}`]: value || undefined }));
 	}
 
-	async function handlePage(p: number) {
+	async function onPage(p: number) {
 		const url = new URL($page.url);
 		url.searchParams.set('page', String(p));
 		await goto(url.pathname + url.search);
