@@ -25,7 +25,7 @@
 	];
 
 	function buildUrl(updates: Record<string, string | undefined>) {
-		const url = new URL($page.url);
+		const url = new URL(page.url);
 		url.searchParams.set('page', '1');
 		for (const [k, v] of Object.entries(updates)) {
 			if (v) url.searchParams.set(k, v);
@@ -47,7 +47,7 @@
 	}
 
 	async function onPage(p: number) {
-		const url = new URL($page.url);
+		const url = new URL(page.url);
 		url.searchParams.set('page', String(p));
 		await goto(url.pathname + url.search);
 	}

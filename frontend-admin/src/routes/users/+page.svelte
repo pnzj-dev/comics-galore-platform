@@ -29,7 +29,7 @@
 	];
 
 	function buildUrl(updates: Record<string, string | undefined>) {
-		const url = new URL($page.url);
+		const url = new URL(page.url);
 		url.searchParams.set('page', '1');
 		for (const [k, v] of Object.entries(updates)) {
 			if (v) url.searchParams.set(k, v);
@@ -51,34 +51,34 @@
 	}
 
 	async function onPage(p: number) {
-		const url = new URL($page.url);
+		const url = new URL(page.url);
 		url.searchParams.set('page', String(p));
 		await goto(url.pathname + url.search);
 	}
 
 	async function changeRole(userId: string, newRole: string) {
 		await encore.auth.AdminUpdateUserRole(userId, { role: newRole });
-		await goto($page.url.pathname + $page.url.search);
+		await goto(page.url.pathname + page.url.search);
 	}
 
 	async function banUser(userId: string) {
 		await encore.auth.AdminBanUser(userId, { reason: '' });
-		await goto($page.url.pathname + $page.url.search);
+		await goto(page.url.pathname + page.url.search);
 	}
 
 	async function unbanUser(userId: string) {
 		await encore.auth.AdminUnbanUser(userId);
-		await goto($page.url.pathname + $page.url.search);
+		await goto(page.url.pathname + page.url.search);
 	}
 
 	async function suspendUser(userId: string) {
 		await encore.auth.AdminSuspendUser(userId, { reason: '' });
-		await goto($page.url.pathname + $page.url.search);
+		await goto(page.url.pathname + page.url.search);
 	}
 
 	async function unsuspendUser(userId: string) {
 		await encore.auth.AdminUnsuspendUser(userId);
-		await goto($page.url.pathname + $page.url.search);
+		await goto(page.url.pathname + page.url.search);
 	}
 
 	function statusBadge(u: Record<string, unknown>): string {

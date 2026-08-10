@@ -19,7 +19,7 @@
 		searchTerm = value;
 		if (searchTimer) clearTimeout(searchTimer);
 		searchTimer = setTimeout(() => {
-			const url = new URL($page.url);
+			const url = new URL(page.url);
 			url.searchParams.set('page', '1');
 			if (value) url.searchParams.set('search', value);
 			else url.searchParams.delete('search');
@@ -28,7 +28,7 @@
 	}
 
 	function handlePage(p: number) {
-		const url = new URL($page.url);
+		const url = new URL(page.url);
 		url.searchParams.set('page', String(p));
 		goto(url.pathname + url.search);
 	}

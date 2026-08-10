@@ -21,7 +21,7 @@
 	];
 
 	function buildUrl(updates: Record<string, string | undefined>) {
-		const url = new URL($page.url);
+		const url = new URL(page.url);
 		url.searchParams.set('page', '1');
 		for (const [k, v] of Object.entries(updates)) {
 			if (v) url.searchParams.set(k, v);
@@ -43,7 +43,7 @@
 	}
 
 	async function onPage(p: number) {
-		const url = new URL($page.url);
+		const url = new URL(page.url);
 		url.searchParams.set('page', String(p));
 		await goto(url.pathname + url.search);
 	}
@@ -52,14 +52,14 @@
 		actionLoading = id;
 		await encore.comics.RestoreComic(id);
 		actionLoading = '';
-		await goto($page.url.pathname + $page.url.search);
+		await goto(page.url.pathname + page.url.search);
 	}
 
 	async function permanentDelete(id: string) {
 		actionLoading = id;
 		await encore.comics.DeleteComic(id);
 		actionLoading = '';
-		await goto($page.url.pathname + $page.url.search);
+		await goto(page.url.pathname + page.url.search);
 	}
 </script>
 
