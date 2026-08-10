@@ -180,7 +180,7 @@ type AutoLinkPlanResponse struct {
 	PlanName       string `json:"plan_name"`
 }
 
-//encore:api auth method=POST path=/admin/plans/:id/auto-link
+//encore:api auth method=POST path=/admin/plans/link/:id
 func AutoLinkPlan(ctx context.Context, id string) (*AutoLinkPlanResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 	if ad.Role != "admin" {
@@ -243,7 +243,7 @@ type UnlinkAllPlansResponse struct {
 	Count int `json:"count"`
 }
 
-//encore:api auth method=POST path=/admin/plans/unlink-all
+//encore:api auth method=POST path=/admin/plans/unlink
 func UnlinkAllPlans(ctx context.Context) (*UnlinkAllPlansResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 	if ad.Role != "admin" {

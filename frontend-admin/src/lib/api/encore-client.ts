@@ -1240,12 +1240,12 @@ export namespace tiers {
         }
 
         public async AutoLinkPlan(id: string): Promise<AutoLinkPlanResponse> {
-            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/${encodeURIComponent(id)}/auto-link`)
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/link/${encodeURIComponent(id)}`)
             return await resp.json() as AutoLinkPlanResponse
         }
 
         public async UnlinkAllPlans(): Promise<UnlinkAllPlansResponse> {
-            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/unlink-all`)
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/unlink`)
             return await resp.json() as UnlinkAllPlansResponse
         }
     }
