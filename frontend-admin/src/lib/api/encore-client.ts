@@ -96,6 +96,16 @@ export interface ClientOptions {
 }
 
 export namespace auth {
+    export interface AdminListUsersParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterRole: string
+        FilterTier: string
+    }
+
     export interface AdminUser {
         id: string
         email: string
@@ -130,9 +140,16 @@ export namespace auth {
         "quota_silver_gb": number
         "quota_gold_gb": number
         "quota_platinum_gb": number
-        "boost_5gb_price": number
-        "boost_10gb_price": number
-        "boost_20gb_price": number
+        "boost_1_gb": number
+        "boost_1_price": number
+        "boost_2_gb": number
+        "boost_2_price": number
+        "boost_3_gb": number
+        "boost_3_price": number
+        "contact_email": string
+        "hide_mature_default": boolean
+        "enable_comments": boolean
+        "default_meta_description": string
     }
 
     export interface AuthParams {
@@ -282,15 +299,18 @@ export namespace auth {
         }
 
         public async AdminListUsers(params: AdminListUsersParams): Promise<AdminUserListResponse> {
+            // Convert our params into the objects we need for the request
             const query = makeRecord<string, string | string[]>({
-                page: String(params.Page),
-                limit: String(params.Limit),
-                search: params.Search,
-                sort: params.Sort,
-                sort_dir: params.SortDir,
-                filter_role: params.FilterRole,
-                filter_tier: params.FilterTier,
+                "filter_role": params.FilterRole,
+                "filter_tier": params.FilterTier,
+                limit:         String(params.Limit),
+                page:          String(params.Page),
+                search:        params.Search,
+                sort:          params.Sort,
+                "sort_dir":    params.SortDir,
             })
+
+            // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/admin/users`, undefined, {query})
             return await resp.json() as AdminUserListResponse
         }
@@ -421,8 +441,19 @@ export namespace auth {
  * Base URL: https://api.nowpayments.io
  */
 export namespace billing {
+    export interface AdminListSubscriptionsParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterStatus: string
+        FilterTier: string
+    }
+
     export interface AdminSubList {
         subscriptions: AdminSubscription[]
+        total: number
     }
 
     export interface AdminSubscription {
@@ -516,15 +547,18 @@ export namespace billing {
         }
 
         public async AdminListSubscriptions(params: AdminListSubscriptionsParams): Promise<AdminSubList> {
+            // Convert our params into the objects we need for the request
             const query = makeRecord<string, string | string[]>({
-                page: String(params.Page),
-                limit: String(params.Limit),
-                search: params.Search,
-                sort: params.Sort,
-                sort_dir: params.SortDir,
-                filter_status: params.FilterStatus,
-                filter_tier: params.FilterTier,
+                "filter_status": params.FilterStatus,
+                "filter_tier":   params.FilterTier,
+                limit:           String(params.Limit),
+                page:            String(params.Page),
+                search:          params.Search,
+                sort:            params.Sort,
+                "sort_dir":      params.SortDir,
             })
+
+            // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/admin/subscriptions`, undefined, {query})
             return await resp.json() as AdminSubList
         }
@@ -593,6 +627,16 @@ export namespace billing {
 }
 
 export namespace comics {
+    export interface AdminListComicsParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterStatus: string
+        FilterAuthor: string
+    }
+
     export interface AuditLogEntry {
         id: string
         "actor_id": string
@@ -698,54 +742,6 @@ export namespace comics {
         disliked: boolean
     }
 
-    export interface AdminListComicsParams {
-        Page: number
-        Limit: number
-        Search: string
-        Sort: string
-        SortDir: string
-        FilterStatus: string
-        FilterAuthor: string
-    }
-
-    export interface AdminListUsersParams {
-        Page: number
-        Limit: number
-        Search: string
-        Sort: string
-        SortDir: string
-        FilterRole: string
-        FilterTier: string
-    }
-
-    export interface AdminListSubscriptionsParams {
-        Page: number
-        Limit: number
-        Search: string
-        Sort: string
-        SortDir: string
-        FilterStatus: string
-        FilterTier: string
-    }
-
-    export interface PendingComicsParams {
-        Page: number
-        Limit: number
-        Search: string
-        Sort: string
-        SortDir: string
-    }
-
-    export interface RecycleBinParams {
-        Page: number
-        Limit: number
-        Search: string
-        Sort: string
-        SortDir: string
-        FilterStatus: string
-        FilterAuthor: string
-    }
-
     export interface ListComicsParams {
         Page: number
         Limit: number
@@ -780,6 +776,24 @@ export namespace comics {
         "uploader_id": string
         status: string
         "created_at": string
+    }
+
+    export interface PendingComicsParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+    }
+
+    export interface RecycleBinParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterStatus: string
+        FilterAuthor: string
     }
 
     export interface RejectParams {
@@ -872,15 +886,18 @@ export namespace comics {
         }
 
         public async AdminListComics(params: AdminListComicsParams): Promise<ListComicsResponse> {
+            // Convert our params into the objects we need for the request
             const query = makeRecord<string, string | string[]>({
-                page: String(params.Page),
-                limit: String(params.Limit),
-                search: params.Search,
-                sort: params.Sort,
-                sort_dir: params.SortDir,
-                filter_status: params.FilterStatus,
-                filter_author: params.FilterAuthor,
+                "filter_author": params.FilterAuthor,
+                "filter_status": params.FilterStatus,
+                limit:           String(params.Limit),
+                page:            String(params.Page),
+                search:          params.Search,
+                sort:            params.Sort,
+                "sort_dir":      params.SortDir,
             })
+
+            // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/admin/comics`, undefined, {query})
             return await resp.json() as ListComicsResponse
         }
@@ -1003,13 +1020,16 @@ export namespace comics {
         }
 
         public async PendingComics(params: PendingComicsParams): Promise<ListPendingResponse> {
+            // Convert our params into the objects we need for the request
             const query = makeRecord<string, string | string[]>({
-                page: String(params.Page),
-                limit: String(params.Limit),
-                search: params.Search,
-                sort: params.Sort,
-                sort_dir: params.SortDir,
+                limit:      String(params.Limit),
+                page:       String(params.Page),
+                search:     params.Search,
+                sort:       params.Sort,
+                "sort_dir": params.SortDir,
             })
+
+            // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/moderation/comics`, undefined, {query})
             return await resp.json() as ListPendingResponse
         }
@@ -1019,15 +1039,18 @@ export namespace comics {
         }
 
         public async RecycleBin(params: RecycleBinParams): Promise<ListComicsResponse> {
+            // Convert our params into the objects we need for the request
             const query = makeRecord<string, string | string[]>({
-                page: String(params.Page),
-                limit: String(params.Limit),
-                search: params.Search,
-                sort: params.Sort,
-                sort_dir: params.SortDir,
-                filter_status: params.FilterStatus,
-                filter_author: params.FilterAuthor,
+                "filter_author": params.FilterAuthor,
+                "filter_status": params.FilterStatus,
+                limit:           String(params.Limit),
+                page:            String(params.Page),
+                search:          params.Search,
+                sort:            params.Sort,
+                "sort_dir":      params.SortDir,
             })
+
+            // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/admin/recycle-bin`, undefined, {query})
             return await resp.json() as ListComicsResponse
         }
@@ -1143,6 +1166,11 @@ export namespace reading {
 }
 
 export namespace tiers {
+    export interface AutoLinkPlanResponse {
+        "provider_plan_id": string
+        "plan_name": string
+    }
+
     export interface ListPlansResponse {
         plans: Plan[]
     }
@@ -1177,17 +1205,12 @@ export namespace tiers {
         "created_at": string
     }
 
-    export interface UpdatePlanProviderParams {
-        "provider_plan_id": string
-    }
-
-    export interface AutoLinkPlanResponse {
-        "provider_plan_id": string
-        "plan_name": string
-    }
-
     export interface UnlinkAllPlansResponse {
         count: number
+    }
+
+    export interface UpdatePlanProviderParams {
+        "provider_plan_id": string
     }
 
     export class ServiceClient {
@@ -1195,14 +1218,20 @@ export namespace tiers {
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
+            this.AutoLinkPlan = this.AutoLinkPlan.bind(this)
             this.GetTier = this.GetTier.bind(this)
             this.ListPlans = this.ListPlans.bind(this)
             this.ListTiers = this.ListTiers.bind(this)
             this.PlanMatrixStatus = this.PlanMatrixStatus.bind(this)
             this.PlansReady = this.PlansReady.bind(this)
-            this.UpdatePlanProviderID = this.UpdatePlanProviderID.bind(this)
-            this.AutoLinkPlan = this.AutoLinkPlan.bind(this)
             this.UnlinkAllPlans = this.UnlinkAllPlans.bind(this)
+            this.UpdatePlanProviderID = this.UpdatePlanProviderID.bind(this)
+        }
+
+        public async AutoLinkPlan(id: string): Promise<AutoLinkPlanResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/link/${encodeURIComponent(id)}`)
+            return await resp.json() as AutoLinkPlanResponse
         }
 
         public async GetTier(id: string): Promise<Tier> {
@@ -1235,18 +1264,14 @@ export namespace tiers {
             return await resp.json() as MatrixStatus
         }
 
-        public async UpdatePlanProviderID(id: string, params: UpdatePlanProviderParams): Promise<void> {
-            await this.baseClient.callTypedAPI("PATCH", `/admin/plans/${encodeURIComponent(id)}`, JSON.stringify(params))
-        }
-
-        public async AutoLinkPlan(id: string): Promise<AutoLinkPlanResponse> {
-            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/link/${encodeURIComponent(id)}`)
-            return await resp.json() as AutoLinkPlanResponse
-        }
-
         public async UnlinkAllPlans(): Promise<UnlinkAllPlansResponse> {
+            // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/unlink`)
             return await resp.json() as UnlinkAllPlansResponse
+        }
+
+        public async UpdatePlanProviderID(id: string, params: UpdatePlanProviderParams): Promise<void> {
+            await this.baseClient.callTypedAPI("PATCH", `/admin/plans/${encodeURIComponent(id)}`, JSON.stringify(params))
         }
     }
 }
