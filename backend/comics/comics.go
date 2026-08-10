@@ -532,21 +532,43 @@ type ListPendingResponse struct {
 	Total  int            `json:"total"`
 }
 
+type PendingComicsParams struct {
+	Page    int    `query:"page"`
+	Limit   int    `query:"limit"`
+	Search  string `query:"search"`
+	Sort    string `query:"sort"`
+	SortDir string `query:"sort_dir"`
+}
+
 //encore:api auth method=GET path=/moderation/comics
-func PendingComics(ctx context.Context) (*ListPendingResponse, error) {
+func PendingComics(ctx context.Context, p *PendingComicsParams) (*ListPendingResponse, error) {
 	ad, hasAuth := getAuthData(ctx)
 	if !hasAuth || (ad.Role != "moderator" && ad.Role != "admin") {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "requires moderator or admin"}
 	}
 
-	var total int
-	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics WHERE status = 'pending_review'`).Scan(&total)
+	page := defaultValue(p.Page, 1)
+	limit := defaultValue(p.Limit, 20)
+	if limit > 100 { limit = 100 }
+	offset := (page - 1) * limit
 
-	rows, err := db.Query(ctx, `
+	search := "%" + p.Search + "%"
+	sortCol := sanitizeSortCol(p.Sort, "created_at", "title", "status", "uploader_id")
+	sortDir := "ASC"
+	if strings.ToLower(p.SortDir) == "desc" { sortDir = "DESC" }
+
+	var total int
+	db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM comics WHERE status = 'pending_review'
+		AND (title ILIKE $1 OR uploader_id ILIKE $1)
+	`, search).Scan(&total)
+
+	rows, err := db.Query(ctx, fmt.Sprintf(`
 		SELECT id, title, uploader_id, status, created_at
 		FROM comics WHERE status = 'pending_review'
-		ORDER BY created_at ASC
-	`)
+		AND (title ILIKE $1 OR uploader_id ILIKE $1)
+		ORDER BY %s %s LIMIT $2 OFFSET $3
+	`, sortCol, sortDir), search, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -769,33 +791,70 @@ func ToggleDislike(ctx context.Context, id string) (*ToggleDislikeResponse, erro
 
 // ----- Admin comic list -----
 
+type AdminListComicsParams struct {
+	Page          int    `query:"page"`
+	Limit         int    `query:"limit"`
+	Search        string `query:"search"`
+	Sort          string `query:"sort"`
+	SortDir       string `query:"sort_dir"`
+	FilterStatus  string `query:"filter_status"`
+	FilterAuthor  string `query:"filter_author"`
+}
+
 //encore:api auth method=GET path=/admin/comics
-func AdminListComics(ctx context.Context) (*ListComicsResponse, error) {
+func AdminListComics(ctx context.Context, p *AdminListComicsParams) (*ListComicsResponse, error) {
 	ad, hasAuth := getAuthData(ctx)
 	if !hasAuth || ad.Role != "admin" {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
 	}
 
-	rows, err := db.Query(ctx, `
+	page := defaultValue(p.Page, 1)
+	limit := defaultValue(p.Limit, 20)
+	if limit > 100 { limit = 100 }
+	offset := (page - 1) * limit
+
+	search := "%" + p.Search + "%"
+	sortCol := sanitizeSortCol(p.Sort, "created_at", "title", "author", "status", "published_at", "view_count", "download_count")
+	sortDir := "DESC"
+	if strings.ToLower(p.SortDir) == "asc" { sortDir = "ASC" }
+
+	where := "WHERE (title ILIKE $1 OR author ILIKE $1)"
+	args := []interface{}{search}
+	argIdx := 2
+
+	if p.FilterStatus != "" {
+		where += fmt.Sprintf(" AND status = $%d", argIdx)
+		args = append(args, p.FilterStatus)
+		argIdx++
+	}
+	if p.FilterAuthor != "" {
+		where += fmt.Sprintf(" AND author ILIKE $%d", argIdx)
+		args = append(args, "%"+p.FilterAuthor+"%")
+		argIdx++
+	}
+
+	query := fmt.Sprintf(`
 		SELECT id, uploader_id, title, author, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
 			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
-		FROM comics ORDER BY created_at DESC LIMIT 100
-	`)
-	if err != nil {
-		return nil, err
-	}
+		FROM comics %s ORDER BY %s %s LIMIT $%d OFFSET $%d
+	`, where, sortCol, sortDir, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := db.Query(ctx, query, args...)
+	if err != nil { return nil, err }
 	defer rows.Close()
 
 	comics, err := scanComics(rows)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
+
+	var total int
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics `+where, args[:len(args)-2]...).Scan(&total)
 
 	enrichReactions(ctx, comics, string(ad.UserID))
 
-	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
+	return &ListComicsResponse{Comics: comics, Total: total}, nil
 }
 
 // ----- Comments -----
@@ -1124,28 +1183,67 @@ func RestoreComic(ctx context.Context, id string) error {
 	return err
 }
 
+type RecycleBinParams struct {
+	Page          int    `query:"page"`
+	Limit         int    `query:"limit"`
+	Search        string `query:"search"`
+	Sort          string `query:"sort"`
+	SortDir       string `query:"sort_dir"`
+	FilterStatus  string `query:"filter_status"`
+	FilterAuthor  string `query:"filter_author"`
+}
+
 //encore:api auth method=GET path=/admin/recycle-bin
-func RecycleBin(ctx context.Context) (*ListComicsResponse, error) {
+func RecycleBin(ctx context.Context, p *RecycleBinParams) (*ListComicsResponse, error) {
 	ad, hasAuth := getAuthData(ctx)
 	if !hasAuth || (ad.Role != "admin" && ad.Role != "moderator") {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin or moderator only"}
 	}
 
-	rows, err := db.Query(ctx, `
+	page := defaultValue(p.Page, 1)
+	limit := defaultValue(p.Limit, 20)
+	if limit > 100 { limit = 100 }
+	offset := (page - 1) * limit
+
+	search := "%" + p.Search + "%"
+	sortCol := sanitizeSortCol(p.Sort, "deleted_at", "title", "author", "status")
+	sortDir := "DESC"
+	if strings.ToLower(p.SortDir) == "asc" { sortDir = "ASC" }
+
+	where := "WHERE c.deleted_at IS NOT NULL AND (c.title ILIKE $1 OR c.author ILIKE $1)"
+	args := []interface{}{search}
+	argIdx := 2
+
+	if p.FilterStatus != "" {
+		where += fmt.Sprintf(" AND c.status = $%d", argIdx)
+		args = append(args, p.FilterStatus)
+		argIdx++
+	}
+	if p.FilterAuthor != "" {
+		where += fmt.Sprintf(" AND c.author ILIKE $%d", argIdx)
+		args = append(args, "%"+p.FilterAuthor+"%")
+		argIdx++
+	}
+
+	query := fmt.Sprintf(`
 		SELECT c.id, c.uploader_id, c.title, c.slug, c.description, c.content_language, c.status,
 			c.cover_key, c.file_key, c.page_keys, c.file_size_bytes, c.min_tier_id, c.age_rating,
 			c.tags, c.rejection_reason, c.published_at, c.view_count, c.download_count, c.like_count, c.fav_count,
 			c.created_at, c.updated_at
-		FROM comics c
-		WHERE c.deleted_at IS NOT NULL
-		ORDER BY c.deleted_at DESC
-		LIMIT 50
-	`)
+		FROM comics c %s ORDER BY %s %s LIMIT $%d OFFSET $%d
+	`, where, sortCol, sortDir, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := db.Query(ctx, query, args...)
 	if err != nil { return nil, err }
 	defer rows.Close()
 	comics, err := scanComics(rows)
 	if err != nil { return nil, err }
-	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
+
+	var total int
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics c `+where, args[:len(args)-2]...).Scan(&total)
+
+	return &ListComicsResponse{Comics: comics, Total: total}, nil
 }
 
 //encore:api auth method=DELETE path=/comics/:id
@@ -1209,4 +1307,17 @@ func AdminAuditLogs(ctx context.Context) (*AuditLogsResponse, error) {
 	}
 
 	return &AuditLogsResponse{Entries: entries}, nil
+}
+
+func defaultValue(v int, def int) int {
+	if v <= 0 { return def }
+	return v
+}
+
+func sanitizeSortCol(sort string, allowed ...string) string {
+	if sort == "" { return allowed[0] }
+	for _, a := range allowed {
+		if sort == a { return a }
+	}
+	return allowed[0]
 }

@@ -1,24 +1,63 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { BookOpenCheck } from 'lucide-svelte';
+	import AdminTable from '$lib/components/AdminTable.svelte';
 
 	let { data } = $props();
 
-	// svelte-ignore state_referenced_locally
-	let comics = $state(data.comics);
+	let results = $state(data.results);
 	let loading = $state(false);
 	let confirmDelete = $state('');
 
-	async function loadComics() {
-		loading = true;
-		try { 	const res = await encore.comics.AdminListComics(); comics = res.comics; } catch {}
-		loading = false;
+	const columns = [
+		{ key: 'title', label: 'Title', sortable: true, filterable: true, filterType: 'text' as const, filterPlaceholder: 'Filter...' },
+		{ key: 'author', label: 'Author', sortable: true, filterable: true, filterType: 'text' as const, filterPlaceholder: 'Filter...' },
+		{ key: 'status', label: 'Status', sortable: true, filterable: true, filterType: 'select' as const, filterOptions: [
+			{ value: 'published', label: 'Published' },
+			{ value: 'pending_review', label: 'Pending' },
+			{ value: 'rejected', label: 'Rejected' },
+		]},
+		{ key: 'view_count', label: 'Views', sortable: true },
+		{ key: 'download_count', label: 'Downloads', sortable: true },
+		{ key: 'created_at', label: 'Created', sortable: true },
+	];
+
+	const current = $derived($page.url);
+
+	function buildUrl(updates: Record<string, string | undefined>) {
+		const url = new URL($page.url);
+		url.searchParams.set('page', '1');
+		for (const [k, v] of Object.entries(updates)) {
+			if (v) url.searchParams.set(k, v);
+			else url.searchParams.delete(k);
+		}
+		return url.pathname + url.search;
+	}
+
+	async function handleSort(key: string, dir: 'asc' | 'desc') {
+		await goto(buildUrl({ sort: key, sort_dir: dir }));
+	}
+
+	async function handleSearch(value: string) {
+		await goto(buildUrl({ search: value || undefined }));
+	}
+
+	async function handleFilter(key: string, value: string) {
+		await goto(buildUrl({ [`filter_${key}`]: value || undefined }));
+	}
+
+	async function handlePage(p: number) {
+		const url = new URL($page.url);
+		url.searchParams.set('page', String(p));
+		await goto(url.pathname + url.search);
 	}
 
 	async function deleteComic(id: string) {
 		await encore.comics.DeleteComic(id);
-		comics = comics.filter(c => c.id !== id);
+		results = results.filter(c => c.id !== id);
 		confirmDelete = '';
 	}
 
@@ -29,55 +68,50 @@
 
 <svelte:head><title>Comics — Admin</title></svelte:head>
 
-<section class="py-8">
+<section>
 	<h1 class="text-3xl font-bold mb-6">Comics</h1>
 
-	{#if loading}
-		<div class="rounded-xl border border-border overflow-hidden animate-pulse">
-			<div class="divide-y divide-border">
-				{#each Array(8) as _}
-					<div class="flex items-center gap-4 px-6 py-3">
-						<div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 flex-1"></div>
-						<div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-16"></div>
-						<div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
-						<div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
-						<div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
-						<div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-20"></div>
-					</div>
-				{/each}
-			</div>
-		</div>
-	{:else if comics.length === 0}
-		<p class="text-muted-foreground text-center py-12">No comics found.</p>
-	{:else}
-		<div class="rounded-xl border border-border overflow-hidden">
-			<table class="w-full text-sm">
-				<thead>
-					<tr class="border-b bg-muted/50 text-left"><th class="px-6 py-3 font-medium">Title</th><th class="px-6 py-3 font-medium">Status</th><th class="px-6 py-3 font-medium">Views</th><th class="px-6 py-3 font-medium">Downloads</th><th class="px-6 py-3 font-medium">Created</th><th class="px-6 py-3 font-medium w-40">Actions</th></tr>
-				</thead>
-				<tbody class="divide-y divide-border">
-					{#each comics as c}
-						<tr class="hover:bg-muted/30">
-							<td class="px-6 py-3"><a href={`http://localhost:5173/comics/${c.slug}`} target="_blank" class="hover:text-primary">{c.title}</a></td>
-							<td class="px-6 py-3"><span class="text-xs px-2 py-0.5 rounded-full flex items-center gap-1 w-fit {statusClass(c.status)}">{#if c.status === 'published'}<BookOpenCheck class="size-3" />{/if}{c.status?.replace('_', ' ')}</span></td>
-							<td class="px-6 py-3 text-xs">{c.view_count}</td>
-							<td class="px-6 py-3 text-xs">{c.download_count}</td>
-							<td class="px-6 py-3 text-xs text-muted-foreground">{new Date(c.created_at).toLocaleDateString()}</td>
-							<td class="px-6 py-3">
-								<div class="flex gap-1">
-									<Button size="sm" variant="outline" disabled>Edit</Button>
-									{#if confirmDelete === c.id}
-										<Button size="sm" variant="destructive" onclick={() => deleteComic(c.id)}>Confirm</Button>
-										<Button size="sm" variant="ghost" onclick={() => confirmDelete = ''}>Cancel</Button>
-									{:else}
-										<Button size="sm" variant="ghost" class="text-destructive hover:bg-destructive/10" onclick={() => confirmDelete = c.id}>Delete</Button>
-									{/if}
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	{/if}
+	<AdminTable
+		{columns}
+		data={results as Record<string, unknown>[]}
+		total={data.total}
+		page={data.page}
+		limit={data.limit}
+		sortKey={data.sort}
+		sortDir={data.sortDir as 'asc' | 'desc'}
+		search={data.search}
+		filters={data.filters as Record<string, string>}
+		loading={false}
+		{onSort}
+		{onSearch}
+		{onFilter}
+		{onPage}
+	>
+		{#snippet children(row)}
+			{#if row.status}
+				<span class="text-xs px-2 py-0.5 rounded-full flex items-center gap-1 w-fit {statusClass(row.status as string)}">
+					{#if row.status === 'published'}<BookOpenCheck class="size-3" />{/if}
+					{(row.status as string)?.replace('_', ' ')}
+				</span>
+			{:else if row.view_count !== undefined}
+				<span class="text-xs">{row.view_count as number}</span>
+			{:else if row.download_count !== undefined}
+				<span class="text-xs">{row.download_count as number}</span>
+			{:else if row.created_at}
+				<span class="text-xs text-muted-foreground">{new Date(row.created_at as string).toLocaleDateString()}</span>
+			{:else if row.title}
+				<a href={`http://localhost:5173/comics/${row.slug}`} target="_blank" class="hover:text-primary text-xs">{row.title as string}</a>
+			{:else}
+				<span class="text-xs">{row[columns[0].key] as string}</span>
+			{/if}
+		{/snippet}
+		{#snippet actions(row)}
+			{#if confirmDelete === row.id}
+				<Button size="sm" variant="destructive" onclick={() => deleteComic(row.id as string)}>Confirm</Button>
+				<Button size="sm" variant="ghost" onclick={() => confirmDelete = ''}>Cancel</Button>
+			{:else}
+				<Button size="sm" variant="ghost" class="text-destructive hover:bg-destructive/10" onclick={() => confirmDelete = row.id as string}>Delete</Button>
+			{/if}
+		{/snippet}
+	</AdminTable>
 </section>

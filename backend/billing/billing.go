@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -363,20 +364,67 @@ func DepositWebhook(w http.ResponseWriter, req *http.Request) {
 
 // ----- Admin -----
 
+type AdminListSubscriptionsParams struct {
+	Page         int    `query:"page"`
+	Limit        int    `query:"limit"`
+	Search       string `query:"search"`
+	Sort         string `query:"sort"`
+	SortDir      string `query:"sort_dir"`
+	FilterStatus string `query:"filter_status"`
+	FilterTier   string `query:"filter_tier"`
+}
+
 //encore:api auth method=GET path=/admin/subscriptions
-func AdminListSubscriptions(ctx context.Context) (*AdminSubList, error) {
+func AdminListSubscriptions(ctx context.Context, p *AdminListSubscriptionsParams) (*AdminSubList, error) {
 	ad := auth.Data().(*myauth.AuthData)
 	if ad.Role != "admin" {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
 	}
 
-	rows, err := db.Query(ctx, `
-		SELECT id, user_id, plan_id, status, active, tier, activated_at, expires_at, created_at
-		FROM subscriptions ORDER BY created_at DESC LIMIT 100
-	`)
-	if err != nil {
-		return nil, err
+	page := p.Page
+	if page <= 0 { page = 1 }
+	limit := p.Limit
+	if limit <= 0 { limit = 20 }
+	if limit > 100 { limit = 100 }
+	offset := (page - 1) * limit
+
+	search := "%" + p.Search + "%"
+	sortCol := "created_at"
+	sortDir := "DESC"
+	switch p.Sort {
+	case "created_at": sortCol = "created_at"
+	case "status": sortCol = "status"
+	case "tier": sortCol = "tier"
+	case "expires_at": sortCol = "expires_at"
 	}
+	if strings.ToLower(p.SortDir) == "asc" { sortDir = "ASC" }
+
+	where := "WHERE (user_id::text ILIKE $1 OR plan_id::text ILIKE $1)"
+	args := []interface{}{search}
+	argIdx := 2
+
+	if p.FilterStatus != "" {
+		where += fmt.Sprintf(" AND status = $%d", argIdx)
+		args = append(args, p.FilterStatus)
+		argIdx++
+	}
+	if p.FilterTier != "" {
+		where += fmt.Sprintf(" AND tier = $%d", argIdx)
+		args = append(args, p.FilterTier)
+		argIdx++
+	}
+
+	var total int
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM subscriptions `+where, args...).Scan(&total)
+
+	query := fmt.Sprintf(`
+		SELECT id, user_id, plan_id, status, active, tier, activated_at, expires_at, created_at
+		FROM subscriptions %s ORDER BY %s %s LIMIT $%d OFFSET $%d
+	`, where, sortCol, sortDir, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := db.Query(ctx, query, args...)
+	if err != nil { return nil, err }
 	defer rows.Close()
 
 	var subs []AdminSubscription
@@ -389,13 +437,14 @@ func AdminListSubscriptions(ctx context.Context) (*AdminSubList, error) {
 		subs = append(subs, s)
 	}
 
-	return &AdminSubList{Subscriptions: subs}, rows.Err()
+	return &AdminSubList{Subscriptions: subs, Total: total}, rows.Err()
 }
 
 // ----- Types -----
 
 type AdminSubList struct {
 	Subscriptions []AdminSubscription `json:"subscriptions"`
+	Total         int                 `json:"total"`
 }
 
 type AdminSubscription struct {

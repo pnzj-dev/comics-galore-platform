@@ -281,9 +281,17 @@ export namespace auth {
             return await resp.json() as DashboardStats
         }
 
-        public async AdminListUsers(): Promise<AdminUserListResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/users`)
+        public async AdminListUsers(params: AdminListUsersParams): Promise<AdminUserListResponse> {
+            const query = makeRecord<string, string | string[]>({
+                page: String(params.Page),
+                limit: String(params.Limit),
+                search: params.Search,
+                sort: params.Sort,
+                sort_dir: params.SortDir,
+                filter_role: params.FilterRole,
+                filter_tier: params.FilterTier,
+            })
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/users`, undefined, {query})
             return await resp.json() as AdminUserListResponse
         }
 
@@ -507,9 +515,17 @@ export namespace billing {
             this.SubscriptionWebhook = this.SubscriptionWebhook.bind(this)
         }
 
-        public async AdminListSubscriptions(): Promise<AdminSubList> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/subscriptions`)
+        public async AdminListSubscriptions(params: AdminListSubscriptionsParams): Promise<AdminSubList> {
+            const query = makeRecord<string, string | string[]>({
+                page: String(params.Page),
+                limit: String(params.Limit),
+                search: params.Search,
+                sort: params.Sort,
+                sort_dir: params.SortDir,
+                filter_status: params.FilterStatus,
+                filter_tier: params.FilterTier,
+            })
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/subscriptions`, undefined, {query})
             return await resp.json() as AdminSubList
         }
 
@@ -682,6 +698,54 @@ export namespace comics {
         disliked: boolean
     }
 
+    export interface AdminListComicsParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterStatus: string
+        FilterAuthor: string
+    }
+
+    export interface AdminListUsersParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterRole: string
+        FilterTier: string
+    }
+
+    export interface AdminListSubscriptionsParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterStatus: string
+        FilterTier: string
+    }
+
+    export interface PendingComicsParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+    }
+
+    export interface RecycleBinParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterStatus: string
+        FilterAuthor: string
+    }
+
     export interface ListComicsParams {
         Page: number
         Limit: number
@@ -807,9 +871,17 @@ export namespace comics {
             return await resp.json() as AuditLogsResponse
         }
 
-        public async AdminListComics(): Promise<ListComicsResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/comics`)
+        public async AdminListComics(params: AdminListComicsParams): Promise<ListComicsResponse> {
+            const query = makeRecord<string, string | string[]>({
+                page: String(params.Page),
+                limit: String(params.Limit),
+                search: params.Search,
+                sort: params.Sort,
+                sort_dir: params.SortDir,
+                filter_status: params.FilterStatus,
+                filter_author: params.FilterAuthor,
+            })
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/comics`, undefined, {query})
             return await resp.json() as ListComicsResponse
         }
 
@@ -930,9 +1002,15 @@ export namespace comics {
             return await resp.json() as ListComicsResponse
         }
 
-        public async PendingComics(): Promise<ListPendingResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/moderation/comics`)
+        public async PendingComics(params: PendingComicsParams): Promise<ListPendingResponse> {
+            const query = makeRecord<string, string | string[]>({
+                page: String(params.Page),
+                limit: String(params.Limit),
+                search: params.Search,
+                sort: params.Sort,
+                sort_dir: params.SortDir,
+            })
+            const resp = await this.baseClient.callTypedAPI("GET", `/moderation/comics`, undefined, {query})
             return await resp.json() as ListPendingResponse
         }
 
@@ -940,9 +1018,17 @@ export namespace comics {
             return this.baseClient.callAPI(method, `/rss`, body, options)
         }
 
-        public async RecycleBin(): Promise<ListComicsResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/recycle-bin`)
+        public async RecycleBin(params: RecycleBinParams): Promise<ListComicsResponse> {
+            const query = makeRecord<string, string | string[]>({
+                page: String(params.Page),
+                limit: String(params.Limit),
+                search: params.Search,
+                sort: params.Sort,
+                sort_dir: params.SortDir,
+                filter_status: params.FilterStatus,
+                filter_author: params.FilterAuthor,
+            })
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/recycle-bin`, undefined, {query})
             return await resp.json() as ListComicsResponse
         }
 

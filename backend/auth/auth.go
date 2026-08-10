@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -566,23 +567,67 @@ type AdminUserListResponse struct {
 	Total int         `json:"total"`
 }
 
+type AdminListUsersParams struct {
+	Page       int    `query:"page"`
+	Limit      int    `query:"limit"`
+	Search     string `query:"search"`
+	Sort       string `query:"sort"`
+	SortDir    string `query:"sort_dir"`
+	FilterRole string `query:"filter_role"`
+	FilterTier string `query:"filter_tier"`
+}
+
 //encore:api auth method=GET path=/admin/users
-func AdminListUsers(ctx context.Context) (*AdminUserListResponse, error) {
+func AdminListUsers(ctx context.Context, p *AdminListUsersParams) (*AdminUserListResponse, error) {
 	data := auth.Data().(*AuthData)
 	if data.Role != "admin" {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
 	}
 
-	var total int
-	db.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&total)
+	page := p.Page
+	if page <= 0 { page = 1 }
+	limit := p.Limit
+	if limit <= 0 { limit = 20 }
+	if limit > 100 { limit = 100 }
+	offset := (page - 1) * limit
 
-	rows, err := db.Query(ctx, `
-		SELECT id, email, role, tier, created_at, banned_at, suspended_at
-		FROM users ORDER BY created_at DESC LIMIT 100
-	`)
-	if err != nil {
-		return nil, err
+	search := "%" + p.Search + "%"
+	sortCol := "created_at"
+	sortDir := "DESC"
+	switch p.Sort {
+	case "email": sortCol = "email"
+	case "role": sortCol = "role"
+	case "tier": sortCol = "tier"
+	case "created_at": sortCol = "created_at"
 	}
+	if strings.ToLower(p.SortDir) == "asc" { sortDir = "ASC" }
+
+	where := "WHERE (email ILIKE $1)"
+	args := []interface{}{search}
+	argIdx := 2
+
+	if p.FilterRole != "" {
+		where += fmt.Sprintf(" AND role = $%d", argIdx)
+		args = append(args, p.FilterRole)
+		argIdx++
+	}
+	if p.FilterTier != "" {
+		where += fmt.Sprintf(" AND tier = $%d", argIdx)
+		args = append(args, p.FilterTier)
+		argIdx++
+	}
+
+	var total int
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM users `+where, args...).Scan(&total)
+
+	query := fmt.Sprintf(`
+		SELECT id, email, role, tier, created_at, banned_at, suspended_at
+		FROM users %s ORDER BY %s %s LIMIT $%d OFFSET $%d
+	`, where, sortCol, sortDir, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := db.Query(ctx, query, args...)
+	if err != nil { return nil, err }
 	defer rows.Close()
 
 	var users []AdminUser

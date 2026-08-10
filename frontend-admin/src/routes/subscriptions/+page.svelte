@@ -1,46 +1,94 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button/index.js';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
+	import AdminTable from '$lib/components/AdminTable.svelte';
 
 	let { data } = $props();
 
-	function statusClass(s: string): string {
-		return s === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
+	const columns = [
+		{ key: 'user_id', label: 'User ID', sortable: false, filterable: true, filterType: 'text' as const, filterPlaceholder: 'Filter...' },
+		{ key: 'plan_id', label: 'Plan ID', sortable: false },
+		{ key: 'status', label: 'Status', sortable: true, filterable: true, filterType: 'select' as const, filterOptions: [
+			{ value: 'active', label: 'Active' },
+			{ value: 'inactive', label: 'Inactive' },
+			{ value: 'expired', label: 'Expired' },
+		]},
+		{ key: 'tier', label: 'Tier', sortable: true, filterable: true, filterType: 'select' as const, filterOptions: [
+			{ value: 'free', label: 'Free' },
+			{ value: 'bronze', label: 'Bronze' },
+			{ value: 'silver', label: 'Silver' },
+			{ value: 'gold', label: 'Gold' },
+			{ value: 'platinum', label: 'Platinum' },
+		]},
+		{ key: 'expires_at', label: 'Expires', sortable: true },
+		{ key: 'created_at', label: 'Created', sortable: true },
+	];
+
+	function buildUrl(updates: Record<string, string | undefined>) {
+		const url = new URL($page.url);
+		url.searchParams.set('page', '1');
+		for (const [k, v] of Object.entries(updates)) {
+			if (v) url.searchParams.set(k, v);
+			else url.searchParams.delete(k);
+		}
+		return url.pathname + url.search;
+	}
+
+	async function handleSort(key: string, dir: 'asc' | 'desc') {
+		await goto(buildUrl({ sort: key, sort_dir: dir }));
+	}
+
+	async function handleSearch(value: string) {
+		await goto(buildUrl({ search: value || undefined }));
+	}
+
+	async function handleFilter(key: string, value: string) {
+		await goto(buildUrl({ [`filter_${key}`]: value || undefined }));
+	}
+
+	async function handlePage(p: number) {
+		const url = new URL($page.url);
+		url.searchParams.set('page', String(p));
+		await goto(url.pathname + url.search);
 	}
 </script>
 
 <svelte:head><title>Subscriptions — Admin</title></svelte:head>
 
-<section class="py-8">
+<section>
 	<h1 class="text-3xl font-bold mb-6">Subscriptions</h1>
 
-	{#if data.subs.length === 0}
-		<p class="text-muted-foreground text-center py-12">No subscriptions yet.</p>
-	{:else}
-		<div class="rounded-xl border border-border overflow-hidden">
-			<table class="w-full text-sm">
-				<thead>
-					<tr class="border-b bg-muted/50 text-left">
-						<th class="px-6 py-3 font-medium">User ID</th>
-						<th class="px-6 py-3 font-medium">Plan</th>
-						<th class="px-6 py-3 font-medium">Status</th>
-						<th class="px-6 py-3 font-medium">Tier</th>
-						<th class="px-6 py-3 font-medium">Expires</th>
-						<th class="px-6 py-3 font-medium w-40">Actions</th>
-					</tr>
-				</thead>
-				<tbody class="divide-y divide-border">
-					{#each data.subs as s}
-						<tr class="hover:bg-muted/30">
-							<td class="px-6 py-3 font-mono text-xs">{s.user_id?.slice(0, 8)}...</td>
-							<td class="px-6 py-3 font-mono text-xs">{s.plan_id?.slice(0, 8)}...</td>
-							<td class="px-6 py-3"><span class="text-xs px-2 py-0.5 rounded-full {statusClass(s.status)}">{s.status}</span></td>
-							<td class="px-6 py-3 capitalize text-xs">{s.tier}</td>
-							<td class="px-6 py-3 text-xs text-muted-foreground">{s.expires_at ? new Date(s.expires_at).toLocaleDateString() : '-'}</td>
-							<td class="px-6 py-3"><Button size="sm" variant="outline" disabled>Cancel</Button></td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	{/if}
+	<AdminTable
+		{columns}
+		data={data.results as Record<string, unknown>[]}
+		total={data.total}
+		page={data.page}
+		limit={data.limit}
+		sortKey={data.sort}
+		sortDir={data.sortDir as 'asc' | 'desc'}
+		search={data.search}
+		filters={data.filters as Record<string, string>}
+		loading={false}
+		{onSort}
+		{onSearch}
+		{onFilter}
+		{onPage}
+	>
+		{#snippet children(row)}
+			{#if row.user_id}
+				<span class="font-mono text-xs">{String(row.user_id).slice(0, 8)}...</span>
+				{:else if row.plan_id}
+				<span class="font-mono text-xs">{String(row.plan_id).slice(0, 8)}...</span>
+			{:else if row.status}
+				<span class="text-xs px-2 py-0.5 rounded-full {row.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}">{row.status as string}</span>
+			{:else if row.tier}
+				<span class="text-xs capitalize">{row.tier as string}</span>
+			{:else if row.expires_at || row.created_at}
+				<span class="text-xs text-muted-foreground">{row.expires_at ? new Date(row.expires_at as string).toLocaleDateString() : row.created_at ? new Date(row.created_at as string).toLocaleDateString() : '-'}</span>
+			{/if}
+		{/snippet}
+		{#snippet actions(row)}
+			<button class="text-xs text-muted-foreground" disabled>Cancel</button>
+		{/snippet}
+	</AdminTable>
 </section>
