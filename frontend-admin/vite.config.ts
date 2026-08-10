@@ -5,6 +5,9 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	server: { port: 5174 },
+	ssr: {
+		noExternal: ['@tanstack/svelte-table', '@tanstack/table-core'],
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit({
