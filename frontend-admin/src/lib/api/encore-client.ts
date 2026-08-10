@@ -1100,6 +1100,10 @@ export namespace tiers {
         "plan_name": string
     }
 
+    export interface UnlinkAllPlansResponse {
+        count: number
+    }
+
     export class ServiceClient {
         private baseClient: BaseClient
 
@@ -1112,6 +1116,7 @@ export namespace tiers {
             this.PlansReady = this.PlansReady.bind(this)
             this.UpdatePlanProviderID = this.UpdatePlanProviderID.bind(this)
             this.AutoLinkPlan = this.AutoLinkPlan.bind(this)
+            this.UnlinkAllPlans = this.UnlinkAllPlans.bind(this)
         }
 
         public async GetTier(id: string): Promise<Tier> {
@@ -1151,6 +1156,11 @@ export namespace tiers {
         public async AutoLinkPlan(id: string): Promise<AutoLinkPlanResponse> {
             const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/${encodeURIComponent(id)}/auto-link`)
             return await resp.json() as AutoLinkPlanResponse
+        }
+
+        public async UnlinkAllPlans(): Promise<UnlinkAllPlansResponse> {
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/unlink-all`)
+            return await resp.json() as UnlinkAllPlansResponse
         }
     }
 }

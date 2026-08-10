@@ -239,6 +239,25 @@ func AutoLinkPlan(ctx context.Context, id string) (*AutoLinkPlanResponse, error)
 	}, nil
 }
 
+type UnlinkAllPlansResponse struct {
+	Count int `json:"count"`
+}
+
+//encore:api auth method=POST path=/admin/plans/unlink-all
+func UnlinkAllPlans(ctx context.Context) (*UnlinkAllPlansResponse, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	result, err := db.Exec(ctx, `UPDATE plans SET provider_plan_id = NULL WHERE provider_plan_id IS NOT NULL AND provider_plan_id != ''`)
+	if err != nil {
+		return nil, err
+	}
+	count := result.RowsAffected()
+	return &UnlinkAllPlansResponse{Count: int(count)}, nil
+}
+
 func intervalToPeriod(interval string) string {
 	switch strings.ToLower(interval) {
 	case "daily":

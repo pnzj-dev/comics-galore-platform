@@ -2,7 +2,7 @@
 	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card/index.js';
-	import { AlertCircle, CheckCircle } from 'lucide-svelte';
+	import { AlertCircle, CheckCircle, AlertTriangle } from 'lucide-svelte';
 
 	let { data } = $props();
 
@@ -25,6 +25,23 @@
 	let submitting = $state(false);
 	let saved = $state(false);
 	let error = $state('');
+
+	let showUnlinkConfirm = $state(false);
+	let unlinking = $state(false);
+	let unlinkResult = $state('');
+
+	async function unlinkAllPlans() {
+		unlinking = true;
+		unlinkResult = '';
+		try {
+			const res = await encore.tiers.UnlinkAllPlans();
+			unlinkResult = `Unlinked ${res.count} plan(s).`;
+		} catch (e: any) {
+			unlinkResult = `Error: ${e?.message || 'unknown'}`;
+		}
+		unlinking = false;
+		showUnlinkConfirm = false;
+	}
 
 	function syncJson() {
 		jsonText = JSON.stringify(settings, null, 2);
@@ -74,7 +91,7 @@
 
 <svelte:head><title>Settings — Admin</title></svelte:head>
 
-<section class="max-w-3xl">
+<section>
 	<h1 class="text-3xl font-bold mb-6">Settings</h1>
 
 	<div class="flex items-center gap-2 mb-6">
@@ -238,6 +255,36 @@
 							<input type="number" bind:value={settings.cf_presigned_ttl_min} class="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm" />
 						</div>
 					</div>
+				</CardContent>
+			</Card>
+
+			<Card class="border-red-200 dark:border-red-800">
+				<CardHeader><CardTitle class="text-red-600 dark:text-red-400">NowPayments Integration</CardTitle></CardHeader>
+				<CardContent class="space-y-3">
+					<p class="text-sm text-muted-foreground">Remove all linked NowPayments plan IDs from all plans. Subscriptions will stop working until plans are re-linked.</p>
+
+					{#if showUnlinkConfirm}
+						<div class="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+							<AlertTriangle class="size-4 text-red-600 mt-0.5 flex-shrink-0" />
+							<div class="space-y-2 flex-1">
+								<p class="text-sm text-red-800 dark:text-red-200">Are you sure? This will remove all NowPayments plan IDs from all plans. Subscriptions will stop working until plans are re-linked.</p>
+								<div class="flex gap-2">
+									<Button variant="outline" size="sm" onclick={() => showUnlinkConfirm = false} disabled={unlinking}>Cancel</Button>
+									<Button variant="destructive" size="sm" onclick={unlinkAllPlans} disabled={unlinking}>
+										{unlinking ? 'Unlinking...' : 'Yes, Unlink All'}
+									</Button>
+								</div>
+							</div>
+						</div>
+					{:else}
+						<Button variant="destructive" onclick={() => showUnlinkConfirm = true}>
+							Unlink All NowPayments Plans
+						</Button>
+					{/if}
+
+					{#if unlinkResult}
+						<p class="text-sm {unlinkResult.startsWith('Error') ? 'text-red-600' : 'text-green-600'}">{unlinkResult}</p>
+					{/if}
 				</CardContent>
 			</Card>
 

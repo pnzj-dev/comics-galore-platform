@@ -14,6 +14,8 @@
 	let autoLinking = $state(false);
 	let autoProgress = $state({ done: 0, total: 0 });
 	let mode = $state<'manual' | 'automatic'>('manual');
+	let planLinkState = $state<Record<string, 'pending' | 'linking' | 'success' | 'failed'>>({});
+	let failedIds = $state<string[]>([]);
 
 	let sortKey = $state<string | null>(null);
 	let sortDir = $state<'asc' | 'desc'>('asc');
@@ -72,6 +74,8 @@
 			inputs = {};
 			logLines = [];
 			validationError = '';
+			planLinkState = {};
+			failedIds = [];
 			missing.forEach(p => { inputs[p.id] = ''; });
 		} catch {
 			unlinked = [];
@@ -122,19 +126,62 @@
 		validationError = '';
 		logLines = [];
 		autoProgress = { done: 0, total: unlinked.length };
+		planLinkState = {};
+		failedIds = [];
+		unlinked.forEach(p => { planLinkState[p.id] = 'pending'; });
 
 		for (const plan of unlinked) {
+			planLinkState[plan.id] = 'linking';
 			logLines = [...logLines, { text: `Creating NowPayments plan for ${planDisplayName(plan)}...`, ok: false, loading: true }];
 			try {
 				const res = await encore.tiers.AutoLinkPlan(plan.id);
+				planLinkState[plan.id] = 'success';
 				logLines = logLines.map(l =>
 					l.text.startsWith(`Creating NowPayments plan for ${planDisplayName(plan)}`)
 						? { text: `✓ ${planDisplayName(plan)} auto-linked (ID ${res.provider_plan_id})`, ok: true, loading: false }
 						: l
 				);
 			} catch (err: any) {
+				planLinkState[plan.id] = 'failed';
+				failedIds.push(plan.id);
 				logLines = logLines.map(l =>
 					l.text.startsWith(`Creating NowPayments plan for ${planDisplayName(plan)}`)
+						? { text: `✗ ${planDisplayName(plan)} failed: ${err?.message || 'unknown error'}`, ok: false, loading: false }
+						: l
+				);
+			}
+			autoProgress = { ...autoProgress, done: autoProgress.done + 1 };
+		}
+
+		autoLinking = false;
+		await loadPlans();
+	}
+
+	async function retryFailedPlans(planIds: string[]) {
+		const plans = unlinked.filter(p => planIds.includes(p.id));
+		autoLinking = true;
+		logLines = [];
+		autoProgress = { done: 0, total: plans.length };
+		planLinkState = {};
+		failedIds = [];
+		plans.forEach(p => { planLinkState[p.id] = 'pending'; });
+
+		for (const plan of plans) {
+			planLinkState[plan.id] = 'linking';
+			logLines = [...logLines, { text: `Retrying ${planDisplayName(plan)}...`, ok: false, loading: true }];
+			try {
+				const res = await encore.tiers.AutoLinkPlan(plan.id);
+				planLinkState[plan.id] = 'success';
+				logLines = logLines.map(l =>
+					l.text.startsWith(`Retrying ${planDisplayName(plan)}`)
+						? { text: `✓ ${planDisplayName(plan)} auto-linked (ID ${res.provider_plan_id})`, ok: true, loading: false }
+						: l
+				);
+			} catch (err: any) {
+				planLinkState[plan.id] = 'failed';
+				failedIds.push(plan.id);
+				logLines = logLines.map(l =>
+					l.text.startsWith(`Retrying ${planDisplayName(plan)}`)
 						? { text: `✗ ${planDisplayName(plan)} failed: ${err?.message || 'unknown error'}`, ok: false, loading: false }
 						: l
 				);
@@ -261,7 +308,22 @@
 												</div>
 											</td>
 										{:else}
-											<td class="px-4 py-2.5 text-xs text-muted-foreground">auto</td>
+											<td class="px-4 py-2.5">
+												{#if planLinkState[plan.id] === 'linking'}
+													<div class="flex items-center gap-1.5">
+														<LoaderCircle class="size-3 animate-spin text-primary" />
+														<div class="w-10 h-1 bg-muted rounded-full overflow-hidden">
+															<div class="h-full bg-primary rounded-full animate-pulse"></div>
+														</div>
+													</div>
+												{:else if planLinkState[plan.id] === 'success'}
+													<CheckCircle class="size-4 text-green-500" />
+												{:else if planLinkState[plan.id] === 'failed'}
+													<AlertCircle class="size-4 text-red-500" />
+												{:else}
+													<span class="text-xs text-muted-foreground">ready</span>
+												{/if}
+											</td>
 										{/if}
 									</tr>
 								{/each}
@@ -274,9 +336,15 @@
 							Link All
 						</Button>
 					{:else if mode === 'automatic' && unlinked.length > 0}
-						<Button onclick={linkAllAutomatic} disabled={autoLinking} class="w-full">
-							{autoLinking ? 'Linking...' : 'Link All'}
-						</Button>
+						{#if failedIds.length > 0 && !autoLinking}
+							<Button onclick={() => retryFailedPlans(failedIds)} disabled={autoLinking} class="w-full">
+								Retry Failed ({failedIds.length})
+							</Button>
+						{:else}
+							<Button onclick={linkAllAutomatic} disabled={autoLinking} class="w-full">
+								{autoLinking ? 'Linking...' : 'Link All'}
+							</Button>
+						{/if}
 					{/if}
 
 					{#if logLines.length > 0}
