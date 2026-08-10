@@ -59,13 +59,13 @@ Comics-Galore/
 
 Must contain (at minimum):
 
-- shadcn-svelte based primitives and domain components (ComicCard, Reader, PlanModal, etc.)
+- shadcn-svelte based primitives and domain components (ComicCard, HeroComicCard, Reader, PlanModal, etc.)
 - Superforms + Zod schemas for comic creation, login, settings…
 - Upload Session client logic (presign → upload → collect file keys → build payload)
 - Comic creation payload builder (used by both Manual and Archive tabs)
 - Reader chrome (keyboard + swipe handlers)
 - Theme / dark-mode stores
-- Thin wrappers around the generated Encore client
+- Generated Encore TypeScript client wrappers (`$lib/api/encore.ts` → `encore-client.ts`)
 
 Web and desktop both import from this package.  
 Duplication of UI or validation logic is considered a bug.
@@ -97,19 +97,14 @@ The cookie is set with `path=/`, `SameSite=Lax`, and `max-age=2592000` (30 days)
 **Required for all pages that fetch external data.** Uses `+page.server.ts` load functions so data arrives at render time — no skeletons, SSR-friendly, search-engine readable.
 
 ```ts
-// +page.server.ts
+// +page.server.ts — using the generated Encore client
+import { getEncoreClient } from '$lib/server/encore';
 import type { PageServerLoad } from './$types';
 
-const API = 'http://localhost:4000';
-
-export const load: PageServerLoad = async ({ cookies, fetch }) => {
-    const token = cookies.get('token');
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-    const res = await fetch(`${API}/comics?limit=4&sort=newest`, { headers });
-    const { comics } = await res.json();
-
-    return { comics };
+export const load: PageServerLoad = async ({ cookies }) => {
+    const client = getEncoreClient(cookies.get('token'));
+    const res = await client.comics.ListComics({ Page: 1, Limit: 4, Sort: 'newest' });
+    return { comics: res.comics || [] };
 };
 ```
 
@@ -121,20 +116,21 @@ export const load: PageServerLoad = async ({ cookies, fetch }) => {
 </script>
 ```
 
-**Current state (v1):** Data loading uses `onMount` + client-side `api.get/post` across all 18 data-dependent pages. This means search engines see empty pages and users see skeletons on every load. Migrating to `load` functions is marked as SOON (v1.1).
+**Current state (v1):** All data-dependent pages use `+page.server.ts` load functions with the generated Encore TypeScript client (`getEncoreClient(token)`). The migration from `onMount` + client-side `api.get/post` is complete.
 
 **For auth-required pages:** the `load` function reads the JWT cookie (same pattern as route guards) and passes it as `Authorization: Bearer <token>` to the Encore API.
 
-**Generated client alternative:** Encore's `encore gen client --lang typescript` command produces a typed TypeScript client that replaces raw `fetch()` calls in `+page.server.ts` files — eliminating manual URL building and header construction. See `.agents/skills/sveltekit-encore-client/SKILL.md` for setup and usage. The current 18 server files use raw `fetch()`; migrating to the generated client is marked as SOON (v1.1).
+**Generated client:** The Encore TypeScript client (`$lib/api/encore-client.ts`) is generated via `encore gen client --lang typescript` and wrapped in `$lib/api/encore.ts` (browser) and `$lib/server/encore.ts` (server). All page load functions and client-side API calls use this typed client — no raw `fetch()` or manual URL building remains. See `.agents/skills/sveltekit-encore-client/SKILL.md` for setup and usage.
 
 ### Admin (`frontend-admin/` — admin.comics-galore.com)
 
 - Separate SvelteKit application for admin-only features.
+- Fixed sidebar layout (`w-60`, `bg-slate-900`) with active page highlighting.
 - Login required (no register — admins are created by the system).
 - Uses `packages/ui` for shared components.
-- Handles dashboard, moderation, user management, subscriptions, comics management.
-- Shows red plan matrix banner when incomplete.
-- No public content or discovery features.
+- Handles dashboard, moderation (pending comics queue), user management, subscriptions, comics management, recycle bin, settings.
+- Settings page has Form/JSON toggle for raw editing of the `app_settings` JSON blob.
+- Shows red plan matrix banner when incomplete (NowPayments link wizard resolves this).
 
 ## Desktop Client (Wails)
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { encore } from '$lib/api/encore';
-	import { onMount } from 'svelte';
+	import { LoaderCircle, CheckCircle } from 'lucide-svelte';
 
 	let { open, onClose }: { open: boolean; onClose: () => void } = $props();
 
@@ -14,26 +14,30 @@
 		email_support_replies: true,
 		email_marketing: false,
 		in_app_enabled: true,
+		hide_mature: false,
 	});
 	let saved = $state(false);
+	let saving = $state(false);
 	let loading = $state(true);
 
 	async function load() {
 		try {
-			const res: any = await encore.auth.GetPreferences();
-			settings = res;
+			const res = await encore.auth.GetPreferences();
+			settings = { ...settings, ...res as Record<string, unknown> };
 		} catch {}
 		loading = false;
 	}
 
-	onMount(() => { if (open) load(); });
-
 	$effect(() => { if (open) { loading = true; load(); } });
 
 	async function save() {
-		await encore.auth.SavePreferences(settings);
-		saved = true;
-		setTimeout(() => saved = false, 2000);
+		saving = true;
+		try {
+			await encore.auth.SavePreferences(settings);
+			saved = true;
+			setTimeout(() => saved = false, 2000);
+		} catch {}
+		saving = false;
 	}
 
 	function handleKeydown(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
@@ -96,6 +100,14 @@
 				</div>
 
 				<div>
+					<h3 class="text-sm font-medium mb-3">Content</h3>
+					<label class="flex items-center gap-2 text-sm cursor-pointer">
+						<input type="checkbox" bind:checked={settings.hide_mature} class="rounded" />
+						Hide mature content
+					</label>
+				</div>
+
+				<div>
 					<h3 class="text-sm font-medium mb-3">Notifications</h3>
 					<div class="space-y-2">
 						<label class="flex items-center gap-2 text-sm cursor-pointer">
@@ -136,7 +148,17 @@
 				</div>
 
 				<div class="flex items-center gap-3 pt-2">
-					<Button onclick={save} class="w-full">Save Settings</Button>
+					<Button onclick={save} class="w-full" disabled={saving}>
+						{#if saving}
+							<LoaderCircle class="size-4 animate-spin" />
+							Saving...
+						{:else if saved}
+							<CheckCircle class="size-4 text-green-500" />
+							Save Settings
+						{:else}
+							Save Settings
+						{/if}
+					</Button>
 					{#if saved}<span class="text-sm text-green-500 flex-shrink-0">Saved!</span>{/if}
 				</div>
 			</div>

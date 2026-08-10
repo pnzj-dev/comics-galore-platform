@@ -5,14 +5,10 @@
 
 	let { data } = $props();
 
-	// svelte-ignore state_referenced_locally
-	let prefs = $state(data.prefs);
-	let saved = $state(false);
+	let prefs = $derived(data.prefs);
 
 	async function save() {
 		await encore.auth.UpdateNotificationPrefs(prefs);
-		saved = true;
-		setTimeout(() => saved = false, 2000);
 	}
 </script>
 
@@ -49,8 +45,6 @@
 		</CardContent>
 	</Card>
 
-	<div class="flex items-center gap-3 mt-6">
-		<Button onclick={save}>Save Preferences</Button>
-		{#if saved}<span class="text-sm text-green-500">Saved!</span>{/if}
-	</div>
+	<Button onclick={save}>Save Preferences</Button>
+
 </section>

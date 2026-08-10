@@ -20,6 +20,8 @@
 
 ## Uploader – New Comic Workspace (3 tabs)
 
+**Tab navigation uses query parameters** (`?tab=list`, `?tab=manual`, `?tab=archive`) for bookmarkable state. Active upload sessions are loaded server-side in `+page.server.ts`. After creating a comic, the form redirects to `/upload?tab=list` to show the refreshed grid.
+
 ### Tab 1 – My Comics
 - Paginated grid of simplified comic cards (cover, title, status badge, date).
 - Newest first.
@@ -29,42 +31,36 @@
 
 ### Tab 2 – Manual Creation
 
-**Layout: two-column (metadata left, cover right), full-width previews + archives**
+**Layout: full-width, three-row (metadata+cover, previews, archives)**
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  Create New Comic                                                    │
 │                                                                      │
-│  ┌─────────────────────────────┐ ┌────────────────────────────────┐ │
-│  │ Title *                     │ │                                │ │
-│  │ Author                      │ │   Cover Image *                │ │
-│  │ Description (2 rows)       │ │                                │ │
-│  │ Synopsis (2 rows)          │ │   ┌──────────────────────┐    │ │
-│  │ Language ▼  Age Rating ▼    │ │   │                      │    │ │
-│  │ Category                    │ │   │   3 : 4 aspect       │    │ │
-│  │ Tags (comma-separated)      │ │   │   upload or preview  │    │ │
-│  └─────────────────────────────┘ │   │       × %            │    │ │
-│                                  │   └──────────────────────┘    │ │
-│                                  └────────────────────────────────┘ │
-│                                                                      │
-│  Preview Images (min 2)                                   [+ Add]    │
+│  ┌──────────────────── metadata ────────────────────┐ ┌── cover ──┐ │
+│  │ Title *, Author, Description, Synopsis,          │ │ 3:4        │ │
+│  │ Language + Age Rating, Category, Tags            │ │ dropzone   │ │
+│  └─────────────────────────────────────────────────┘ │ × progress │ │
+│                                                      └────────────┘ │
+│  Preview Images (min 2, up to 10)                        [+ Add]    │
 │  ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐                  │
 │  │ 🌄 │ │ 🌄 │ │ 🌄 │ │ 🌄 │ │ 🌄 │ │  + │ │  + │                  │
-│  │ 2:3│ │ 2:3│ │ 2:3│ │ 2:3│ │ 2:3│ │ 2:3│ │ 2:3│                  │
 │  └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘                  │
-│  7-column grid, each slot: upload→preview→progress→× remove         │
 │                                                                      │
-│  Archive Files (min 1)                                   [+ Add]    │
+│  Archive Files (min 1, up to 10)                         [+ Add]    │
 │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐                       │
 │  │  ⬇   │ │  ⬇   │ │ 50%  │ │  +   │ │  +   │                       │
-│  │ name  │ │ name  │ │ name  │ │ Arch  │ │ Arch  │                       │
-│  │size ×│ │size ×│ │size   │ │       │ │       │                       │
 │  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘                       │
-│  5-column grid, each slot: upload→name+size→× remove                │
 │                                                                      │
-│  [Publish Comic] (full width)                                       │
+│  [Publish Comic] (full width, standard submit pattern)               │
 └──────────────────────────────────────────────────────────────────────┘
 ```
+
+**Layout details:**
+- **Row 1:** `grid md:grid-cols-[1fr_320px]` — metadata fields stacked on left, 3:4 cover dropzone on right (320px fixed). Cover dropzone shows preview + upload progress overlay, removable via × button. Cover uses Cloudflare Images; archives use S3 presigned URLs.
+- **Row 2:** 7-column responsive grid of preview image slots (2:3 aspect), Cloudflare upload. Min 2 slots, max 10 via "+ Add". Each slot: file picker → preview thumbnail → upload progress → × remove.
+- **Row 3:** 5-column grid of archive file slots (square), S3 upload. Accepts `.cbr,.cbz,.pdf,.zip,.rar,.7z`. Min 1 slot, max 10. Each slot: upload → filename + filesize → purple border on success → × remove.
+- Submit button is full-width, standardized: `submitting ? 'Publishing...' : 'Publish Comic'`.
 
 **Metadata fields (left column, stacked):**
 - Title (required)
@@ -481,6 +477,40 @@ Minimal variant for admin lists, uploader "My Comics" tab, and moderation queues
 - No user popover
 - Premium badge: icon-only (smaller, crown SVG)
 
+### HeroComicCard (featured / Comic of the Day)
+
+Landscape-oriented variant for the "Comic of the Day" section on the home page. Same props interface as `ComicCard` (spread-compatible).
+
+**Layout:**
+```
+┌──────────────────────────────────────────────────────────────┐
+│ ┌── cover ──┐                                               │
+│ │  (35%)    │ PREMIUM                             ★ Favorite│
+│ │  3:4      │ AUTHOR NAME                                   │
+│ │           │ Title (text-lg, bold, hover:purple)           │
+│ │           │ Published Date                                │
+│ │           │                                               │
+│ │           │ Description (line-clamp-3, always visible)    │
+│ │           │                                               │
+│ │           │ [tag1] [tag2] [tag3] [+N]                    │
+│ │           │ ──────────────────────────────────────────   │
+│ │           │ 👁 12.3k  ⬇ 5.1k  💬 42  📄 28p  👍 1.2k    │
+│ └──────────┘                                               │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Key differences from ComicCard:**
+- Orientation: horizontal (`flex-row` on desktop, stacks vertically on mobile)
+- Cover image: 35% width on desktop, full width on mobile
+- Description: always visible (no hover overlay)
+- Premium badge: shown both on cover image and inline above title (inline hidden on mobile)
+- Stats bar: same format as ComicCard (icons + compactNum)
+- Favorite button: inline next to title (not on cover overlay)
+
+**Breakpoints:**
+- `< sm`: stacks vertically — cover full-width, info below
+- `≥ sm`: horizontal `flex-row`, cover 35% / info 65%
+
 ### ComicGrid
 
 Responsive grid container for ComicCard components.
@@ -577,8 +607,9 @@ When loading, show skeleton cards matching the ComicCard layout:
 ### Admin Control Panel (`frontend-admin/` — admin.comics-galore.com)
 
 **Layout:**
-- Sticky admin navbar: Dashboard, Moderation, Users, Subscriptions, Comics
-- Persistent **red banner** when plan matrix is incomplete
+- Fixed sidebar (`w-60`, `bg-slate-900`): Dashboard, Moderation, Users, Subscriptions, Comics, Recycle Bin, Settings — active page highlighted with `bg-white/10`
+- User email + Sign Out at sidebar bottom
+- Persistent **red banner** when plan matrix is incomplete (above main content, outside sidebar)
 - Dark mode support via theme toggle
 
 **Table pattern (all admin pages):**
@@ -674,13 +705,17 @@ Three-tier fallback — zero extra queries on auth: users.preferences → app_se
 
 ### Admin Settings Page (`/settings`)
 
-Full system-wide form (7 Card sections) loaded via `GET /admin/settings`:
-- **Site**: name, maintenance toggle, registrations toggle
-- **Content**: language selects, max upload size, image serving mode
-- **Display**: items per page, popular tags limit
+Full system-wide form with **Form/JSON toggle** (segmented control at top). Form mode renders 6 Card sections; JSON mode shows a `textarea` with pretty-printed JSON for raw editing.
+
+Loaded via `GET /admin/settings`, saved via `PATCH /admin/settings`:
+- **Site**: site name, contact email, maintenance toggle, registrations toggle
+- **Content**: language selects, max upload size, image serving mode, default meta description (textarea)
+- **Display**: items per page, popular tags limit, hide mature content (checkbox), enable comments (checkbox)
 - **Quotas**: per-tier GB inputs (Free/Bronze/Silver/Gold/Platinum)
 - **Quota Boosts**: 3 boost prices editable
 - **Security**: rate limit, email verification toggle, S3/CF presigned TTL
+
+Submit button uses standardized pattern: `submitting ? 'Saving...' : 'Save Settings'`, with green `Saved!` confirmation.
 
 ## Public experience (v1 implemented / v1.1 in progress)
 

@@ -22,17 +22,18 @@ Both clients share the majority of Svelte code via an internal `packages/ui` lib
 
 ## Uploader: “New Comic” Workspace (3 tabs)
 
-When the user has the `uploader` role, a dedicated **New Comic** area is available with exactly three tabs:
+When the user has the `uploader` role, a dedicated **New Comic** area is available with exactly three tabs. **Tab state is driven by query parameters** (`?tab=list`, `?tab=manual`, `?tab=archive`) for bookmarkability and browser back/forward support. Active upload sessions are loaded server-side in `+page.server.ts` alongside the comics list.
 
 ### Tab 1 – My Comics (default after success)
 - Grid of **simplified comic cards** belonging to the current uploader.
 - Ordered by creation date, **newest → oldest**.
 - **Pagination** (or infinite scroll with clear page controls).
 - Shows status badge (`pending_review`, `published`, `rejected`, etc.).
-- After a successful creation (manual or archive) the user is automatically returned to this tab so they can see the new comic.
+- After a successful creation (manual or archive) the user is automatically returned to this tab (`/upload?tab=list`) so they can see the new comic.
 
 ### Tab 2 – Manual Creation
-- Rich form (Superforms + Zod): title, description, series, issue, tags, cover, main archive, status, schedule, minimum tier, etc.
+- **Full-width 3-section layout**: Row 1 — metadata (left, `1fr`) + 3:4 cover dropzone (right, 320px); Row 2 — preview image grid (Cloudflare upload, min 2, up to 10); Row 3 — archive file grid (S3 upload, min 1, up to 10).
+- Rich form fields: title, author, description, synopsis, category, tags, language, age rating.
 - **All file inputs upload directly to S3 via presigned URLs**. The frontend receives **file keys** back.
 - Those keys are written into the form state.
 - When the form is complete and valid, the frontend sends the **same creation payload** to the backend.
@@ -72,7 +73,7 @@ When the user has the `uploader` role, a dedicated **New Comic** area is availab
 
 ### Discovery
 - Fast comic grids with progressive / responsive covers
-- Staff Picks, Comic of the Day / Random
+- Staff Picks, Comic of the Day / Random (displayed with `HeroComicCard` — landscape layout, cover + info side by side)
 - “New this week” / “Popular this month” rails
 - Faceted search; **tag pages** as first-class public URLs
 - “People also liked” related comics
@@ -174,7 +175,7 @@ When the user has the `uploader` role, a dedicated **New Comic** area is availab
 - Notification delivery log
 
 ### Other
-- General settings (maintenance, registration, timeouts, currencies…)
+- General settings (maintenance, registration, contact email, hide mature default, enable comments, default meta description, quotas, rate limit, image serving — editable via Form/JSON toggle)
 - Full audit log
 - CSV export on main datalists
 - Saved filters / views on datalists

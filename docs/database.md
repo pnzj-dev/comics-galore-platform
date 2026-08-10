@@ -217,10 +217,20 @@ Constraints:
 - `kind = page | original` → `storage = s3`
 
 ### settings
-Include keys such as:
+
+Global application settings stored as a JSON blob in `app_settings` (key `'defaults'`). Includes:
+- `site_name` — public-facing site name
+- `maintenance_mode` — boolean, blocks non-admin access
+- `registrations_open` — boolean, toggles registration
+- `contact_email` — from-address for Resend transactional emails
 - `image_serving_mode` = `direct` | `imgproxy` | `cloudflare_images` (default `direct`)
 - `imgproxy_base_url`
 - `cloudflare_images_account` / delivery base (secrets via env, non-secret config in settings)
+- `require_email_verify` — boolean, email verification gate
+- `hide_mature_default` — boolean, default for anonymous users
+- `enable_comments` — boolean, global comment kill switch
+- `default_meta_description` — SEO fallback for public pages
+- Rate limit, presigned TTLs, per-tier quotas, boost prices (see `AppSettings` struct)
 
 
 ## Language fields

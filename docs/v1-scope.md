@@ -68,7 +68,7 @@ A working web app where users can discover and read comics, uploaders can submit
 - User list + role change + basic ban/suspend  
 - Comic list + status management  
 - Basic KPIs (users, comics, downloads, active subs) — charts nice-to-have  
-- Settings: maintenance flag, registration open/closed  
+- Settings: maintenance flag, registration open/closed, contact email, hide mature default, enable comments, default meta description, quotas, rate limit, image serving mode — all editable via Form/JSON toggle  
 - Audit log for critical actions (approve, reject, ban, role change, manual grant if any)  
 
 ### Account & trust (minimal)
@@ -99,7 +99,7 @@ A working web app where users can discover and read comics, uploaders can submit
 - Additional UI locales (ja, es, ko, fr, pt-BR, …) as translation packs land
 - Language facet polished on public browse  
 - Soft quota warning at ~80%  
-- Migrate all data-fetching pages from `onMount` + client-side `api.get` to SvelteKit `load` functions (`+page.server.ts`). Currently 18 pages load data client-side only (no SSR data, search engines see empty pages, skeletons on every load). See `docs/architecture.md` for the required pattern.  
+- ~~Migrate all data-fetching pages from `onMount` + client-side `api.get` to SvelteKit `load` functions~~ **DONE** — Encore client migration complete; all pages use `+page.server.ts` with `getEncoreClient(token)`.
 
 ---
 

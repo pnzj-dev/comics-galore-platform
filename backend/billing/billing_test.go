@@ -54,6 +54,10 @@ func (m *mockProvider) CreateDeposit(ctx context.Context, req DepositRequest) (*
 	return nil, fmt.Errorf("CreateDeposit not implemented")
 }
 
+func (m *mockProvider) CreatePlan(ctx context.Context, req CreatePlanRequest) (*CreatePlanResponse, error) {
+	return &CreatePlanResponse{ProviderPlanID: "mock-plan-id"}, nil
+}
+
 func setupBillingTables(t *testing.T) error {
 	t.Helper()
 

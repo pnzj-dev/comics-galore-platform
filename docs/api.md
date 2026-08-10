@@ -58,6 +58,19 @@
 | DELETE | `/comments/:id` | Delete comment (owner or mod/admin); cascades to replies | Yes |
 | GET (SSE) | `/comments-stream/:id` | SSE stream of new comments for a comic | No |
 
+## Tiers & Plans
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/tiers` | List all tiers | No |
+| GET | `/plans` | List all plans (tiers × intervals matrix) | No |
+| GET | `/plans/ready` | Whether all plans have provider plan IDs | No |
+| GET (admin) | `/admin/plans/matrix-status` | Admin check if plan matrix is complete | Admin |
+| PATCH (admin) | `/admin/plans/:id` | Manually set a plan's provider_plan_id (refuses if already linked) | Admin |
+| POST (admin) | `/admin/plans/:id/auto-link` | Auto-create NowPayments plan via API + store the ID | Admin |
+
+The `auto-link` endpoint calls the NowPayments `POST /v1/subscriptions/plans` API to create a remote plan and saves the returned ID as `provider_plan_id`. The `PATCH` endpoint has a lock guard preventing re-linking of already-configured plans.
+
 ## Other domains
 Auth, users, tiers, intervals, plans, subscriptions, webhooks, settings, social, comments, messaging, support, admin KPIs & datalists remain as previously specified.
 

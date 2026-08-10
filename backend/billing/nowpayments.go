@@ -283,12 +283,31 @@ func (p *NowPaymentsProvider) CreateDeposit(ctx context.Context, req DepositRequ
 
 // ----- CreatePlan (JWT + API key) -----
 
+func periodToDays(period string) int {
+	switch period {
+	case "day":
+		return 1
+	case "week":
+		return 7
+	case "month":
+		return 30
+	case "quarter":
+		return 90
+	case "semester":
+		return 180
+	case "year":
+		return 365
+	default:
+		return 30
+	}
+}
+
 func (p *NowPaymentsProvider) CreatePlan(ctx context.Context, req CreatePlanRequest) (*CreatePlanResponse, error) {
 	body := map[string]interface{}{
-		"name":            req.Name,
-		"price_amount":    req.PriceAmount,
-		"price_currency":  "usd",
-		"period":          req.Period,
+		"title":          	req.Name,
+		"amount":   		req.PriceAmount,
+		"currency": 		"usd",
+		"interval_day":     periodToDays(req.Period),
 	}
 
 	resp, err := p.doJWTRequest(ctx, "POST", npBaseURL+"/subscriptions/plans", body)
@@ -299,6 +318,7 @@ func (p *NowPaymentsProvider) CreatePlan(ctx context.Context, req CreatePlanRequ
 	var result struct {
 		ID json.Number `json:"id"`
 	}
+
 	if err := json.Unmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("create plan parse: %w", err)
 	}
