@@ -23,7 +23,7 @@
 
 	const user = $derived(data.user || $currentUser);
 	const authed = $derived(!!(data.user) || $isAuthenticated);
-	const path = $derived(page.url.pathname);
+	const path = $derived(page.url?.pathname ?? '');
 
 	async function checkPlanMatrix() {
 		try {
