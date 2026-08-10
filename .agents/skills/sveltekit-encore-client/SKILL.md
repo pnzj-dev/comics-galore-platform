@@ -54,26 +54,9 @@ For production, replace `Local` with your production API URL.
 
 ---
 
-## 3. Use in a load function — Before / After
+## 3. Use in a load function
 
-**Before** (raw `fetch` — what all 18 `+page.server.ts` files currently use):
-
-```typescript
-// +page.server.ts
-const API = 'http://localhost:4000';
-
-export const load: PageServerLoad = async ({ cookies, fetch }) => {
-    const token = cookies.get('token');
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
-    const res = await fetch(`${API}/comics?limit=4&sort=newest`, { headers })
-        .then(r => r.json());
-
-    return { latestComics: res.comics || [] };
-};
-```
-
-**After** (generated client):
+The migration from raw `fetch()` and legacy `api.get()` to the Encore generated client is **complete**. All pages use this pattern:
 
 ```typescript
 // +page.server.ts
@@ -82,18 +65,18 @@ import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ cookies }) => {
     const client = getEncoreClient(cookies.get('token'));
-
-    const latest = await client.comics.list({ limit: 4, sort: 'newest' });
-
-    return { latestComics: latest.comics ?? [] };
+    try {
+        const res = await client.comics.ListComics({ Page: 1, Limit: 4, Sort: 'newest' });
+        return { comics: res.comics || [] };
+    } catch {
+        return { comics: [] };
+    }
 };
 ```
 
-**Benefits**:
-- No hardcoded API URLs — the client manages routing
-- No manual `Authorization` header construction — passed via `auth` option
-- Full TypeScript types on request params and response shapes
-- Autocompletion in your editor for every endpoint
+**Always wrap in try/catch** — the backend might be unreachable. Return empty/null fallback data so the page renders gracefully instead of crashing with 500.
+
+**Client-side usage**: `import { encore } from '$lib/api/encore'` — same generated client, reads JWT token from browser cookie as `Authorization: Bearer` header.
 
 ---
 
@@ -118,9 +101,6 @@ const users = await client.auth.adminListUsers();
 
 ## 5. Complete homepage example
 
-The homepage `+page.server.ts` currently does 4 parallel `fetch()` calls with
-manual URL building and header construction. With the generated client:
-
 ```typescript
 // frontend-public/src/routes/+page.server.ts
 import { getEncoreClient } from '$lib/server/encore';
@@ -131,24 +111,24 @@ export const load: PageServerLoad = async ({ cookies }) => {
     const client = getEncoreClient(token);
 
     const [latest, popular, random] = await Promise.all([
-        client.comics.list({ limit: 4, sort: 'newest' }),
-        client.comics.list({ limit: 4, sort: 'popular' }),
-        client.comics.list({ limit: 1, sort: 'random' }),
+        client.comics.ListComics({ Page: 1, Limit: 4, Sort: 'newest' }),
+        client.comics.ListComics({ Page: 1, Limit: 4, Sort: 'popular' }),
+        client.comics.ListComics({ Page: 1, Limit: 1, Sort: 'random' }),
     ]);
 
-    let continueReading: any[] = [];
+    let continueReading: unknown[] = [];
     let continueProgress: Record<string, { current_page: number; total_pages: number }> = {};
 
     if (token) {
         try {
-            const cr = await client.reading.continueReading();
+            const cr = await client.reading.ContinueReading();
             const items = cr.items || [];
             for (const item of items) {
                 continueProgress[item.comic_id] = { current_page: item.current_page, total_pages: item.total_pages };
             }
             if (items.length > 0) {
-                const ids = items.map((i: any) => i.comic_id);
-                const batch = await client.comics.batchGet({ ids });
+                const ids = items.map(i => i.comic_id);
+                const batch = await client.comics.BatchGetComics({ ids });
                 continueReading = batch.comics || [];
             }
         } catch {}

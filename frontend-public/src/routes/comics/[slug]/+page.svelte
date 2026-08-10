@@ -278,7 +278,7 @@
 
 				{#if comic.uploader_id}
 					<div class="flex items-center gap-2 mt-1">
-						<div class="size-6 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center text-[10px] font-medium text-purple-600 dark:text-purple-300 flex-shrink-0">
+						<div class="size-6 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center text-[10px] font-medium text-purple-600 dark:text-purple-300 shrink-0">
 							{(comic.author || 'U').charAt(0).toUpperCase()}
 						</div>
 						<span class="text-xs text-muted-foreground">Uploader</span>
@@ -314,13 +314,13 @@
 				</div>
 
 				<div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-sm">
-					<div class="flex items-center gap-2"><Eye class="size-3.5 text-muted-foreground flex-shrink-0" /><span class="text-muted-foreground">Views</span><span class="ml-auto font-medium">{compactNum(comic.view_count)}</span></div>
-					<div class="flex items-center gap-2"><Download class="size-3.5 text-muted-foreground flex-shrink-0" /><span class="text-muted-foreground">Downloads</span><span class="ml-auto font-medium">{compactNum(comic.download_count)}</span></div>
-					<div class="flex items-center gap-2"><ThumbsDown class="size-3.5 text-muted-foreground flex-shrink-0" /><span class="text-muted-foreground">Dislikes</span><span class="ml-auto font-medium">{compactNum(comic.dislike_count)}</span></div>
-					<div class="flex items-center gap-2"><BookOpen class="size-3.5 text-muted-foreground flex-shrink-0" /><span class="text-muted-foreground">Pages</span><span class="ml-auto font-medium">{comic.page_keys?.length || 0}</span></div>
-					<div class="flex items-center gap-2"><BookOpenCheck class="size-3.5 text-muted-foreground flex-shrink-0" /><span class="text-muted-foreground">Published</span><span class="ml-auto font-medium text-xs">{formatDate(comic.published_at) || '-'}</span></div>
-					<div class="flex items-center gap-2"><Clock class="size-3.5 text-muted-foreground flex-shrink-0" /><span class="text-muted-foreground">Reading</span><span class="ml-auto font-medium">5 min</span></div>
-					<div class="flex items-center gap-2"><Globe class="size-3.5 text-muted-foreground flex-shrink-0" /><span class="text-muted-foreground">Language</span><span class="ml-auto font-medium uppercase">{comic.content_language}</span></div>
+					<div class="flex items-center gap-2"><Eye class="size-3.5 text-muted-foreground shrink-0" /><span class="text-muted-foreground">Views</span><span class="ml-auto font-medium">{compactNum(comic.view_count)}</span></div>
+					<div class="flex items-center gap-2"><Download class="size-3.5 text-muted-foreground shrink-0" /><span class="text-muted-foreground">Downloads</span><span class="ml-auto font-medium">{compactNum(comic.download_count)}</span></div>
+					<div class="flex items-center gap-2"><ThumbsDown class="size-3.5 text-muted-foreground shrink-0" /><span class="text-muted-foreground">Dislikes</span><span class="ml-auto font-medium">{compactNum(comic.dislike_count)}</span></div>
+					<div class="flex items-center gap-2"><BookOpen class="size-3.5 text-muted-foreground shrink-0" /><span class="text-muted-foreground">Pages</span><span class="ml-auto font-medium">{comic.page_keys?.length || 0}</span></div>
+					<div class="flex items-center gap-2"><BookOpenCheck class="size-3.5 text-muted-foreground shrink-0" /><span class="text-muted-foreground">Published</span><span class="ml-auto font-medium text-xs">{formatDate(comic.published_at) || '-'}</span></div>
+					<div class="flex items-center gap-2"><Clock class="size-3.5 text-muted-foreground shrink-0" /><span class="text-muted-foreground">Reading</span><span class="ml-auto font-medium">5 min</span></div>
+					<div class="flex items-center gap-2"><Globe class="size-3.5 text-muted-foreground shrink-0" /><span class="text-muted-foreground">Language</span><span class="ml-auto font-medium uppercase">{comic.content_language}</span></div>
 				</div>
 
 				<div class="flex flex-col gap-2 mt-4">

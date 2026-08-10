@@ -40,7 +40,7 @@
 		<div class="flex gap-4 overflow-x-auto pb-2 -mx-1 px-1">
 			{#each data.continueReading as comic}
 				{@const progress = data.continueProgress[comic.id]}
-				<div class="flex-shrink-0 w-48">
+				<div class="shrink-0 w-48">
 					<ComicCard {...comic} />
 					{#if progress}
 						<p class="text-xs text-muted-foreground text-center mt-1">Page {progress.current_page + 1} of {progress.total_pages}</p>

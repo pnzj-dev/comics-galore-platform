@@ -45,7 +45,7 @@
 		{#each comments as comment (comment.id)}
 			<div class="group">
 				<div class="flex items-start gap-2">
-					<div class="size-7 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center text-[10px] font-medium text-purple-600 dark:text-purple-300 flex-shrink-0 mt-0.5">
+					<div class="size-7 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center text-[10px] font-medium text-purple-600 dark:text-purple-300 shrink-0 mt-0.5">
 						{comment.user_id.charAt(0).toUpperCase()}
 					</div>
 					<div class="flex-1 min-w-0">

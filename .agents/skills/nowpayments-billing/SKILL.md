@@ -21,6 +21,54 @@ description: Implement Comics Galore crypto billing with NowPayments, plan matri
 
 Estimate → ensure balance/deposit if required → create subscription at provider → wait for status webhook → activate internal subscription and tier.
 
+## CreatePlan (auto-link)
+
+The `NowPaymentsProvider.CreatePlan` method calls `POST /v1/subscriptions/plans`.
+**Never hard-code raw `strconv.Atoi` on period strings** — periods like "month" are not numeric.
+
+### Request body contract
+```json
+{ "title": "Plan Name", "price_amount": 9.99, "price_currency": "usd", "period": 30 }
+```
+- `title` — plan name (string, required)
+- `price_amount` — USD price (float, required)
+- `price_currency` — always `"usd"`
+- `period` — **integer days** (number, required), not a string
+
+### Period mapping
+Use a `periodToDays()` helper to convert period strings to day counts:
+| Period | Days |
+|--------|------|
+| `day` | 1 |
+| `week` | 7 |
+| `month` | 30 |
+| `quarter` | 90 |
+| `semester` | 180 |
+| `year` | 365 |
+
+### Auto-link endpoint (backend)
+
+`POST /admin/plans/:id/auto-link` (tiers service, admin-only):
+1. Fetch plan from DB → get `name`, `price_usd_cents`, `interval`
+2. Map interval string via `intervalToPeriod()` ("monthly"→"month"), then `periodToDays()` ("month"→30)
+3. Call `billing.CreatePlan()` → NowPayments API → get back `provider_plan_id`
+4. Store `provider_plan_id` on the plan in DB
+5. Return `{ provider_plan_id, plan_name }`
+
+### Lock guard
+
+`PATCH /admin/plans/:id` refuses update if the plan already has a non-empty `provider_plan_id`. Returns error: `"plan already linked to provider plan ID: {id}"`. Prevents accidental re-linking.
+
+### Admin link wizard (frontend)
+
+Modal in `frontend-admin/src/lib/components/NowPaymentsLinkWizard.svelte`:
+- **Manual mode**: admin types NowPayments plan IDs into a sortable table, clicks "Link" per row
+- **Automatic mode**: admin clicks "Link All" → calls `POST /admin/plans/:id/auto-link` for each unlinked plan → shows progress bar (% complete) → log lines per result
+- Plans display name includes interval (except "Free" tier): e.g. "Bronze - Monthly"
+- Sortable table headers: Plan name, Interval, Price
+- Free tier excluded from interval display
+- Submit button uses standardized pattern: `autoLinking ? 'Linking...' : 'Link All'`
+
 ## Reliability
 
 - Idempotent webhook handling.

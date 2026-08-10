@@ -15,13 +15,37 @@ description: Implement Comics Galore comic creation including presigned uploads,
 
 ## V1 vs later
 
-- **V1** — manual form path only (must work).
+- **V1** — manual form path with full-width 3-section layout:
+  Row 1: metadata fields (`1fr`) + 3:4 cover dropzone (320px, Cloudflare `CloudflarePresignedUpload`)
+  Row 2: preview image grid (Cloudflare, 2:3 aspect slots, min 2, max 10, "+ Add" button)
+  Row 3: archive file grid (S3 presigned, square slots, min 1, max 10)
+  Submit: standardized `submitting ? 'Publishing...' : 'Publish Comic'` button.
 - **SOON** — archive + `comic.json` via libarchive.js in the browser, same payload and API.
 
 ## Upload sessions
 
 - Use sessions for large/resumable uploads when implementing recovery.
 - Confirm parts, then finalise by calling `POST /comics` (not a separate create semantics).
+
+## Tab navigation (upload page)
+
+Upload page uses **query-param tabs** for bookmarkable state:
+```
+/upload?tab=list     → My Comics grid
+/upload?tab=manual   → ComicForm
+/upload?tab=archive  → ArchiveForm
+```
+Tab param read server-side in `+page.server.ts` via `url.searchParams.get('tab')`. Switch tabs with `goto('/upload?tab=manual')` — no local `$state`.
+
+**Server-side sessions**: Active upload sessions loaded in `+page.server.ts` alongside the comics list (via `Promise.allSettled`), not in `onMount`.
+
+**Success redirect**: After creation, both ComicForm and ArchiveForm call `goto('/upload?tab=list')` to refresh the grid with the new comic.
+
+## Form submission pattern
+
+Cover and preview images use **Cloudflare** (`encore.upload.CloudflarePresignedUpload()`) with XHR progress tracking. Archives use **S3** (`CreateSession` → `PresignUpload` → upload via `fetch` → `ConfirmPart`).
+
+Validation before submit: title required, cover required, at least one archive required. Errors shown as `<p class="text-sm text-destructive">`.
 
 ## Language
 
