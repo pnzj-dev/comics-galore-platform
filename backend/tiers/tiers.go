@@ -215,8 +215,9 @@ func AutoLinkPlan(ctx context.Context, id string) (*AutoLinkPlanResponse, error)
 	period := intervalToPeriod(plan.Interval)
 	displayName := plan.Name
 	if displayName == "" {
-		displayName = plan.TierID + " - " + plan.Interval
+		displayName = plan.TierID
 	}
+	displayName += " - " + plan.Interval
 
 	resp, err := billing.CreatePlan(ctx, billing.CreatePlanRequest{
 		Name:        displayName,
