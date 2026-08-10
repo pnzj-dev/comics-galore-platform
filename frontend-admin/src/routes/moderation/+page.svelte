@@ -23,14 +23,14 @@
 			url.searchParams.set('page', '1');
 			if (value) url.searchParams.set('search', value);
 			else url.searchParams.delete('search');
-			goto(url.pathname + url.search);
+			goto(url.pathname + url.search, { keepFocus: true });
 		}, 300);
 	}
 
 	function handlePage(p: number) {
 		const url = new URL(page.url);
 		url.searchParams.set('page', String(p));
-		goto(url.pathname + url.search);
+		goto(url.pathname + url.search, { keepFocus: true });
 	}
 
 	async function approve(id: string) {

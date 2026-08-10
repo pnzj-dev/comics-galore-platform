@@ -49,7 +49,7 @@
 	async function onPage(p: number) {
 		const url = new URL(page.url);
 		url.searchParams.set('page', String(p));
-		await goto(url.pathname + url.search);
+		await goto(url.pathname + url.search, { keepFocus: true });
 	}
 
 	async function deleteComic(id: string) {

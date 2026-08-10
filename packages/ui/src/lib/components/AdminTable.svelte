@@ -56,6 +56,15 @@
 	let searchTerm = $state(search);
 	let searchTimer = $state<ReturnType<typeof setTimeout>>();
 	let filterTimers = $state<Record<string, ReturnType<typeof setTimeout>>>({});
+	let filterValues = $state<Record<string, string>>({});
+
+	$effect(() => {
+		const next: Record<string, string> = {};
+		for (const [k, v] of Object.entries(filters)) {
+			if (v) next[k] = v;
+		}
+		filterValues = next;
+	});
 
 	function handleSearchInput(value: string) {
 		searchTerm = value;
@@ -144,8 +153,8 @@
 									<input
 										type="text"
 										placeholder={col.filterPlaceholder || col.label}
-										value={filters[col.key] || ''}
-										oninput={(e) => handleFilterInput(col.key, (e.target as HTMLInputElement).value)}
+										bind:value={filterValues[col.key]}
+										oninput={() => handleFilterInput(col.key, filterValues[col.key])}
 										class="w-full rounded border border-input bg-background px-2 py-1 text-xs"
 									/>
 								{:else if col.filterable && col.filterType === 'select' && col.filterOptions}
