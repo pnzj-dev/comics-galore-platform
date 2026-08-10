@@ -8,8 +8,7 @@
 
 	let { data } = $props();
 
-	let results = $state(data.results);
-	let loading = $state(false);
+	let results = $derived(data.results);
 	let confirmDelete = $state('');
 
 	const columns = [
@@ -57,8 +56,8 @@
 
 	async function deleteComic(id: string) {
 		await encore.comics.DeleteComic(id);
-		results = results.filter(c => c.id !== id);
 		confirmDelete = '';
+		await goto($page.url.pathname + $page.url.search);
 	}
 
 	function statusClass(s: string): string {

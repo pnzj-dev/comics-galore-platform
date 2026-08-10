@@ -7,7 +7,7 @@
 
 	let { data } = $props();
 
-	let results = $state(data.results);
+	let results = $derived(data.results);
 	let actionLoading = $state('');
 
 	const columns = [
@@ -51,15 +51,15 @@
 	async function restoreComic(id: string) {
 		actionLoading = id;
 		await encore.comics.RestoreComic(id);
-		results = results.filter(c => c.id !== id);
 		actionLoading = '';
+		await goto($page.url.pathname + $page.url.search);
 	}
 
 	async function permanentDelete(id: string) {
 		actionLoading = id;
 		await encore.comics.DeleteComic(id);
-		results = results.filter(c => c.id !== id);
 		actionLoading = '';
+		await goto($page.url.pathname + $page.url.search);
 	}
 </script>
 

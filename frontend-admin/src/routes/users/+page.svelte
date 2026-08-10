@@ -7,7 +7,7 @@
 
 	let { data } = $props();
 
-	let results = $state(data.results);
+	let results = $derived(data.results);
 
 	const columns = [
 		{ key: 'email', label: 'Email', sortable: true, filterable: true, filterType: 'text' as const, filterPlaceholder: 'Filter...' },
@@ -58,27 +58,27 @@
 
 	async function changeRole(userId: string, newRole: string) {
 		await encore.auth.AdminUpdateUserRole(userId, { role: newRole });
-		results = results.map(u => u.id === userId ? { ...u, role: newRole } : u);
+		await goto($page.url.pathname + $page.url.search);
 	}
 
 	async function banUser(userId: string) {
 		await encore.auth.AdminBanUser(userId, { reason: '' });
-		results = results.map(u => u.id === userId ? { ...u, banned_at: new Date().toISOString() } : u);
+		await goto($page.url.pathname + $page.url.search);
 	}
 
 	async function unbanUser(userId: string) {
 		await encore.auth.AdminUnbanUser(userId);
-		results = results.map(u => u.id === userId ? { ...u, banned_at: null } : u);
+		await goto($page.url.pathname + $page.url.search);
 	}
 
 	async function suspendUser(userId: string) {
 		await encore.auth.AdminSuspendUser(userId, { reason: '' });
-		results = results.map(u => u.id === userId ? { ...u, suspended_at: new Date().toISOString() } : u);
+		await goto($page.url.pathname + $page.url.search);
 	}
 
 	async function unsuspendUser(userId: string) {
 		await encore.auth.AdminUnsuspendUser(userId);
-		results = results.map(u => u.id === userId ? { ...u, suspended_at: null } : u);
+		await goto($page.url.pathname + $page.url.search);
 	}
 
 	function statusBadge(u: Record<string, unknown>): string {
