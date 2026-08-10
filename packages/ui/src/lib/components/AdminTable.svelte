@@ -1,7 +1,17 @@
 <script lang="ts">
+	import { createTable, FlexRender } from '@tanstack/svelte-table';
+	import {
+		tableFeatures,
+		rowSortingFeature,
+		columnFilteringFeature,
+		rowPaginationFeature,
+		createColumnHelper,
+		filterFn_includesString,
+		filterFn_equalsString,
+	} from '@tanstack/svelte-table';
 	import { Button } from '$lib/components/ui/button/index.js';
 
-	type Column = {
+	type ColumnDef = {
 		key: string;
 		label: string;
 		sortable?: boolean;
@@ -12,7 +22,7 @@
 	};
 
 	interface Props {
-		columns: Column[];
+		columns: ColumnDef[];
 		data: Record<string, unknown>[];
 		total: number;
 		page: number;
@@ -27,12 +37,12 @@
 		onSearch: (value: string) => void;
 		onFilter: (key: string, value: string) => void;
 		onPage: (page: number) => void;
-		children: import('svelte').Snippet<[item: Record<string, unknown>, col: Column]>;
+		children: import('svelte').Snippet<[item: Record<string, unknown>, col: ColumnDef]>;
 		actions: import('svelte').Snippet<[item: Record<string, unknown>]>;
 	}
 
 	let {
-		columns,
+		columns: columnDefs,
 		data,
 		total,
 		page,
@@ -48,7 +58,7 @@
 		onFilter,
 		onPage,
 		children,
-		actions
+		actions,
 	}: Props = $props();
 
 	const totalPages = $derived(Math.max(1, Math.ceil(total / limit)));
@@ -56,13 +66,6 @@
 	let searchTerm = $state(search);
 	let searchTimer = $state<ReturnType<typeof setTimeout>>();
 	let filterTimers = $state<Record<string, ReturnType<typeof setTimeout>>>({});
-	// svelte-ignore state_referenced_locally
-	let filterValues = $state<Record<string, string>>({ ...filters });
-
-	// Resync local filter values if the parent resets/clears `filters` externally
-	$effect(() => {
-		filterValues = { ...filters };
-	});
 
 	function handleSearchInput(value: string) {
 		searchTerm = value;
@@ -71,24 +74,70 @@
 	}
 
 	function handleFilterInput(key: string, value: string) {
-		filterValues[key] = value;
 		if (filterTimers[key]) clearTimeout(filterTimers[key]);
 		filterTimers[key] = setTimeout(() => onFilter(key, value), 300);
 	}
 
-	function handleSort(key: string) {
-		if (!columns.find(c => c.key === key)?.sortable) return;
-		let nextDir: 'asc' | 'desc' = 'asc';
-		if (sortKey === key) {
-			nextDir = sortDir === 'asc' ? 'desc' : 'asc';
-		}
-		onSort(key, nextDir);
-	}
+	const columnHelper = createColumnHelper<Record<string, unknown>>();
 
-	function sortArrow(key: string): string {
-		if (sortKey !== key) return ' ↕';
-		return sortDir === 'asc' ? ' ↑' : ' ↓';
-	}
+	const tableColumns = $derived(
+		columnDefs.map((col) =>
+			columnHelper.accessor(col.key, {
+				header: col.label,
+				enableSorting: col.sortable ?? false,
+				enableColumnFilter: col.filterable ?? false,
+				filterFn: col.filterType === 'select' ? filterFn_equalsString : filterFn_includesString,
+				meta: {
+					filterType: col.filterType,
+					filterOptions: col.filterOptions,
+					filterPlaceholder: col.filterPlaceholder ?? col.label,
+				},
+			})
+		)
+	);
+
+	const sortingState = $derived(sortKey ? [{ id: sortKey, desc: sortDir === 'desc' }] : []);
+	const filterState = $derived(
+		Object.entries(filters)
+			.filter(([_, v]) => v)
+			.map(([id, value]) => ({ id, value }))
+	);
+
+	const table = createTable({
+		features: tableFeatures({
+			rowSortingFeature,
+			columnFilteringFeature,
+			rowPaginationFeature,
+		}),
+		columns: tableColumns,
+		get data() {
+			return data;
+		},
+		get rowCount() {
+			return total;
+		},
+		manualPagination: true,
+		manualSorting: true,
+		manualFiltering: true,
+		state: {
+			get sorting() {
+				return sortingState;
+			},
+			get columnFilters() {
+				return filterState;
+			},
+			get pagination() {
+				return { pageIndex: page - 1, pageSize: limit };
+			},
+		},
+		onSortingChange: (updater) => {
+			const prev = table.getState().sorting;
+			const next = typeof updater === 'function' ? updater(prev) : updater;
+			if (next.length > 0) {
+				onSort(next[0].id, next[0].desc ? 'desc' : 'asc');
+			}
+		},
+	});
 </script>
 
 <div class="space-y-3">
@@ -105,29 +154,44 @@
 	<div class="rounded-xl border border-border overflow-hidden">
 		<table class="w-full text-sm">
 			<thead>
-				<tr class="border-b bg-muted/50 text-left">
-					{#each columns as col}
-						<th class="px-4 py-2.5 font-medium whitespace-nowrap">
-							<button
-								onclick={() => handleSort(col.key)}
-								class="hover:text-primary transition-colors cursor-pointer border-0 bg-transparent p-0 text-inherit select-none"
-								disabled={!col.sortable}
-							>
-								{col.label}{sortArrow(col.key)}
-							</button>
-						</th>
-					{/each}
-					<th class="px-4 py-2.5 w-24"></th>
-				</tr>
+				{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
+					<tr class="border-b bg-muted/50 text-left">
+						{#each headerGroup.headers as header (header.id)}
+							<th class="px-4 py-2.5 font-medium whitespace-nowrap">
+								{#if header.column.getCanSort()}
+									<button
+										onclick={header.column.getToggleSortingHandler()}
+										class="hover:text-primary transition-colors cursor-pointer border-0 bg-transparent p-0 text-inherit select-none"
+									>
+										<FlexRender
+											header={header}
+											content={header.column.columnDef.header}
+										/>
+										{#if header.column.getIsSorted() === 'asc'} ↑
+										{:else if header.column.getIsSorted() === 'desc'} ↓
+										{:else} ↕
+										{/if}
+									</button>
+								{:else}
+									<FlexRender
+										header={header}
+										content={header.column.columnDef.header}
+									/>
+								{/if}
+							</th>
+						{/each}
+						<th class="px-4 py-2.5 w-24"></th>
+					</tr>
+				{/each}
 				<tr class="border-b bg-muted/30">
-					{#each columns as col}
+					{#each columnDefs as col}
 						<td class="px-3 py-1.5">
 							{#if col.filterable && col.filterType === 'text'}
 								<input
 									type="text"
 									placeholder={col.filterPlaceholder || col.label}
-									bind:value={filterValues[col.key]}
-									oninput={() => handleFilterInput(col.key, filterValues[col.key])}
+									value={filters[col.key] || ''}
+									oninput={(e) => handleFilterInput(col.key, (e.target as HTMLInputElement).value)}
 									class="w-full rounded border border-input bg-background px-2 py-1 text-xs"
 								/>
 							{:else if col.filterable && col.filterType === 'select' && col.filterOptions}
@@ -148,37 +212,28 @@
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-border">
-				{#if loading}
-					{#each Array(5) as _}
-						<tr>
-							{#each columns as _}
-								<td class="px-4 py-2.5"><div class="h-3 bg-muted rounded w-full animate-pulse"></div></td>
-							{/each}
-							<td class="px-4 py-2.5"><div class="h-3 bg-muted rounded w-16 animate-pulse"></div></td>
-						</tr>
-					{/each}
-				{:else if data.length === 0}
+				{#if data.length === 0}
 					<tr>
-						<td colspan={columns.length + 1} class="px-4 py-8 text-center text-sm text-muted-foreground">
+						<td colspan={columnDefs.length + 1} class="px-4 py-8 text-center text-sm text-muted-foreground">
 							{emptyMessage}
 						</td>
 					</tr>
 				{:else}
-					{#each data as row (row.id as string)}
+					{#each table.getRowModel().rows as row (row.id)}
 						<tr class="hover:bg-muted/30">
-							{#each columns as col}
+							{#each row.getAllCells() as cell (cell.id)}
 								<td class="px-4 py-2.5">
 									{#if children}
-										{@render children(row, col)}
+										{@render children(row.original, columnDefs.find(c => c.key === cell.column.id) ?? columnDefs[0])}
 									{:else}
-										<span class="text-xs">{row[col.key] as string}</span>
+										<FlexRender cell={cell} content={cell.column.columnDef.cell} />
 									{/if}
 								</td>
 							{/each}
 							<td class="px-4 py-2.5">
 								{#if actions}
 									<div class="flex items-center gap-1">
-										{@render actions(row)}
+										{@render actions(row.original)}
 									</div>
 								{/if}
 							</td>

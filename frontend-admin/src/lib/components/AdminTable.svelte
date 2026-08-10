@@ -221,7 +221,7 @@
 				{:else}
 					{#each table.getRowModel().rows as row (row.id)}
 						<tr class="hover:bg-muted/30">
-							{#each row.getVisibleCells() as cell (cell.id)}
+							{#each row.getAllCells() as cell (cell.id)}
 								<td class="px-4 py-2.5">
 									{#if children}
 										{@render children(row.original, columnDefs.find(c => c.key === cell.column.id) ?? columnDefs[0])}
