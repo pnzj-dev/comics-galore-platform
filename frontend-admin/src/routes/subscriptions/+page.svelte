@@ -65,7 +65,7 @@
 	>
 		{#snippet children(row, col)}
 			{#if col.key === 'user_id' || col.key === 'plan_id'}
-				<span class="font-mono text-xs truncate block max-w-[120px]" title={String(row[col.key])}>{String(row[col.key])}</span>
+				<span class="font-mono text-xs truncate block" title={String(row[col.key])}>{String(row[col.key])}</span>
 			{:else if col.key === 'status'}
 				<span class="text-xs px-2 py-0.5 rounded-full {row.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}">{row.status as string}</span>
 			{:else if col.key === 'tier'}
