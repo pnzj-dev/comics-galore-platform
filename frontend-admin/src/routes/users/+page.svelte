@@ -103,7 +103,6 @@
 		sortDir={data.sortDir as 'asc' | 'desc'}
 		search={data.search}
 		filters={data.filters as Record<string, string>}
-		loading={false}
 		{onSort}
 		{onSearch}
 		{onFilter}

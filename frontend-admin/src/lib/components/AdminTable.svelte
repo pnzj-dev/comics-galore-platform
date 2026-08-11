@@ -30,7 +30,6 @@
 		sortDir: 'asc' | 'desc';
 		search: string;
 		filters: Record<string, string>;
-		loading: boolean;
 		emptyMessage?: string;
 		onSort: (key: string, dir: 'asc' | 'desc') => void;
 		onSearch: (value: string) => void;
@@ -50,7 +49,6 @@
 		sortDir,
 		search,
 		filters,
-		loading,
 		emptyMessage = 'No results found.',
 		onSort,
 		onSearch,
