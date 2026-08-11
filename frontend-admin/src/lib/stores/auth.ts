@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { goto } from '$app/navigation';
 import { encore } from '$lib/api/encore';
 import type { User } from '$lib/api/encore-client';
 
@@ -57,8 +58,9 @@ export async function fetchMe(): Promise<User | null> {
 	}
 }
 
-export function logout() {
+export async function logout() {
 	clearToken();
 	currentUser.set(null);
 	isAuthenticated.set(false);
+	await goto('/login');
 }
