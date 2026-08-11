@@ -4,21 +4,47 @@
 	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AdminTable from '$lib/components/AdminTable.svelte';
+	import { createColumnHelper, renderComponent } from '@tanstack/svelte-table';
+	import SortHeader from '$lib/components/SortHeader.svelte';
 
 	let { data } = $props();
-
-	let results = $derived(data.results);
 	let actionLoading = $state('');
 
-	const columns = [
-		{ key: 'title', label: 'Title', sortable: true, filterable: true, filterType: 'text' as const, filterPlaceholder: 'Filter...' },
-		{ key: 'author', label: 'Author', sortable: true, filterable: true, filterType: 'text' as const, filterPlaceholder: 'Filter...' },
-		{ key: 'status', label: 'Status', sortable: true, filterable: true, filterType: 'select' as const, filterOptions: [
-			{ value: 'published', label: 'Published' },
-			{ value: 'pending_review', label: 'Pending' },
-			{ value: 'rejected', label: 'Rejected' },
-		]},
-	];
+	const columnHelper = createColumnHelper<Record<string, unknown>>();
+
+	const columns = columnHelper.columns([
+		columnHelper.accessor('title', {
+			header: ({ header }) => renderComponent(SortHeader, { label: 'Title', header }),
+			enableSorting: true,
+			enableColumnFilter: true,
+			meta: { filterType: 'text', filterPlaceholder: 'Filter...' },
+			cell: ({ getValue }) => getValue(),
+		}),
+		columnHelper.accessor('author', {
+			header: ({ header }) => renderComponent(SortHeader, { label: 'Author', header }),
+			enableSorting: true,
+			enableColumnFilter: true,
+			meta: { filterType: 'text', filterPlaceholder: 'Filter...' },
+			cell: ({ getValue }) => getValue() || '—',
+		}),
+		columnHelper.accessor('status', {
+			header: ({ header }) => renderComponent(SortHeader, { label: 'Status', header }),
+			enableSorting: true,
+			enableColumnFilter: true,
+			meta: {
+				filterType: 'select',
+				filterOptions: [
+					{ value: 'published', label: 'Published' },
+					{ value: 'pending_review', label: 'Pending' },
+					{ value: 'rejected', label: 'Rejected' },
+				],
+			},
+			cell: ({ getValue }) => {
+				const s = getValue() as string;
+				return s?.replace('_', ' ') || '';
+			},
+		}),
+	]);
 
 	function buildUrl(updates: Record<string, string | undefined>) {
 		const url = new URL(page.url);
@@ -29,32 +55,20 @@
 		}
 		return url.pathname + url.search;
 	}
-
-	async function onSort(key: string, dir: 'asc' | 'desc') {
-		await goto(buildUrl({ sort: key, sort_dir: dir }));
-	}
-
-	async function onSearch(value: string) {
-		await goto(buildUrl({ search: value || undefined }));
-	}
-
-	async function onFilter(key: string, value: string) {
-		await goto(buildUrl({ [`filter_${key}`]: value || undefined }));
-	}
-
+	async function onSort(key: string, dir: 'asc' | 'desc') { await goto(buildUrl({ sort: key, sort_dir: dir })); }
+	async function onSearch(value: string) { await goto(buildUrl({ search: value || undefined })); }
+	async function onFilter(key: string, value: string) { await goto(buildUrl({ [`filter_${key}`]: value || undefined })); }
 	async function onPage(p: number) {
 		const url = new URL(page.url);
 		url.searchParams.set('page', String(p));
 		await goto(url.pathname + url.search, { keepFocus: true });
 	}
-
 	async function restoreComic(id: string) {
 		actionLoading = id;
 		await encore.comics.RestoreComic(id);
 		actionLoading = '';
 		await goto(page.url.pathname + page.url.search);
 	}
-
 	async function permanentDelete(id: string) {
 		actionLoading = id;
 		await encore.comics.DeleteComic(id);
@@ -70,7 +84,7 @@
 
 	<AdminTable
 		{columns}
-		data={results as Record<string, unknown>[]}
+		data={data.results as Record<string, unknown>[]}
 		total={data.total}
 		page={data.page}
 		limit={data.limit}
@@ -78,21 +92,12 @@
 		sortDir={data.sortDir as 'asc' | 'desc'}
 		search={data.search}
 		filters={data.filters as Record<string, string>}
+		emptyMessage="Recycle bin is empty."
 		{onSort}
 		{onSearch}
 		{onFilter}
 		{onPage}
-		emptyMessage="Recycle bin is empty."
 	>
-		{#snippet children(row, col)}
-			{#if col.key === 'title'}
-				<a href={`http://localhost:5173/comics/${row.slug}`} target="_blank" class="hover:text-primary text-xs">{row.title as string}</a>
-			{:else if col.key === 'author'}
-				<span class="text-xs text-muted-foreground">{row.author as string || '—'}</span>
-			{:else if col.key === 'status'}
-				<span class="text-xs px-2 py-0.5 rounded-full w-fit {(row.status as string) === 'published' ? 'bg-green-100 text-green-700' : (row.status as string) === 'pending_review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}">{(row.status as string)?.replace('_', ' ')}</span>
-			{/if}
-		{/snippet}
 		{#snippet actions(row)}
 			<Button size="sm" variant="outline" onclick={() => restoreComic(row.id as string)} disabled={actionLoading === row.id}>Restore</Button>
 			<Button size="sm" variant="destructive" onclick={() => permanentDelete(row.id as string)} disabled={actionLoading === row.id}>Delete</Button>

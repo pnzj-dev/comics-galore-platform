@@ -3,26 +3,67 @@
 	import { page } from '$app/state';
 	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { BookOpenCheck } from 'lucide-svelte';
 	import AdminTable from '$lib/components/AdminTable.svelte';
+	import { createColumnHelper, renderComponent } from '@tanstack/svelte-table';
+	import SortHeader from '$lib/components/SortHeader.svelte';
 
 	let { data } = $props();
-
-	let results = $derived(data.results);
 	let confirmDelete = $state('');
 
-	const columns = [
-		{ key: 'title', label: 'Title', sortable: true, filterable: true, filterType: 'text' as const, filterPlaceholder: 'Filter...' },
-		{ key: 'author', label: 'Author', sortable: true, filterable: true, filterType: 'text' as const, filterPlaceholder: 'Filter...' },
-		{ key: 'status', label: 'Status', sortable: true, filterable: true, filterType: 'select' as const, filterOptions: [
-			{ value: 'published', label: 'Published' },
-			{ value: 'pending_review', label: 'Pending' },
-			{ value: 'rejected', label: 'Rejected' },
-		]},
-		{ key: 'view_count', label: 'Views', sortable: true },
-		{ key: 'download_count', label: 'Downloads', sortable: true },
-		{ key: 'created_at', label: 'Created', sortable: true },
-	];
+	const columnHelper = createColumnHelper<Record<string, unknown>>();
+
+	const columns = columnHelper.columns([
+		columnHelper.accessor('title', {
+			header: ({ header }) => renderComponent(SortHeader, { label: 'Title', header }),
+			enableSorting: true,
+			enableColumnFilter: true,
+			meta: { filterType: 'text', filterPlaceholder: 'Filter...' },
+			cell: ({ row }) => row.getValue(),
+		}),
+		columnHelper.accessor('author', {
+			header: ({ header }) => renderComponent(SortHeader, { label: 'Author', header }),
+			enableSorting: true,
+			enableColumnFilter: true,
+			meta: { filterType: 'text', filterPlaceholder: 'Filter...' },
+			cell: ({ getValue }) => getValue() || '—',
+		}),
+		columnHelper.accessor('status', {
+			header: ({ header }) => renderComponent(SortHeader, { label: 'Status', header }),
+			enableSorting: true,
+			enableColumnFilter: true,
+			meta: {
+				filterType: 'select',
+				filterOptions: [
+					{ value: 'published', label: 'Published' },
+					{ value: 'pending_review', label: 'Pending' },
+					{ value: 'rejected', label: 'Rejected' },
+				],
+			},
+			cell: ({ getValue }) => {
+				const s = getValue() as string;
+				const cls = s === 'published' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : s === 'pending_review' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+				return `<span class="text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${cls}">${s === 'published' ? '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open-check"><path d="M12 21V7"/><path d="M16 21V7"/><path d="M8 21V7"/><path d="M3 13h2l1 2 3-5 1 1.5 2-3"/></svg>' : ''}${(s as string)?.replace('_', ' ')}</span>`;
+			},
+		}),
+		columnHelper.accessor('view_count', {
+			header: ({ header }) => renderComponent(SortHeader, { label: 'Views', header }),
+			enableSorting: true,
+			cell: ({ getValue }) => getValue(),
+		}),
+		columnHelper.accessor('download_count', {
+			header: ({ header }) => renderComponent(SortHeader, { label: 'Downloads', header }),
+			enableSorting: true,
+			cell: ({ getValue }) => getValue(),
+		}),
+		columnHelper.accessor('created_at', {
+			header: ({ header }) => renderComponent(SortHeader, { label: 'Created', header }),
+			enableSorting: true,
+			cell: ({ getValue }) => {
+				const d = getValue() as string;
+				return new Date(d).toLocaleDateString();
+			},
+		}),
+	]);
 
 	function buildUrl(updates: Record<string, string | undefined>) {
 		const url = new URL(page.url);
@@ -37,29 +78,21 @@
 	async function onSort(key: string, dir: 'asc' | 'desc') {
 		await goto(buildUrl({ sort: key, sort_dir: dir }));
 	}
-
 	async function onSearch(value: string) {
 		await goto(buildUrl({ search: value || undefined }));
 	}
-
 	async function onFilter(key: string, value: string) {
 		await goto(buildUrl({ [`filter_${key}`]: value || undefined }));
 	}
-
 	async function onPage(p: number) {
 		const url = new URL(page.url);
 		url.searchParams.set('page', String(p));
 		await goto(url.pathname + url.search, { keepFocus: true });
 	}
-
 	async function deleteComic(id: string) {
 		await encore.comics.DeleteComic(id);
 		confirmDelete = '';
 		await goto(page.url.pathname + page.url.search);
-	}
-
-	function statusClass(s: string): string {
-		return s === 'published' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : s === 'pending_review' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
 	}
 </script>
 
@@ -70,7 +103,7 @@
 
 	<AdminTable
 		{columns}
-		data={results as Record<string, unknown>[]}
+		data={data.results as Record<string, unknown>[]}
 		total={data.total}
 		page={data.page}
 		limit={data.limit}
@@ -83,24 +116,6 @@
 		{onFilter}
 		{onPage}
 	>
-		{#snippet children(row, col)}
-			{#if col.key === 'title'}
-				<a href={`http://localhost:5173/comics/${row.slug}`} target="_blank" class="hover:text-primary text-xs">{row.title as string}</a>
-			{:else if col.key === 'author'}
-				<span class="text-xs text-muted-foreground">{row.author as string || '—'}</span>
-			{:else if col.key === 'status'}
-				<span class="text-xs px-2 py-0.5 rounded-full flex items-center gap-1 w-fit {statusClass(row.status as string)}">
-					{#if row.status === 'published'}<BookOpenCheck class="size-3" />{/if}
-					{(row.status as string)?.replace('_', ' ')}
-				</span>
-			{:else if col.key === 'view_count'}
-				<span class="text-xs">{row.view_count as number}</span>
-			{:else if col.key === 'download_count'}
-				<span class="text-xs">{row.download_count as number}</span>
-			{:else if col.key === 'created_at'}
-				<span class="text-xs text-muted-foreground">{new Date(row.created_at as string).toLocaleDateString()}</span>
-			{/if}
-		{/snippet}
 		{#snippet actions(row)}
 			{#if confirmDelete === row.id}
 				<Button size="sm" variant="destructive" onclick={() => deleteComic(row.id as string)}>Confirm</Button>
