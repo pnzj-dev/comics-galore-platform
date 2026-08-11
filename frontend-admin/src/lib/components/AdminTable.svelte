@@ -3,6 +3,7 @@
 	import {
 		tableFeatures,
 		rowSortingFeature,
+		columnFilteringFeature,
 		rowPaginationFeature,
 		createColumnHelper,
 	} from '@tanstack/svelte-table';
@@ -61,17 +62,12 @@
 	const totalPages = $derived(Math.max(1, Math.ceil(total / limit)));
 	let searchTerm = $state(search);
 	let searchTimer = $state<ReturnType<typeof setTimeout>>();
-	let filterTimers = $state<Record<string, ReturnType<typeof setTimeout>>>({});
+	let filterTimer = $state<ReturnType<typeof setTimeout>>();
 
 	function handleSearchInput(value: string) {
 		searchTerm = value;
 		if (searchTimer) clearTimeout(searchTimer);
 		searchTimer = setTimeout(() => onSearch(value), 300);
-	}
-
-	function handleFilterInput(key: string, value: string) {
-		if (filterTimers[key]) clearTimeout(filterTimers[key]);
-		filterTimers[key] = setTimeout(() => onFilter(key, value), 300);
 	}
 
 	const columnHelper = createColumnHelper<Record<string, unknown>>();
@@ -81,6 +77,12 @@
 			columnHelper.accessor(col.key, {
 				header: col.label,
 				enableSorting: col.sortable ?? false,
+				enableColumnFilter: col.filterable ?? false,
+				meta: {
+					filterType: col.filterType,
+					filterOptions: col.filterOptions,
+					filterPlaceholder: col.filterPlaceholder ?? col.label,
+				},
 			})
 		)
 	);
@@ -89,9 +91,16 @@
 		sortKey ? [{ id: sortKey, desc: sortDir === 'desc' }] : []
 	);
 
+	const filterState = $derived(
+		Object.entries(filters)
+			.filter(([_, v]) => v)
+			.map(([id, value]) => ({ id, value }))
+	);
+
 	const table = createTable({
 		features: tableFeatures({
 			rowSortingFeature,
+			columnFilteringFeature,
 			rowPaginationFeature,
 		}),
 		columns: tableColumns,
@@ -99,8 +108,10 @@
 		get rowCount() { return total; },
 		manualPagination: true,
 		manualSorting: true,
+		manualFiltering: true,
 		state: {
-			get sorting() { return sortingState as any; },
+			get sorting() { return sortingState; },
+			get columnFilters() { return filterState as any; },
 			get pagination() { return { pageIndex: page - 1, pageSize: limit }; },
 		},
 		onSortingChange: (updater) => {
@@ -109,6 +120,26 @@
 			if (next.length > 0) {
 				onSort(next[0].id, next[0].desc ? 'desc' : 'asc');
 			}
+		},
+		onColumnFiltersChange: (updater) => {
+			if (filterTimer) clearTimeout(filterTimer);
+			filterTimer = setTimeout(() => {
+				const prev = table.getState().columnFilters;
+				const next = typeof updater === 'function' ? updater(prev) : updater;
+				const prevIds = new Map(prev.map(f => [f.id, f.value]));
+				const nextIds = new Map(next.map(f => [f.id, f.value]));
+
+				for (const [id, value] of nextIds) {
+					if (prevIds.get(id) !== value) {
+						onFilter(id, String(value ?? ''));
+					}
+				}
+				for (const [id] of prevIds) {
+					if (!nextIds.has(id)) {
+						onFilter(id, '');
+					}
+				}
+			}, 300);
 		},
 	});
 </script>
@@ -130,59 +161,58 @@
 				{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
 					<tr class="border-b bg-muted/50 text-left">
 						{#each headerGroup.headers as header (header.id)}
-							<th class="px-4 py-2.5 font-medium whitespace-nowrap">
-								{#if header.column.getCanSort()}
-									<button
-										onclick={header.column.getToggleSortingHandler()}
-										class="hover:text-primary transition-colors cursor-pointer border-0 bg-transparent p-0 text-inherit select-none"
-									>
+							<th class="px-4 py-2.5 font-medium whitespace-nowrap align-top">
+								<div>
+									{#if header.column.getCanSort()}
+										<button
+											onclick={header.column.getToggleSortingHandler()}
+											class="hover:text-primary transition-colors cursor-pointer border-0 bg-transparent p-0 text-inherit select-none"
+										>
+											<FlexRender
+												header={header}
+												content={header.column.columnDef.header}
+											/>
+											{#if header.column.getIsSorted() === 'asc'} ↑
+											{:else if header.column.getIsSorted() === 'desc'} ↓
+											{:else} ↕
+											{/if}
+										</button>
+									{:else}
 										<FlexRender
 											header={header}
 											content={header.column.columnDef.header}
 										/>
-										{#if header.column.getIsSorted() === 'asc'} ↑
-										{:else if header.column.getIsSorted() === 'desc'} ↓
-										{:else} ↕
-										{/if}
-									</button>
-								{:else}
-									<FlexRender
-										header={header}
-										content={header.column.columnDef.header}
-									/>
+									{/if}
+								</div>
+								{#if header.column.getCanFilter()}
+									{@const col = columnDefs.find(c => c.key === header.column.id)}
+									{@const meta = ((header.column.columnDef.meta ?? {}) as Record<string, unknown>)}
+									{#if (meta.filterType as string) === 'select' && (meta.filterOptions as any[])}
+										<select
+											value={header.column.getFilterValue() as string ?? ''}
+											onchange={(e) => header.column.setFilterValue((e.target as HTMLSelectElement).value || undefined)}
+											class="mt-1 block w-full rounded border border-input bg-background px-2 py-1 text-xs"
+										>
+											<option value="">All</option>
+											{#each (meta.filterOptions as any[]) as opt}
+												<option value={opt.value}>{opt.label}</option>
+											{/each}
+										</select>
+									{:else}
+										<input
+											type="text"
+											placeholder={(meta.filterPlaceholder as string) ?? ''}
+											value={header.column.getFilterValue() as string ?? ''}
+											oninput={(e) => header.column.setFilterValue((e.target as HTMLInputElement).value || undefined)}
+											class="mt-1 block w-full rounded border border-input bg-background px-2 py-1 text-xs"
+										/>
+									{/if}
 								{/if}
 							</th>
 						{/each}
 						<th class="px-4 py-2.5 w-24"></th>
 					</tr>
 				{/each}
-				<tr class="border-b bg-muted/30">
-					{#each columnDefs as col}
-						<td class="px-3 py-1.5">
-							{#if col.filterable && col.filterType === 'text'}
-								<input
-									type="text"
-									placeholder={col.filterPlaceholder || col.label}
-									value={filters[col.key] || ''}
-									oninput={(e) => handleFilterInput(col.key, (e.target as HTMLInputElement).value)}
-									class="w-full rounded border border-input bg-background px-2 py-1 text-xs"
-								/>
-							{:else if col.filterable && col.filterType === 'select' && col.filterOptions}
-								<select
-									value={filters[col.key] || ''}
-									onchange={(e) => onFilter(col.key, (e.target as HTMLSelectElement).value)}
-									class="w-full rounded border border-input bg-background px-2 py-1 text-xs"
-								>
-									<option value="">All</option>
-									{#each col.filterOptions as opt}
-										<option value={opt.value}>{opt.label}</option>
-									{/each}
-								</select>
-							{/if}
-						</td>
-					{/each}
-					<td class="px-3 py-1.5"></td>
-				</tr>
 			</thead>
 			<tbody class="divide-y divide-border">
 				{#if data.length === 0}
@@ -194,7 +224,7 @@
 				{:else}
 					{#each table.getRowModel().rows as row (row.id)}
 						<tr class="hover:bg-muted/30">
-							{#each tableColumns as colDef, i}
+							{#each tableColumns as _, i}
 								{@const col = columnDefs[i] ?? columnDefs[0]}
 								<td class="px-4 py-2.5">
 									{#if children}
