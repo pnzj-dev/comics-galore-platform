@@ -30,7 +30,6 @@
 		sortDir: 'asc' | 'desc';
 		search: string;
 		filters: Record<string, string>;
-		loading: boolean;
 		emptyMessage?: string;
 		onSort: (key: string, dir: 'asc' | 'desc') => void;
 		onSearch: (value: string) => void;
@@ -50,7 +49,6 @@
 		sortDir,
 		search,
 		filters,
-		loading,
 		emptyMessage = 'No results found.',
 		onSort,
 		onSearch,
@@ -98,6 +96,7 @@
 			globalFilteringFeature,
 			rowPaginationFeature,
 		}),
+		// svelte-ignore state_referenced_locally
 		columns: tableColumns,
 		get data() { return data; },
 		get rowCount() { return total; },

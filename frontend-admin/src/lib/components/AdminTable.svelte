@@ -96,6 +96,7 @@
 			globalFilteringFeature,
 			rowPaginationFeature,
 		}),
+		// svelte-ignore state_referenced_locally
 		columns: tableColumns,
 		get data() { return data; },
 		get rowCount() { return total; },
