@@ -13,7 +13,7 @@
 		[key: string]: any;
 	} = $props();
 
-	let internalValue = $state(String(value ?? ''));
+	let internalValue = $derived(String(value ?? ''));
 
 	$effect(() => {
 		internalValue = String(value ?? '');

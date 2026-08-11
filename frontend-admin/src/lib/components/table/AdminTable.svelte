@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" generics="TData extends Record<string, unknown>">
 	import TableHeader from './TableHeader.svelte';
 	import TablePagination from './TablePagination.svelte';
 	import DebouncedInput from './DebouncedInput.svelte';
@@ -15,7 +15,7 @@
 
 	interface Props {
 		columns: ColumnDef[];
-		data: Record<string, unknown>[];
+		data: TData[];
 		total: number;
 		page: number;
 		limit: number;
@@ -29,8 +29,8 @@
 		onSearch: (value: string) => void;
 		onFilter: (key: string, value: string) => void;
 		onPage: (page: number) => void;
-		children: import('svelte').Snippet<[item: Record<string, unknown>, col: ColumnDef]>;
-		actions: import('svelte').Snippet<[item: Record<string, unknown>]>;
+		children: import('svelte').Snippet<[item: TData, col: ColumnDef]>;
+		actions: import('svelte').Snippet<[item: TData]>;
 		searchPlaceholder?: string;
 		searchClass?: string;
 		containerClass?: string;
