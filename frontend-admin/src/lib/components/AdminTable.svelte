@@ -241,11 +241,11 @@
 	<div class="flex items-center justify-between text-sm text-muted-foreground">
 		<span>{total} result{total !== 1 ? 's' : ''}</span>
 		<div class="flex items-center gap-2">
-			<Button variant="outline" size="sm" disabled={page <= 1} onclick={() => table.previousPage()}>
+			<Button variant="outline" size="sm" disabled={!table.getCanPreviousPage()} onclick={() => table.previousPage()}>
 				← Prev
 			</Button>
-			<span class="text-xs">Page {page} of {Math.max(1, Math.ceil(total / limit))}</span>
-			<Button variant="outline" size="sm" disabled={page >= Math.max(1, Math.ceil(total / limit))} onclick={() => table.nextPage()}>
+			<span class="text-xs">Page {page} of {table.getPageCount()}</span>
+			<Button variant="outline" size="sm" disabled={!table.getCanNextPage()} onclick={() => table.nextPage()}>
 				Next →
 			</Button>
 		</div>
