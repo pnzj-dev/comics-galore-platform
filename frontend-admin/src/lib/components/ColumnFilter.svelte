@@ -11,11 +11,10 @@
     table: Table<typeof features, TData>;
   } = $props();
 
-  const meta = (column.columnDef.meta ?? {}) as Record<string, unknown>;
-  const filterType = (meta.filterType as string) ?? "text";
-  const filterOptions =
-    (meta.filterOptions as Array<{ value: string; label: string }>) ?? [];
-  const filterPlaceholder = (meta.filterPlaceholder as string) ?? "Filter...";
+  const meta = column.columnDef.meta ?? {};
+  const filterType = meta.filterType ?? "text";
+  const filterOptions = meta.filterOptions ?? [];
+  const filterPlaceholder = meta.filterPlaceholder ?? "Filter...";
 
   const firstValue = $derived(
     table.getPreFilteredRowModel().flatRows[0]?.getValue(column.id),
