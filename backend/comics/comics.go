@@ -799,6 +799,7 @@ type AdminListComicsParams struct {
 	SortDir       string `query:"sort_dir"`
 	FilterStatus  string `query:"filter_status"`
 	FilterAuthor  string `query:"filter_author"`
+	FilterTitle   string `query:"filter_title"`
 }
 
 //encore:api auth method=GET path=/admin/comics
@@ -830,6 +831,11 @@ func AdminListComics(ctx context.Context, p *AdminListComicsParams) (*ListComics
 	if p.FilterAuthor != "" {
 		where += fmt.Sprintf(" AND author ILIKE $%d", argIdx)
 		args = append(args, "%"+p.FilterAuthor+"%")
+		argIdx++
+	}
+	if p.FilterTitle != "" {
+		where += fmt.Sprintf(" AND title ILIKE $%d", argIdx)
+		args = append(args, "%"+p.FilterTitle+"%")
 		argIdx++
 	}
 
@@ -1191,6 +1197,7 @@ type RecycleBinParams struct {
 	SortDir       string `query:"sort_dir"`
 	FilterStatus  string `query:"filter_status"`
 	FilterAuthor  string `query:"filter_author"`
+	FilterTitle   string `query:"filter_title"`
 }
 
 //encore:api auth method=GET path=/admin/recycle-bin
@@ -1222,6 +1229,11 @@ func RecycleBin(ctx context.Context, p *RecycleBinParams) (*ListComicsResponse, 
 	if p.FilterAuthor != "" {
 		where += fmt.Sprintf(" AND c.author ILIKE $%d", argIdx)
 		args = append(args, "%"+p.FilterAuthor+"%")
+		argIdx++
+	}
+	if p.FilterTitle != "" {
+		where += fmt.Sprintf(" AND c.title ILIKE $%d", argIdx)
+		args = append(args, "%"+p.FilterTitle+"%")
 		argIdx++
 	}
 

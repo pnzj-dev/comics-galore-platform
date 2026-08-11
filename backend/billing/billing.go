@@ -372,6 +372,7 @@ type AdminListSubscriptionsParams struct {
 	SortDir      string `query:"sort_dir"`
 	FilterStatus string `query:"filter_status"`
 	FilterTier   string `query:"filter_tier"`
+	FilterUserID string `query:"filter_user_id"`
 }
 
 //encore:api auth method=GET path=/admin/subscriptions
@@ -411,6 +412,11 @@ func AdminListSubscriptions(ctx context.Context, p *AdminListSubscriptionsParams
 	if p.FilterTier != "" {
 		where += fmt.Sprintf(" AND tier = $%d", argIdx)
 		args = append(args, p.FilterTier)
+		argIdx++
+	}
+	if p.FilterUserID != "" {
+		where += fmt.Sprintf(" AND user_id::text ILIKE $%d", argIdx)
+		args = append(args, "%"+p.FilterUserID+"%")
 		argIdx++
 	}
 

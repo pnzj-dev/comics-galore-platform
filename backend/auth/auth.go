@@ -575,6 +575,7 @@ type AdminListUsersParams struct {
 	SortDir    string `query:"sort_dir"`
 	FilterRole string `query:"filter_role"`
 	FilterTier string `query:"filter_tier"`
+	FilterEmail string `query:"filter_email"`
 }
 
 //encore:api auth method=GET path=/admin/users
@@ -614,6 +615,11 @@ func AdminListUsers(ctx context.Context, p *AdminListUsersParams) (*AdminUserLis
 	if p.FilterTier != "" {
 		where += fmt.Sprintf(" AND tier = $%d", argIdx)
 		args = append(args, p.FilterTier)
+		argIdx++
+	}
+	if p.FilterEmail != "" {
+		where += fmt.Sprintf(" AND email ILIKE $%d", argIdx)
+		args = append(args, "%"+p.FilterEmail+"%")
 		argIdx++
 	}
 

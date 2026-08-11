@@ -104,6 +104,7 @@ export namespace auth {
         SortDir: string
         FilterRole: string
         FilterTier: string
+        FilterEmail: string
     }
 
     export interface AdminUser {
@@ -301,6 +302,7 @@ export namespace auth {
         public async AdminListUsers(params: AdminListUsersParams): Promise<AdminUserListResponse> {
             // Convert our params into the objects we need for the request
             const query = makeRecord<string, string | string[]>({
+                "filter_email": params.FilterEmail,
                 "filter_role": params.FilterRole,
                 "filter_tier": params.FilterTier,
                 limit:         String(params.Limit),
@@ -449,6 +451,7 @@ export namespace billing {
         SortDir: string
         FilterStatus: string
         FilterTier: string
+        FilterUserID: string
     }
 
     export interface AdminSubList {
@@ -549,8 +552,9 @@ export namespace billing {
         public async AdminListSubscriptions(params: AdminListSubscriptionsParams): Promise<AdminSubList> {
             // Convert our params into the objects we need for the request
             const query = makeRecord<string, string | string[]>({
-                "filter_status": params.FilterStatus,
-                "filter_tier":   params.FilterTier,
+                "filter_status":  params.FilterStatus,
+                "filter_tier":    params.FilterTier,
+                "filter_user_id": params.FilterUserID,
                 limit:           String(params.Limit),
                 page:            String(params.Page),
                 search:          params.Search,
@@ -635,6 +639,7 @@ export namespace comics {
         SortDir: string
         FilterStatus: string
         FilterAuthor: string
+        FilterTitle: string
     }
 
     export interface AuditLogEntry {
@@ -794,6 +799,7 @@ export namespace comics {
         SortDir: string
         FilterStatus: string
         FilterAuthor: string
+        FilterTitle: string
     }
 
     export interface RejectParams {
@@ -890,6 +896,7 @@ export namespace comics {
             const query = makeRecord<string, string | string[]>({
                 "filter_author": params.FilterAuthor,
                 "filter_status": params.FilterStatus,
+                "filter_title":  params.FilterTitle,
                 limit:           String(params.Limit),
                 page:            String(params.Page),
                 search:          params.Search,
@@ -1043,6 +1050,7 @@ export namespace comics {
             const query = makeRecord<string, string | string[]>({
                 "filter_author": params.FilterAuthor,
                 "filter_status": params.FilterStatus,
+                "filter_title":  params.FilterTitle,
                 limit:           String(params.Limit),
                 page:            String(params.Page),
                 search:          params.Search,
