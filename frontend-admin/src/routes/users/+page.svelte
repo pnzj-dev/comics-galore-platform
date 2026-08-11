@@ -117,7 +117,7 @@
 
 	<AdminTable
 		{columns}
-		data={data.results as Record<string, unknown>[]}
+		data={data.results}
 		total={data.total}
 		page={data.page}
 		limit={data.limit}

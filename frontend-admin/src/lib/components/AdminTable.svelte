@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" generics="TData extends Record<string, unknown>">
 	import type { ColumnDef, TableFeatures } from '@tanstack/svelte-table';
 	import { createTable, FlexRender } from '@tanstack/svelte-table';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -7,8 +7,8 @@
 	import { features } from '$lib/components/tableFeatures.svelte';
 
 	interface Props {
-		columns: ColumnDef<TableFeatures, unknown>[];
-		data: Record<string, unknown>[];
+		columns: ColumnDef<TableFeatures, TData>[];
+		data: TData[];
 		total: number;
 		page: number;
 		limit: number;
@@ -21,7 +21,7 @@
 		onSearch: (value: string) => void;
 		onFilter: (key: string, value: string) => void;
 		onPage: (page: number) => void;
-		actions: import('svelte').Snippet<[item: Record<string, unknown>]>;
+		actions: import('svelte').Snippet<[item: TData]>;
 	}
 
 	let {
