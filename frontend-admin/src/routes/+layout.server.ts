@@ -4,7 +4,10 @@ import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ cookies, url }) => {
 	const token = cookies.get('token');
-	if (!token && url.pathname !== '/login') throw redirect(302, '/login');
+	if (!token) {
+		if (url.pathname === '/login') return {};
+		throw redirect(302, '/login');
+	}
 
 	const user = decodeJWT(token);
 	if (!user || user.role !== 'admin') throw redirect(302, '/');
