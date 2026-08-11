@@ -1,6 +1,4 @@
 <script lang="ts">
-	import DebouncedInput from './DebouncedInput.svelte';
-
 	type ColumnDef = {
 		key: string;
 		label: string;
@@ -39,13 +37,14 @@
 			{/each}
 		</select>
 	{:else}
-		<DebouncedInput
+		<input
 			type="text"
-			value={value}
-			onchange={(v) => onFilter(col.key, v)}
-			debounce={300}
+			defaultValue={value}
 			placeholder={col.filterPlaceholder ?? col.label}
 			class={inputClass}
+			onblur={(e) => onFilter(col.key, (e.target as HTMLInputElement).value)}
+			onkeydown={(e) => { if (e.key === 'Enter') onFilter(col.key, (e.currentTarget as HTMLInputElement).value); }}
 		/>
 	{/if}
 </div>
+
