@@ -9,6 +9,7 @@
 		createColumnHelper,
 	} from '@tanstack/svelte-table';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import DebouncedInput from '$lib/components/DebouncedInput.svelte';
 
 	type ColumnDefExt = {
 		key: string;
@@ -58,10 +59,6 @@
 		actions,
 	}: Props = $props();
 
-	let globalTimer = $state<ReturnType<typeof setTimeout>>();
-	let filterTimer = $state<ReturnType<typeof setTimeout>>();
-	let pageTimer = $state<ReturnType<typeof setTimeout>>();
-
 	const columnHelper = createColumnHelper<Record<string, unknown>>();
 
 	const tableColumns = $derived(
@@ -83,12 +80,6 @@
 		sortKey ? [{ id: sortKey, desc: sortDir === 'desc' }] : []
 	);
 
-	const filterState = $derived(
-		Object.entries(filters)
-			.filter(([_, v]) => v)
-			.map(([id, value]) => ({ id, value }))
-	);
-
 	const table = createTable({
 		features: tableFeatures({
 			rowSortingFeature,
@@ -103,10 +94,15 @@
 		manualPagination: true,
 		manualSorting: true,
 		manualFiltering: true,
+		globalFilterFn: 'includesString',
 		state: {
 			get globalFilter() { return search; },
 			get sorting() { return sortingState; },
-			get columnFilters() { return filterState as any; },
+			get columnFilters() {
+				return Object.entries(filters)
+					.filter(([_, v]) => v)
+					.map(([id, value]) => ({ id, value }));
+			},
 			get pagination() { return { pageIndex: page - 1, pageSize: limit }; },
 		},
 		onSortingChange: (updater) => {
@@ -117,49 +113,34 @@
 			}
 		},
 		onGlobalFilterChange: (updater) => {
-			if (globalTimer) clearTimeout(globalTimer);
-			globalTimer = setTimeout(() => {
-				const next = typeof updater === 'function'
-					? updater(table.getState().globalFilter)
-					: updater;
-				onSearch(String(next ?? ''));
-			}, 300);
+			const next = typeof updater === 'function'
+				? updater(table.getState().globalFilter)
+				: updater;
+			onSearch(String(next ?? ''));
 		},
 		onColumnFiltersChange: (updater) => {
-			if (filterTimer) clearTimeout(filterTimer);
-			filterTimer = setTimeout(() => {
-				const prev = table.getState().columnFilters;
-				const next = typeof updater === 'function' ? updater(prev) : updater;
-				const prevIds = new Map(prev.map(f => [f.id, f.value]));
-				const nextIds = new Map(next.map(f => [f.id, f.value]));
-				for (const [id, value] of nextIds) {
-					if (prevIds.get(id) !== value) onFilter(id, String(value ?? ''));
-				}
-				for (const [id] of prevIds) {
-					if (!nextIds.has(id)) onFilter(id, '');
-				}
-			}, 300);
-		},
-		onPaginationChange: (updater) => {
-			if (pageTimer) clearTimeout(pageTimer);
-			pageTimer = setTimeout(() => {
-				const prev = table.getState().pagination;
-				const next = typeof updater === 'function' ? updater(prev) : prev;
-				if (next.pageIndex !== prev.pageIndex) {
-					onPage(next.pageIndex + 1);
-				}
-			}, 50);
+			const prev = table.getState().columnFilters;
+			const next = typeof updater === 'function' ? updater(prev) : updater;
+			const prevIds = new Map(prev.map(f => [f.id as string, f.value]));
+			const nextIds = new Map(next.map(f => [f.id as string, f.value]));
+			for (const [id, value] of nextIds) {
+				if (prevIds.get(id) !== value) onFilter(id, String(value ?? ''));
+			}
+			for (const [id] of prevIds) {
+				if (!nextIds.has(id)) onFilter(id, '');
+			}
 		},
 	});
 </script>
 
 <div class="space-y-3">
 	<div class="flex items-center gap-3">
-		<input
+		<DebouncedInput
 			type="text"
-			placeholder="Search..."
 			value={search}
-			oninput={(e) => table.setGlobalFilter((e.target as HTMLInputElement).value || undefined)}
+			onchange={(value) => table.setGlobalFilter(String(value))}
+			debounce={300}
+			placeholder="Search..."
 			class="max-w-xs rounded-md border border-input bg-background px-3 py-1.5 text-sm"
 		/>
 	</div>
@@ -194,7 +175,6 @@
 									{/if}
 								</div>
 								{#if header.column.getCanFilter()}
-									{@const col = columnDefs.find(c => c.key === header.column.id)}
 									{@const meta = ((header.column.columnDef.meta ?? {}) as Record<string, unknown>)}
 									{#if (meta.filterType as string) === 'select' && (meta.filterOptions as any[])}
 										<select
@@ -208,11 +188,12 @@
 											{/each}
 										</select>
 									{:else}
-										<input
+										<DebouncedInput
 											type="text"
+											value={(header.column.getFilterValue() as string ?? '')}
+											onchange={(value) => header.column.setFilterValue(String(value) || undefined)}
+											debounce={300}
 											placeholder={(meta.filterPlaceholder as string) ?? ''}
-											value={header.column.getFilterValue() as string ?? ''}
-											oninput={(e) => header.column.setFilterValue((e.target as HTMLInputElement).value || undefined)}
 											class="mt-1 block w-full rounded border border-input bg-background px-2 py-1 text-xs"
 										/>
 									{/if}
