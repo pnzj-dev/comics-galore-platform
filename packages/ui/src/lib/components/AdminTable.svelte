@@ -159,7 +159,7 @@
 		<input
 			type="text"
 			placeholder="Search..."
-			value={table.getState().globalFilter as string ?? ''}
+			value={search}
 			oninput={(e) => table.setGlobalFilter((e.target as HTMLInputElement).value || undefined)}
 			class="max-w-xs rounded-md border border-input bg-background px-3 py-1.5 text-sm"
 		/>
@@ -259,13 +259,13 @@
 	</div>
 
 	<div class="flex items-center justify-between text-sm text-muted-foreground">
-		<span>{table.getRowCount()} result{table.getRowCount() !== 1 ? 's' : ''}</span>
+		<span>{total} result{total !== 1 ? 's' : ''}</span>
 		<div class="flex items-center gap-2">
-			<Button variant="outline" size="sm" disabled={!table.getCanPreviousPage()} onclick={() => table.previousPage()}>
+			<Button variant="outline" size="sm" disabled={page <= 1} onclick={() => table.previousPage()}>
 				← Prev
 			</Button>
-			<span class="text-xs">Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}</span>
-			<Button variant="outline" size="sm" disabled={!table.getCanNextPage()} onclick={() => table.nextPage()}>
+			<span class="text-xs">Page {page} of {Math.max(1, Math.ceil(total / limit))}</span>
+			<Button variant="outline" size="sm" disabled={page >= Math.max(1, Math.ceil(total / limit))} onclick={() => table.nextPage()}>
 				Next →
 			</Button>
 		</div>
