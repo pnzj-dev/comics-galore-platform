@@ -4,6 +4,7 @@
 		tableFeatures,
 		rowSortingFeature,
 		columnFilteringFeature,
+		globalFilteringFeature,
 		rowPaginationFeature,
 		createColumnHelper,
 	} from '@tanstack/svelte-table';
@@ -60,15 +61,8 @@
 	}: Props = $props();
 
 	const totalPages = $derived(Math.max(1, Math.ceil(total / limit)));
-	let searchTerm = $state(search);
-	let searchTimer = $state<ReturnType<typeof setTimeout>>();
+	let globalTimer = $state<ReturnType<typeof setTimeout>>();
 	let filterTimer = $state<ReturnType<typeof setTimeout>>();
-
-	function handleSearchInput(value: string) {
-		searchTerm = value;
-		if (searchTimer) clearTimeout(searchTimer);
-		searchTimer = setTimeout(() => onSearch(value), 300);
-	}
 
 	const columnHelper = createColumnHelper<Record<string, unknown>>();
 
@@ -110,6 +104,7 @@
 		manualSorting: true,
 		manualFiltering: true,
 		state: {
+			get globalFilter() { return search; },
 			get sorting() { return sortingState; },
 			get columnFilters() { return filterState as any; },
 			get pagination() { return { pageIndex: page - 1, pageSize: limit }; },
@@ -120,6 +115,15 @@
 			if (next.length > 0) {
 				onSort(next[0].id, next[0].desc ? 'desc' : 'asc');
 			}
+		},
+		onGlobalFilterChange: (updater) => {
+			if (globalTimer) clearTimeout(globalTimer);
+			globalTimer = setTimeout(() => {
+				const next = typeof updater === 'function'
+					? updater(table.getState().globalFilter)
+					: updater;
+				onSearch(String(next ?? ''));
+			}, 300);
 		},
 		onColumnFiltersChange: (updater) => {
 			if (filterTimer) clearTimeout(filterTimer);
@@ -149,8 +153,8 @@
 		<input
 			type="text"
 			placeholder="Search..."
-			value={searchTerm}
-			oninput={(e) => handleSearchInput((e.target as HTMLInputElement).value)}
+			value={table.getState().globalFilter as string ?? ''}
+			oninput={(e) => table.setGlobalFilter((e.target as HTMLInputElement).value || undefined)}
 			class="max-w-xs rounded-md border border-input bg-background px-3 py-1.5 text-sm"
 		/>
 	</div>
