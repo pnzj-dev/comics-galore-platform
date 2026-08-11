@@ -2,9 +2,9 @@ import { redirect } from '@sveltejs/kit';
 import { decodeJWT } from '$lib/server/jwt';
 import type { LayoutServerLoad } from './$types';
 
-export const load: LayoutServerLoad = async ({ cookies }) => {
+export const load: LayoutServerLoad = async ({ cookies, url }) => {
 	const token = cookies.get('token');
-	if (!token) throw redirect(302, '/login');
+	if (!token && url.pathname !== '/login') throw redirect(302, '/login');
 
 	const user = decodeJWT(token);
 	if (!user || user.role !== 'admin') throw redirect(302, '/');
