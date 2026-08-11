@@ -1,4 +1,4 @@
-<script lang="ts" generics="TData extends Record<string, unknown>">
+<script lang="ts" generics="TData">
 	import TableHeader from './TableHeader.svelte';
 	import TablePagination from './TablePagination.svelte';
 	import DebouncedInput from './DebouncedInput.svelte';
@@ -132,7 +132,7 @@
 									{#if children}
 										{@render children(row, col)}
 									{:else}
-										<span class="text-xs">{row[col.key] as string}</span>
+										<span class="text-xs">{(row as Record<string, unknown>)[col.key] as string}</span>
 									{/if}
 								</td>
 							{/each}
