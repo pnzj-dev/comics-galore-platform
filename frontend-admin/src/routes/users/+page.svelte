@@ -41,9 +41,9 @@
 		}
 		return url.pathname + url.search;
 	}
-	async function onSort(key: string, dir: 'asc' | 'desc') { await goto(buildUrl({ sort: key, sort_dir: dir })); }
-	async function onSearch(value: string) { await goto(buildUrl({ search: value || undefined })); }
-	async function onFilter(key: string, value: string) { await goto(buildUrl({ [`filter_${key}`]: value || undefined })); }
+	async function onSort(key: string, dir: 'asc' | 'desc') { await goto(buildUrl({ sort: key, sort_dir: dir }), { keepFocus: true }); }
+	async function onSearch(value: string) { await goto(buildUrl({ search: value || undefined }), { keepFocus: true }); }
+	async function onFilter(key: string, value: string) { await goto(buildUrl({ [`filter_${key}`]: value || undefined }), { keepFocus: true }); }
 	async function onPage(p: number) {
 		const url = new URL(page.url);
 		url.searchParams.set('page', String(p));
