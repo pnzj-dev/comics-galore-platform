@@ -68,7 +68,7 @@
 		searchPlaceholder = 'Search...',
 		searchClass = 'max-w-xs rounded-md border border-input bg-background px-3 py-1.5 text-sm',
 		containerClass = 'space-y-3',
-		tableClass = 'w-full text-sm',
+		tableClass = 'w-full text-sm table-fixed',
 		tableWrapperClass = 'rounded-xl border border-border overflow-hidden',
 		headerClass = 'px-4 py-2.5 font-medium whitespace-nowrap align-top',
 		sortBtnClass = 'hover:text-primary transition-colors cursor-pointer border-0 bg-transparent p-0 text-inherit select-none',
