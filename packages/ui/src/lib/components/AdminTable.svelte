@@ -60,9 +60,9 @@
 		actions,
 	}: Props = $props();
 
-	const totalPages = $derived(Math.max(1, Math.ceil(total / limit)));
 	let globalTimer = $state<ReturnType<typeof setTimeout>>();
 	let filterTimer = $state<ReturnType<typeof setTimeout>>();
+	let pageTimer = $state<ReturnType<typeof setTimeout>>();
 
 	const columnHelper = createColumnHelper<Record<string, unknown>>();
 
@@ -95,6 +95,7 @@
 		features: tableFeatures({
 			rowSortingFeature,
 			columnFilteringFeature,
+			globalFilteringFeature,
 			rowPaginationFeature,
 		}),
 		columns: tableColumns,
@@ -132,18 +133,23 @@
 				const next = typeof updater === 'function' ? updater(prev) : updater;
 				const prevIds = new Map(prev.map(f => [f.id, f.value]));
 				const nextIds = new Map(next.map(f => [f.id, f.value]));
-
 				for (const [id, value] of nextIds) {
-					if (prevIds.get(id) !== value) {
-						onFilter(id, String(value ?? ''));
-					}
+					if (prevIds.get(id) !== value) onFilter(id, String(value ?? ''));
 				}
 				for (const [id] of prevIds) {
-					if (!nextIds.has(id)) {
-						onFilter(id, '');
-					}
+					if (!nextIds.has(id)) onFilter(id, '');
 				}
 			}, 300);
+		},
+		onPaginationChange: (updater) => {
+			if (pageTimer) clearTimeout(pageTimer);
+			pageTimer = setTimeout(() => {
+				const prev = table.getState().pagination;
+				const next = typeof updater === 'function' ? updater(prev) : prev;
+				if (next.pageIndex !== prev.pageIndex) {
+					onPage(next.pageIndex + 1);
+				}
+			}, 50);
 		},
 	});
 </script>
@@ -253,13 +259,13 @@
 	</div>
 
 	<div class="flex items-center justify-between text-sm text-muted-foreground">
-		<span>{total} result{total !== 1 ? 's' : ''}</span>
+		<span>{table.getRowCount()} result{table.getRowCount() !== 1 ? 's' : ''}</span>
 		<div class="flex items-center gap-2">
-			<Button variant="outline" size="sm" disabled={page <= 1} onclick={() => onPage(page - 1)}>
+			<Button variant="outline" size="sm" disabled={!table.getCanPreviousPage()} onclick={() => table.previousPage()}>
 				← Prev
 			</Button>
-			<span class="text-xs">Page {page} of {totalPages}</span>
-			<Button variant="outline" size="sm" disabled={page >= totalPages} onclick={() => onPage(page + 1)}>
+			<span class="text-xs">Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}</span>
+			<Button variant="outline" size="sm" disabled={!table.getCanNextPage()} onclick={() => table.nextPage()}>
 				Next →
 			</Button>
 		</div>
