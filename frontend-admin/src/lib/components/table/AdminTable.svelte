@@ -1,4 +1,4 @@
-<script lang="ts" generics="TData">
+<script lang="ts" generics="TData extends { id: string }">
 	import TableHeader from './TableHeader.svelte';
 	import TablePagination from './TablePagination.svelte';
 	import DebouncedInput from './DebouncedInput.svelte';
