@@ -7,11 +7,13 @@
 
 	let { data } = $props();
 
+	// svelte-ignore state_referenced_locally
 	let pending = $state(data.results);
 	let selected = $state<Set<string>>(new Set());
 
 	const totalPages = $derived(Math.max(1, Math.ceil(data.total / data.limit)));
 
+	// svelte-ignore state_referenced_locally
 	let searchTerm = $state(data.search);
 	let searchTimer = $state<ReturnType<typeof setTimeout>>();
 

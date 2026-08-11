@@ -19,10 +19,12 @@
 		boost_3_gb: 20, boost_3_price: 12,
 		contact_email: '', hide_mature_default: false, enable_comments: true,
 		default_meta_description: '',
+		// svelte-ignore state_referenced_locally
 		...data.settings
 	});
 
 	let mode = $state<'form' | 'json'>('form');
+	// svelte-ignore state_referenced_locally
 	let jsonText = $state(JSON.stringify(settings, null, 2));
 	let submitting = $state(false);
 	let saved = $state(false);
@@ -98,18 +100,18 @@
 
 	<div class="flex items-center gap-2 mb-6">
 		<span class="text-sm text-muted-foreground mr-1">View:</span>
-		<label class="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg cursor-pointer transition-colors
+		<button class="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg cursor-pointer transition-colors border-0 bg-transparent
 			{mode === 'form' ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'}"
 			onclick={() => switchMode('form')}
 		>
 			Form
-		</label>
-		<label class="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg cursor-pointer transition-colors
+		</button>
+		<button class="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg cursor-pointer transition-colors border-0 bg-transparent
 			{mode === 'json' ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'}"
 			onclick={() => switchMode('json')}
 		>
 			JSON
-		</label>
+		</button>
 	</div>
 
 	{#if mode === 'json'}
@@ -143,11 +145,11 @@
 					<CardHeader class="pb-2"><CardTitle>Site</CardTitle></CardHeader>
 					<CardContent class="space-y-2">
 						<div class="flex items-center gap-2">
-							<label class="text-xs text-muted-foreground whitespace-nowrap">Name</label>
+							<span class="text-xs text-muted-foreground whitespace-nowrap">Name</span>
 							<input bind:value={settings.site_name} class="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" />
 						</div>
 						<div class="flex items-center gap-2">
-							<label class="text-xs text-muted-foreground whitespace-nowrap">Contact</label>
+							<span class="text-xs text-muted-foreground whitespace-nowrap">Contact</span>
 							<input type="email" bind:value={settings.contact_email} placeholder="admin@site.com" class="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" />
 						</div>
 						<div class="flex gap-4">
@@ -161,7 +163,7 @@
 					<CardHeader class="pb-2"><CardTitle>Content</CardTitle></CardHeader>
 					<CardContent class="space-y-2">
 						<div class="flex items-center gap-2">
-							<label class="text-xs text-muted-foreground whitespace-nowrap">Lang</label>
+							<span class="text-xs text-muted-foreground whitespace-nowrap">Lang</span>
 							<select bind:value={settings.default_language} class="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs">
 								<option value="en">English</option><option value="ja">Japanese</option><option value="es">Spanish</option><option value="ko">Korean</option><option value="fr">French</option>
 							</select>
@@ -170,16 +172,16 @@
 							</select>
 						</div>
 						<div class="flex items-center gap-2">
-							<label class="text-xs text-muted-foreground whitespace-nowrap">Upload</label>
+							<span class="text-xs text-muted-foreground whitespace-nowrap">Upload</span>
 							<input type="number" bind:value={settings.max_upload_size_mb} class="w-16 rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
 							<span class="text-xs text-muted-foreground">MB</span>
-							<label class="text-xs text-muted-foreground whitespace-nowrap ml-2">Images</label>
+							<span class="text-xs text-muted-foreground whitespace-nowrap ml-2">Images</span>
 							<select bind:value={settings.image_serving_mode} class="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs">
 								<option value="direct">direct</option><option value="imgproxy">imgproxy</option><option value="cloudflare_images">CF images</option>
 							</select>
 						</div>
 						<div class="flex items-start gap-2">
-							<label class="text-xs text-muted-foreground whitespace-nowrap pt-1.5">Meta</label>
+							<span class="text-xs text-muted-foreground whitespace-nowrap pt-1.5">Meta</span>
 							<textarea bind:value={settings.default_meta_description} placeholder="SEO meta description..." class="flex-1 rounded-md border border-input bg-background px-2.5 py-1 text-xs resize-y" rows="2"></textarea>
 						</div>
 					</CardContent>
@@ -189,11 +191,11 @@
 					<CardHeader class="pb-2"><CardTitle>Display</CardTitle></CardHeader>
 					<CardContent class="space-y-2">
 						<div class="flex items-center gap-2">
-							<label class="text-xs text-muted-foreground whitespace-nowrap">Per Page</label>
+							<span class="text-xs text-muted-foreground whitespace-nowrap">Per Page</span>
 							<select bind:value={settings.items_per_page} class="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs">
 								<option value={12}>12</option><option value={24}>24</option><option value={48}>48</option>
 							</select>
-							<label class="text-xs text-muted-foreground whitespace-nowrap">Tags</label>
+							<span class="text-xs text-muted-foreground whitespace-nowrap">Tags</span>
 							<input type="number" bind:value={settings.popular_tags_limit} class="w-16 rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
 						</div>
 						<div class="flex gap-4">
@@ -207,16 +209,16 @@
 					<CardHeader class="pb-2"><CardTitle>Security</CardTitle></CardHeader>
 					<CardContent class="space-y-2">
 						<div class="flex items-center gap-2">
-							<label class="text-xs text-muted-foreground whitespace-nowrap">Rate</label>
+							<span class="text-xs text-muted-foreground whitespace-nowrap">Rate</span>
 							<input type="number" bind:value={settings.rate_limit} class="w-16 rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
 							<span class="text-xs text-muted-foreground">req/min</span>
 							<label class="flex items-center gap-1.5 text-xs ml-2"><input type="checkbox" bind:checked={settings.require_email_verify} class="rounded" /> Email Verify</label>
 						</div>
 						<div class="flex items-center gap-2">
-							<label class="text-xs text-muted-foreground whitespace-nowrap">S3 TTL</label>
+							<span class="text-xs text-muted-foreground whitespace-nowrap">S3 TTL</span>
 							<input type="number" bind:value={settings.s3_presigned_ttl_min} class="w-16 rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
 							<span class="text-xs text-muted-foreground">min</span>
-							<label class="text-xs text-muted-foreground whitespace-nowrap ml-2">CF TTL</label>
+							<span class="text-xs text-muted-foreground whitespace-nowrap ml-2">CF TTL</span>
 							<input type="number" bind:value={settings.cf_presigned_ttl_min} class="w-16 rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
 							<span class="text-xs text-muted-foreground">min</span>
 						</div>
@@ -227,11 +229,11 @@
 			<Card>
 				<CardHeader class="pb-2"><CardTitle>Quotas</CardTitle></CardHeader>
 				<CardContent class="grid grid-cols-5 gap-2">
-					<div class="text-center"><label class="text-[10px] text-muted-foreground">Free</label><input type="number" bind:value={settings.quota_free_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
-					<div class="text-center"><label class="text-[10px] text-muted-foreground">Bronze</label><input type="number" bind:value={settings.quota_bronze_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
-					<div class="text-center"><label class="text-[10px] text-muted-foreground">Silver</label><input type="number" bind:value={settings.quota_silver_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
-					<div class="text-center"><label class="text-[10px] text-muted-foreground">Gold</label><input type="number" bind:value={settings.quota_gold_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
-					<div class="text-center"><label class="text-[10px] text-muted-foreground">Platinum</label><input type="number" bind:value={settings.quota_platinum_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
+					<div class="text-center"><span class="text-[10px] text-muted-foreground">Free</span><input type="number" bind:value={settings.quota_free_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
+					<div class="text-center"><span class="text-[10px] text-muted-foreground">Bronze</span><input type="number" bind:value={settings.quota_bronze_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
+					<div class="text-center"><span class="text-[10px] text-muted-foreground">Silver</span><input type="number" bind:value={settings.quota_silver_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
+					<div class="text-center"><span class="text-[10px] text-muted-foreground">Gold</span><input type="number" bind:value={settings.quota_gold_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
+					<div class="text-center"><span class="text-[10px] text-muted-foreground">Platinum</span><input type="number" bind:value={settings.quota_platinum_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
 				</CardContent>
 			</Card>
 
