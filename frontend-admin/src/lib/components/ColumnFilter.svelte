@@ -1,11 +1,11 @@
-<script lang="ts">
+<script lang="ts" generics="TData extends Record<string, unknown>">
 	import DebouncedInput from '$lib/components/DebouncedInput.svelte';
 	import type { Column, TableFeatures } from '@tanstack/svelte-table';
 
 	let {
 		column,
 	}: {
-		column: Column<TableFeatures, unknown, unknown>;
+		column: Column<TableFeatures, TData, unknown>;
 	} = $props();
 
 	const meta = ((column.columnDef.meta ?? {}) as Record<string, unknown>);

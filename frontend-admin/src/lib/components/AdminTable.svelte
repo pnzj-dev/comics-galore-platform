@@ -119,7 +119,7 @@
 									</div>
 									{#if header.column.getCanFilter()}
 										<div>
-											<ColumnFilter column={header.column} />
+											<ColumnFilter column={header.column} {table} />
 										</div>
 									{/if}
 								{/if}
