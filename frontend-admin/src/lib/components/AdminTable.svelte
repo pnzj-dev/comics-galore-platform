@@ -3,15 +3,12 @@
 	import {
 		tableFeatures,
 		rowSortingFeature,
-		columnFilteringFeature,
 		rowPaginationFeature,
 		createColumnHelper,
-		filterFn_includesString,
-		filterFn_equalsString,
 	} from '@tanstack/svelte-table';
 	import { Button } from '$lib/components/ui/button/index.js';
 
-	type ColumnDef = {
+	type ColumnDefExt = {
 		key: string;
 		label: string;
 		sortable?: boolean;
@@ -22,7 +19,7 @@
 	};
 
 	interface Props {
-		columns: ColumnDef[];
+		columns: ColumnDefExt[];
 		data: Record<string, unknown>[];
 		total: number;
 		page: number;
@@ -37,7 +34,7 @@
 		onSearch: (value: string) => void;
 		onFilter: (key: string, value: string) => void;
 		onPage: (page: number) => void;
-		children: import('svelte').Snippet<[item: Record<string, unknown>, col: ColumnDef]>;
+		children: import('svelte').Snippet<[item: Record<string, unknown>, col: ColumnDefExt]>;
 		actions: import('svelte').Snippet<[item: Record<string, unknown>]>;
 	}
 
@@ -62,7 +59,6 @@
 	}: Props = $props();
 
 	const totalPages = $derived(Math.max(1, Math.ceil(total / limit)));
-	// svelte-ignore state_referenced_locally
 	let searchTerm = $state(search);
 	let searchTimer = $state<ReturnType<typeof setTimeout>>();
 	let filterTimers = $state<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -85,50 +81,27 @@
 			columnHelper.accessor(col.key, {
 				header: col.label,
 				enableSorting: col.sortable ?? false,
-				enableColumnFilter: col.filterable ?? false,
-				filterFn: col.filterType === 'select' ? filterFn_equalsString : filterFn_includesString,
-				meta: {
-					filterType: col.filterType,
-					filterOptions: col.filterOptions,
-					filterPlaceholder: col.filterPlaceholder ?? col.label,
-				},
 			})
 		)
 	);
 
-	const sortingState = $derived(sortKey ? [{ id: sortKey, desc: sortDir === 'desc' }] : []);
-	const filterState = $derived(
-		Object.entries(filters)
-			.filter(([_, v]) => v)
-			.map(([id, value]) => ({ id, value }))
+	const sortingState = $derived(
+		sortKey ? [{ id: sortKey, desc: sortDir === 'desc' }] : []
 	);
 
 	const table = createTable({
 		features: tableFeatures({
 			rowSortingFeature,
-			columnFilteringFeature,
 			rowPaginationFeature,
 		}),
 		columns: tableColumns,
-		get data() {
-			return data;
-		},
-		get rowCount() {
-			return total;
-		},
+		get data() { return data; },
+		get rowCount() { return total; },
 		manualPagination: true,
 		manualSorting: true,
-		manualFiltering: true,
 		state: {
-			get sorting() {
-				return sortingState;
-			},
-			get columnFilters() {
-				return filterState;
-			},
-			get pagination() {
-				return { pageIndex: page - 1, pageSize: limit };
-			},
+			get sorting() { return sortingState as any; },
+			get pagination() { return { pageIndex: page - 1, pageSize: limit }; },
 		},
 		onSortingChange: (updater) => {
 			const prev = table.getState().sorting;
@@ -221,12 +194,13 @@
 				{:else}
 					{#each table.getRowModel().rows as row (row.id)}
 						<tr class="hover:bg-muted/30">
-							{#each row.getAllCells() as cell (cell.id)}
+							{#each tableColumns as colDef, i}
+								{@const col = columnDefs[i] ?? columnDefs[0]}
 								<td class="px-4 py-2.5">
 									{#if children}
-										{@render children(row.original, columnDefs.find(c => c.key === cell.column.id) ?? columnDefs[0])}
+										{@render children(row.original, col)}
 									{:else}
-										<FlexRender cell={cell} content={cell.column.columnDef.cell} />
+										<span class="text-xs">{row.original[col.key] as string}</span>
 									{/if}
 								</td>
 							{/each}
