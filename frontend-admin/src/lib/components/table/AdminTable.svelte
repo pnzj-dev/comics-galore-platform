@@ -30,7 +30,7 @@
 		onFilter: (key: string, value: string) => void;
 		onPage: (page: number) => void;
 		children: import('svelte').Snippet<[item: TData, col: ColumnDef]>;
-		actions: import('svelte').Snippet<[item: TData]>;
+		actions?: import('svelte').Snippet<[item: TData]>;
 		searchPlaceholder?: string;
 		searchClass?: string;
 		containerClass?: string;
