@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { currentUser, isAuthenticated } from '$lib/stores/auth';
 	import { encore } from '$lib/api/encore';
 	import LogoutConfirmationModal from '$lib/components/LogoutConfirmationModal.svelte';
@@ -22,7 +22,7 @@
 	});
 
 	const user = $derived(data.user || $currentUser);
-	const authed = $derived(!!(data.user) || $isAuthenticated);
+	const authed = $derived(!!(data.user));
 	const path = $derived(page.url?.pathname ?? '');
 
 	async function checkPlanMatrix() {
