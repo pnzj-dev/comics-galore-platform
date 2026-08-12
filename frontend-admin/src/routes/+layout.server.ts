@@ -10,7 +10,10 @@ export const load: LayoutServerLoad = async ({ cookies, url }) => {
 	}
 
 	const user = decodeJWT(token);
-	if (!user || user.role !== 'admin') throw redirect(302, '/');
+	if (!user || user.role !== 'admin') {
+		cookies.delete('token', { path: '/' });
+		throw redirect(302, '/login');
+	}
 
 	return { user };
 };
