@@ -1321,6 +1321,59 @@ func AdminAuditLogs(ctx context.Context) (*AuditLogsResponse, error) {
 	return &AuditLogsResponse{Entries: entries}, nil
 }
 
+// ----- Admin Stats -----
+
+type TopLikedComic struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	Slug      string `json:"slug"`
+	CoverKey  string `json:"cover_key"`
+	LikeCount int    `json:"like_count"`
+}
+
+type ComicsStats struct {
+	TotalComics    int             `json:"total_comics"`
+	PublishedComics int            `json:"published_comics"`
+	PendingComics  int             `json:"pending_comics"`
+	TotalViews     int64           `json:"total_views"`
+	StorageBytes   int64           `json:"storage_bytes"`
+	TopLiked       []TopLikedComic `json:"top_liked"`
+}
+
+//encore:api auth method=GET path=/admin/comics-stats
+func GetComicsStats(ctx context.Context) (*ComicsStats, error) {
+	ad, hasAuth := getAuthData(ctx)
+	if !hasAuth || ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	var stats ComicsStats
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics WHERE deleted_at IS NULL`).Scan(&stats.TotalComics)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics WHERE status = 'published' AND deleted_at IS NULL`).Scan(&stats.PublishedComics)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics WHERE status = 'pending_review' AND deleted_at IS NULL`).Scan(&stats.PendingComics)
+	db.QueryRow(ctx, `SELECT COALESCE(SUM(view_count), 0) FROM comics WHERE deleted_at IS NULL`).Scan(&stats.TotalViews)
+	db.QueryRow(ctx, `SELECT COALESCE(SUM(file_size_bytes), 0) FROM comics WHERE deleted_at IS NULL`).Scan(&stats.StorageBytes)
+
+	rows, err := db.Query(ctx, `
+		SELECT id, title, slug, COALESCE(cover_key, ''), COALESCE(like_count, 0)
+		FROM comics
+		WHERE deleted_at IS NULL
+		ORDER BY like_count DESC NULLS LAST
+		LIMIT 5
+	`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var c TopLikedComic
+			if rows.Scan(&c.ID, &c.Title, &c.Slug, &c.CoverKey, &c.LikeCount) == nil {
+				stats.TopLiked = append(stats.TopLiked, c)
+			}
+		}
+	}
+
+	return &stats, nil
+}
+
 func defaultValue(v int, def int) int {
 	if v <= 0 { return def }
 	return v

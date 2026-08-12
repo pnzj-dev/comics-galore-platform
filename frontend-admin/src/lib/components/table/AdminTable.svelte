@@ -2,6 +2,9 @@
 	import TableHeader from './TableHeader.svelte';
 	import TablePagination from './TablePagination.svelte';
 	import DebouncedInput from './DebouncedInput.svelte';
+	import RowDetailsDrawer from '$lib/components/RowDetailsDrawer.svelte';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import { Eye } from 'lucide-svelte';
 
 	type ColumnDef = {
 		key: string;
@@ -31,6 +34,8 @@
 		onPage: (page: number) => void;
 		children: import('svelte').Snippet<[item: TData, col: ColumnDef]>;
 		actions?: import('svelte').Snippet<[item: TData]>;
+		details?: import('svelte').Snippet<[item: TData]>;
+		detailsTitle?: string;
 		showFilters?: boolean;
 		onToggleFilters?: () => void;
 		searchPlaceholder?: string;
@@ -67,6 +72,8 @@
 		onPage,
 		children,
 		actions,
+		details,
+		detailsTitle = 'Details',
 		showFilters = false,
 		onToggleFilters,
 		searchPlaceholder = 'Search...',
@@ -85,7 +92,9 @@
 		searchWrapperClass = 'flex items-center gap-3',
 	}: Props = $props();
 
-	const searchableCols = $derived(searchColumns.length > 0 ? searchColumns : columns.map((c) => c.key));
+	let selectedRow = $state<TData | null>(null);
+
+	const hasActionsColumn = $derived(!!(actions || details));
 
 	function handleSearch(value: string) {
 		onSearch(value);
@@ -137,7 +146,7 @@
 			<tbody class="divide-y divide-border">
 				{#if data.length === 0}
 					<tr>
-						<td colspan={columns.length + 1} class="px-4 py-8 text-center text-sm text-muted-foreground">
+						<td colspan={columns.length + (hasActionsColumn ? 1 : 0)} class="px-4 py-8 text-center text-sm text-muted-foreground">
 							{emptyMessage}
 						</td>
 					</tr>
@@ -153,10 +162,17 @@
 									{/if}
 								</td>
 							{/each}
-							{#if actions}
+							{#if hasActionsColumn}
 								<td class={actionsCellClass}>
 									<div class="flex items-center gap-1">
-										{@render actions(row)}
+										{#if details}
+											<Button size="sm" variant="ghost" onclick={() => selectedRow = row}>
+												<Eye class="size-3.5 mr-1" /> Details
+											</Button>
+										{/if}
+										{#if actions}
+											{@render actions(row)}
+										{/if}
 									</div>
 								</td>
 							{/if}
@@ -169,3 +185,11 @@
 
 	<TablePagination {page} {limit} {total} {onPage} />
 </div>
+
+{#if details}
+	<RowDetailsDrawer open={selectedRow !== null} title={detailsTitle} onClose={() => selectedRow = null}>
+		{#if selectedRow}
+			{@render details(selectedRow)}
+		{/if}
+	</RowDetailsDrawer>
+{/if}

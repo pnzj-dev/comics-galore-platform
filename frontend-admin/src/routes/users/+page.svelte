@@ -5,6 +5,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
 	import TierBadge from '$lib/components/TierBadge.svelte';
+	import DetailRow from '$lib/components/DetailRow.svelte';
 	import { TIER_OPTIONS } from '$lib/constants/tiers';
 	import { formatDate } from '$lib/utils/format';
 
@@ -110,6 +111,16 @@
 				<Button size="sm" variant="outline" onclick={() => suspendUser(row.id as string)}>Suspend</Button>
 				<Button size="sm" variant="destructive" onclick={() => banUser(row.id as string)}>Ban</Button>
 			{/if}
+		{/snippet}
+		{#snippet details(row)}
+			<DetailRow label="ID" value={row.id as string} />
+			<DetailRow label="Email" value={row.email as string} />
+			<DetailRow label="Role" value={row.role as string} />
+			<DetailRow label="Tier" value={row.tier as string} />
+			<DetailRow label="Status" value={statusBadge(row)} />
+			<DetailRow label="Created" value={formatDate(row.created_at as string)} />
+			<DetailRow label="Banned at" value={formatDate(row.banned_at as string)} />
+			<DetailRow label="Suspended at" value={formatDate(row.suspended_at as string)} />
 		{/snippet}
 	</AdminTable>
 </section>

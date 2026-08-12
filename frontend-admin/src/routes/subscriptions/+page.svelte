@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
 	import TierBadge from '$lib/components/TierBadge.svelte';
+	import DetailRow from '$lib/components/DetailRow.svelte';
 	import { PAID_TIER_OPTIONS } from '$lib/constants/tiers';
 	import { formatDate } from '$lib/utils/format';
 
@@ -78,6 +79,17 @@
 			{:else if col.key === 'expires_at' || col.key === 'created_at'}
 				<span class="text-xs text-muted-foreground">{formatDate(row[col.key] as string)}</span>
 			{/if}
+		{/snippet}
+		{#snippet details(row)}
+			<DetailRow label="ID" value={row.id as string} />
+			<DetailRow label="User ID" value={row.user_id as string} />
+			<DetailRow label="Plan ID" value={row.plan_id as string} />
+			<DetailRow label="Status" value={row.status as string} />
+			<DetailRow label="Tier" value={row.tier as string} />
+			<DetailRow label="Active" value={row.active ? 'Yes' : 'No'} />
+			<DetailRow label="Activated" value={formatDate(row.activated_at as string)} />
+			<DetailRow label="Expires" value={formatDate(row.expires_at as string)} />
+			<DetailRow label="Created" value={formatDate(row.created_at as string)} />
 		{/snippet}
 	</AdminTable>
 </section>

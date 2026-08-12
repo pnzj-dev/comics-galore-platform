@@ -176,3 +176,19 @@ func countDownloadsThisMonth(ctx context.Context, userID string) (int, error) {
 	`, userID).Scan(&count)
 	return count, err
 }
+
+type ReadingStats struct {
+	TotalDownloads int `json:"total_downloads"`
+}
+
+//encore:api auth method=GET path=/admin/reading-stats
+func GetReadingStats(ctx context.Context) (*ReadingStats, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	var stats ReadingStats
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM download_logs`).Scan(&stats.TotalDownloads)
+	return &stats, nil
+}

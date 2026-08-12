@@ -4,6 +4,7 @@
 	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
+	import DetailRow from '$lib/components/DetailRow.svelte';
 	import { formatDate } from '$lib/utils/format';
 
 	let { data } = $props();
@@ -105,6 +106,18 @@
 			{:else}
 				<Button size="sm" variant="ghost" class="text-destructive hover:bg-destructive/10" onclick={() => confirmDelete = row.id as string}>Delete</Button>
 			{/if}
+		{/snippet}
+		{#snippet details(row)}
+			<DetailRow label="ID" value={row.id as string} />
+			<DetailRow label="Title" value={row.title as string} />
+			<DetailRow label="Author" value={row.author as string} />
+			<DetailRow label="Status" value={(row.status as string)?.replace('_', ' ')} />
+			<DetailRow label="Views" value={row.view_count as number} />
+			<DetailRow label="Downloads" value={row.download_count as number} />
+			<DetailRow label="Likes" value={row.like_count as number} />
+			<DetailRow label="Favorites" value={row.fav_count as number} />
+			<DetailRow label="Published" value={formatDate(row.published_at as string)} />
+			<DetailRow label="Created" value={formatDate(row.created_at as string)} />
 		{/snippet}
 	</AdminTable>
 </section>

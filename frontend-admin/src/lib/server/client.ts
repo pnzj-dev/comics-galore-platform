@@ -168,11 +168,7 @@ export namespace auth {
 
     export interface DashboardStats {
         "total_users": number
-        "total_comics": number
-        "pending_comics": number
-        "active_subscriptions": number
-        "total_downloads": number
-        "total_views": number
+        "new_users_this_month": number
     }
 
     export interface LoginParams {
@@ -536,6 +532,10 @@ export namespace billing {
         "total_revenue": number
         "active_revenue": number
         "recent_revenue": number
+        "total_deposits": number
+        "total_payments": number
+        "active_subscriptions": number
+        "revenue_by_tier": RevenueByTier[]
     }
 
     export interface CheckBalanceResponse {
@@ -582,6 +582,11 @@ export namespace billing {
 
     export interface PollSubResponse {
         active: boolean
+    }
+
+    export interface RevenueByTier {
+        tier: string
+        revenue: number
     }
 
     export interface SeedBillingParams {
@@ -809,6 +814,15 @@ export namespace comics {
         "page_urls": string[]
     }
 
+    export interface ComicsStats {
+        "total_comics": number
+        "published_comics": number
+        "pending_comics": number
+        "total_views": number
+        "storage_bytes": number
+        "top_liked": TopLikedComic[]
+    }
+
     export interface CommentData {
         id: string
         "comic_id": string
@@ -950,6 +964,14 @@ export namespace comics {
         "like_count": number
     }
 
+    export interface TopLikedComic {
+        id: string
+        title: string
+        slug: string
+        "cover_key": string
+        "like_count": number
+    }
+
     export class ServiceClient {
         private baseClient: BaseClient
 
@@ -971,6 +993,7 @@ export namespace comics {
             this.DevSeedEngagement = this.DevSeedEngagement.bind(this)
             this.FollowSeries = this.FollowSeries.bind(this)
             this.GetComic = this.GetComic.bind(this)
+            this.GetComicsStats = this.GetComicsStats.bind(this)
             this.GetLikeStatus = this.GetLikeStatus.bind(this)
             this.GetSeries = this.GetSeries.bind(this)
             this.ListComics = this.ListComics.bind(this)
@@ -1081,6 +1104,12 @@ export namespace comics {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/comics/${encodeURIComponent(slug)}`)
             return await resp.json() as Comic
+        }
+
+        public async GetComicsStats(): Promise<ComicsStats> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/comics-stats`)
+            return await resp.json() as ComicsStats
         }
 
         public async GetLikeStatus(id: string): Promise<LikeStatus> {
@@ -1234,6 +1263,10 @@ export namespace reading {
         "updated_at": string
     }
 
+    export interface ReadingStats {
+        "total_downloads": number
+    }
+
     export interface SaveProgressParams {
         "current_page": number
         "total_pages": number
@@ -1247,6 +1280,7 @@ export namespace reading {
             this.baseClient = baseClient
             this.ContinueReading = this.ContinueReading.bind(this)
             this.GetProgress = this.GetProgress.bind(this)
+            this.GetReadingStats = this.GetReadingStats.bind(this)
             this.RecordDownload = this.RecordDownload.bind(this)
             this.SaveProgress = this.SaveProgress.bind(this)
         }
@@ -1261,6 +1295,12 @@ export namespace reading {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/reading/${encodeURIComponent(comicId)}`)
             return await resp.json() as Progress
+        }
+
+        public async GetReadingStats(): Promise<ReadingStats> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/reading-stats`)
+            return await resp.json() as ReadingStats
         }
 
         public async RecordDownload(comicId: string): Promise<DownloadResponse> {
@@ -1436,6 +1476,11 @@ export namespace upload {
         url: string
     }
 
+    export interface StorageStats {
+        "cf_configured": boolean
+        "cf_images_count": number
+    }
+
     export interface UploadSession {
         id: string
         "user_id": string
@@ -1457,6 +1502,7 @@ export namespace upload {
             this.ConfirmPart = this.ConfirmPart.bind(this)
             this.CreateSession = this.CreateSession.bind(this)
             this.GetSession = this.GetSession.bind(this)
+            this.GetStorageStats = this.GetStorageStats.bind(this)
             this.ListActiveSessions = this.ListActiveSessions.bind(this)
             this.PresignUpload = this.PresignUpload.bind(this)
             this.ServeMedia = this.ServeMedia.bind(this)
@@ -1488,6 +1534,12 @@ export namespace upload {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/upload-sessions/${encodeURIComponent(id)}`)
             return await resp.json() as UploadSession
+        }
+
+        public async GetStorageStats(): Promise<StorageStats> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/storage-stats`)
+            return await resp.json() as StorageStats
         }
 
         public async ListActiveSessions(): Promise<ListSessionsResponse> {

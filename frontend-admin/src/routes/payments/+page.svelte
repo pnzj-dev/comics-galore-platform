@@ -3,6 +3,7 @@
 	import { page } from '$app/state';
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
 	import TierBadge from '$lib/components/TierBadge.svelte';
+	import DetailRow from '$lib/components/DetailRow.svelte';
 	import { PAID_TIER_OPTIONS } from '$lib/constants/tiers';
 	import { formatDate, formatUSD } from '$lib/utils/format';
 
@@ -92,6 +93,19 @@
 			{:else if col.key === 'created_at'}
 				<span class="text-xs text-muted-foreground">{formatDate(row.created_at as string)}</span>
 			{/if}
+		{/snippet}
+		{#snippet details(row)}
+			<DetailRow label="ID" value={row.id as string} />
+			<DetailRow label="Provider Payment ID" value={row.provider_payment_id as string} />
+			<DetailRow label="User ID" value={row.user_id as string} />
+			<DetailRow label="Subscription ID" value={row.subscription_id as string} />
+			<DetailRow label="Tier" value={row.tier as string} />
+			<DetailRow label="Interval" value={row.interval as string} />
+			<DetailRow label="Amount (crypto)" value={row.amount_crypto as string} />
+			<DetailRow label="Currency" value={row.currency_crypto as string} />
+			<DetailRow label="Amount (USD)" value={formatUSD(row.amount_usd_cents as number)} />
+			<DetailRow label="Status" value={row.status as string} />
+			<DetailRow label="Created" value={formatDate(row.created_at as string)} />
 		{/snippet}
 	</AdminTable>
 </section>

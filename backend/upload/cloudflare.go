@@ -78,3 +78,31 @@ func randomHex(n int) string {
 	rand.Read(b)
 	return hex.EncodeToString(b)
 }
+
+type StorageStats struct {
+	CFConfigured  bool `json:"cf_configured"`
+	CFImagesCount int  `json:"cf_images_count"`
+}
+
+//encore:api auth method=GET path=/admin/storage-stats
+func GetStorageStats(ctx context.Context) (*StorageStats, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	stats := &StorageStats{CFConfigured: cfClient != nil && cfSecrets.CloudflareAccountID != ""}
+	if !stats.CFConfigured {
+		return stats, nil
+	}
+
+	resp, err := cfClient.Images.V2.List(ctx, images.V2ListParams{
+		AccountID: cloudflare.F(cfSecrets.CloudflareAccountID),
+		PerPage:   cloudflare.F(float64(10000)),
+	})
+	if err == nil && resp != nil {
+		stats.CFImagesCount = len(resp.Images)
+	}
+
+	return stats, nil
+}

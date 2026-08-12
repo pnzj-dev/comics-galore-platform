@@ -26,6 +26,8 @@
 		"vite": "^8.0.16"
 	},
 	"dependencies": {
+		"@tanstack/charts": "^0.11.1",
+		"@tanstack/svelte-charts": "^0.11.1",
 		"clsx": "^2.1.1",
 		"lucide-svelte": "^1.0.1",
 		"tailwind-merge": "^3.6.0"

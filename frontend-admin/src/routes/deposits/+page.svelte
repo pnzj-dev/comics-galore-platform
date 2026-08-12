@@ -1,13 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { Button } from '$lib/components/ui/button/index.js';
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
-	import DepositDetailsModal from '$lib/components/DepositDetailsModal.svelte';
+	import DepositDetails from '$lib/components/DepositDetails.svelte';
 	import { formatDate, formatUSD } from '$lib/utils/format';
 
 	let { data } = $props();
-	let selectedDeposit = $state<Record<string, unknown> | null>(null);
 
 	const columns = [
 		{ key: 'user_id', label: 'User ID', filterable: true, filterType: 'text' as const, filterPlaceholder: 'User ID...' },
@@ -73,6 +71,7 @@
 		filters={data.filters as Record<string, string>}
 		showFilters={data.showFilters}
 		onToggleFilters={toggleFilters}
+		detailsTitle="Deposit Details"
 		{onSort}
 		{onSearch}
 		{onFilter}
@@ -95,10 +94,8 @@
 				<span class="text-xs text-muted-foreground">{formatDate(row.completed_at as string)}</span>
 			{/if}
 		{/snippet}
-		{#snippet actions(row)}
-			<Button size="sm" variant="outline" onclick={() => selectedDeposit = row}>Details</Button>
+		{#snippet details(row)}
+			<DepositDetails deposit={row} />
 		{/snippet}
 	</AdminTable>
-
-	<DepositDetailsModal open={!!selectedDeposit} deposit={selectedDeposit} onClose={() => selectedDeposit = null} />
 </section>

@@ -4,6 +4,8 @@
 	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
+	import DetailRow from '$lib/components/DetailRow.svelte';
+	import { formatDate } from '$lib/utils/format';
 
 	let { data } = $props();
 	let actionLoading = $state('');
@@ -90,6 +92,13 @@
 		{#snippet actions(row)}
 			<Button size="sm" variant="outline" onclick={() => restoreComic(row.id as string)} disabled={actionLoading === row.id}>Restore</Button>
 			<Button size="sm" variant="destructive" onclick={() => permanentDelete(row.id as string)} disabled={actionLoading === row.id}>Delete</Button>
+		{/snippet}
+		{#snippet details(row)}
+			<DetailRow label="ID" value={row.id as string} />
+			<DetailRow label="Title" value={row.title as string} />
+			<DetailRow label="Author" value={row.author as string} />
+			<DetailRow label="Status" value={(row.status as string)?.replace('_', ' ')} />
+			<DetailRow label="Deleted at" value={formatDate(row.deleted_at as string)} />
 		{/snippet}
 	</AdminTable>
 </section>

@@ -436,10 +436,19 @@ func DepositWebhook(w http.ResponseWriter, req *http.Request) {
 
 // ----- Billing Stats -----
 
+type RevenueByTier struct {
+	Tier    string `json:"tier"`
+	Revenue int    `json:"revenue"`
+}
+
 type BillingStats struct {
-	TotalRevenue  int `json:"total_revenue"`
-	ActiveRevenue int `json:"active_revenue"`
-	RecentRevenue int `json:"recent_revenue"`
+	TotalRevenue      int             `json:"total_revenue"`
+	ActiveRevenue     int             `json:"active_revenue"`
+	RecentRevenue     int             `json:"recent_revenue"`
+	TotalDeposits     int             `json:"total_deposits"`
+	TotalPayments     int             `json:"total_payments"`
+	ActiveSubs        int             `json:"active_subscriptions"`
+	RevenueByTier     []RevenueByTier `json:"revenue_by_tier"`
 }
 
 //encore:api auth method=GET path=/admin/billing-stats
@@ -453,6 +462,24 @@ func GetBillingStats(ctx context.Context) (*BillingStats, error) {
 	db.QueryRow(ctx, `SELECT COALESCE(SUM(amount_usd_cents), 0) FROM payments WHERE status = 'finished'`).Scan(&stats.TotalRevenue)
 	db.QueryRow(ctx, `SELECT COALESCE(SUM(amount_usd_cents), 0) FROM payments WHERE status = 'finished' AND interval = 'monthly'`).Scan(&stats.ActiveRevenue)
 	db.QueryRow(ctx, `SELECT COALESCE(SUM(amount_usd_cents), 0) FROM payments WHERE status = 'finished' AND created_at > now() - interval '30 days'`).Scan(&stats.RecentRevenue)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM deposits`).Scan(&stats.TotalDeposits)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM payments WHERE status = 'finished'`).Scan(&stats.TotalPayments)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM subscriptions WHERE active = true`).Scan(&stats.ActiveSubs)
+
+	rows, err := db.Query(ctx, `
+		SELECT tier, COALESCE(SUM(amount_usd_cents), 0) AS revenue
+		FROM payments WHERE status = 'finished'
+		GROUP BY tier ORDER BY revenue DESC
+	`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var r RevenueByTier
+			if rows.Scan(&r.Tier, &r.Revenue) == nil {
+				stats.RevenueByTier = append(stats.RevenueByTier, r)
+			}
+		}
+	}
 
 	return &stats, nil
 }

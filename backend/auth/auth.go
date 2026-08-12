@@ -769,12 +769,8 @@ func UpdateNotificationPrefs(ctx context.Context, p *NotificationPrefs) (*Notifi
 // ----- Admin Dashboard Stats -----
 
 type DashboardStats struct {
-	TotalUsers        int `json:"total_users"`
-	TotalComics       int `json:"total_comics"`
-	PendingComics     int `json:"pending_comics"`
-	ActiveSubs        int `json:"active_subscriptions"`
-	TotalDownloads    int `json:"total_downloads"`
-	TotalViews        int `json:"total_views"`
+	TotalUsers      int `json:"total_users"`
+	NewUsersThisMonth int `json:"new_users_this_month"`
 }
 
 //encore:api auth method=GET path=/admin/stats
@@ -786,11 +782,7 @@ func AdminDashboardStats(ctx context.Context) (*DashboardStats, error) {
 
 	var stats DashboardStats
 	db.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&stats.TotalUsers)
-	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics`).Scan(&stats.TotalComics)
-	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics WHERE status = 'pending_review'`).Scan(&stats.PendingComics)
-	db.QueryRow(ctx, `SELECT COUNT(*) FROM subscriptions WHERE active = true`).Scan(&stats.ActiveSubs)
-	db.QueryRow(ctx, `SELECT COUNT(*) FROM download_logs`).Scan(&stats.TotalDownloads)
-	db.QueryRow(ctx, `SELECT COALESCE(SUM(view_count), 0) FROM comics`).Scan(&stats.TotalViews)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE created_at >= date_trunc('month', now())`).Scan(&stats.NewUsersThisMonth)
 
 	return &stats, nil
 }
