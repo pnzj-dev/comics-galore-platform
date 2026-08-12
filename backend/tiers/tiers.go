@@ -180,8 +180,12 @@ type AutoLinkPlanResponse struct {
 	PlanName       string `json:"plan_name"`
 }
 
+type AutoLinkPlanParams struct {
+	Host string `header:"Host"`
+}
+
 //encore:api auth method=POST path=/admin/plans/link/:id
-func AutoLinkPlan(ctx context.Context, id string) (*AutoLinkPlanResponse, error) {
+func AutoLinkPlan(ctx context.Context, id string, p *AutoLinkPlanParams) (*AutoLinkPlanResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 	if ad.Role != "admin" {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
@@ -223,7 +227,7 @@ func AutoLinkPlan(ctx context.Context, id string) (*AutoLinkPlanResponse, error)
 		Name:        displayName,
 		PriceAmount: float64(plan.PriceUsdCents) / 100.0,
 		Period:      period,
-	})
+	}, p.Host)
 	if err != nil {
 		return nil, &errs.Error{Code: errs.Internal, Message: "nowpayments plan creation failed: " + err.Error()}
 	}

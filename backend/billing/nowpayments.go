@@ -304,10 +304,11 @@ func periodToDays(period string) int {
 
 func (p *NowPaymentsProvider) CreatePlan(ctx context.Context, req CreatePlanRequest) (*CreatePlanResponse, error) {
 	body := map[string]interface{}{
-		"title":          	req.Name,
-		"amount":   		req.PriceAmount,
-		"currency": 		"usd",
+		"title":            req.Name,
+		"amount":           req.PriceAmount,
+		"currency":         "usd",
 		"interval_day":     periodToDays(req.Period),
+		"ipn_callback_url": req.IPNCallbackURL,
 	}
 
 	resp, err := p.doJWTRequest(ctx, "POST", npBaseURL+"/subscriptions/plans", body)

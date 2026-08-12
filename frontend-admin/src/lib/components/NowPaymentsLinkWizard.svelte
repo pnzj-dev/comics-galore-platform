@@ -134,7 +134,7 @@
 			planLinkState[plan.id] = 'linking';
 			logLines = [...logLines, { text: `Creating NowPayments plan for ${planDisplayName(plan)}...`, ok: false, loading: true }];
 			try {
-				const res = await encore.tiers.AutoLinkPlan(plan.id);
+				const res = await encore.tiers.AutoLinkPlan(plan.id, { Host: window.location.host });
 				planLinkState[plan.id] = 'success';
 				logLines = logLines.map(l =>
 					l.text.startsWith(`Creating NowPayments plan for ${planDisplayName(plan)}`)
@@ -170,7 +170,7 @@
 			planLinkState[plan.id] = 'linking';
 			logLines = [...logLines, { text: `Retrying ${planDisplayName(plan)}...`, ok: false, loading: true }];
 			try {
-				const res = await encore.tiers.AutoLinkPlan(plan.id);
+				const res = await encore.tiers.AutoLinkPlan(plan.id, { Host: window.location.host });
 				planLinkState[plan.id] = 'success';
 				logLines = logLines.map(l =>
 					l.text.startsWith(`Retrying ${planDisplayName(plan)}`)

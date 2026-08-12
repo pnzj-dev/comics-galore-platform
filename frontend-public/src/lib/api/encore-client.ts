@@ -1187,6 +1187,10 @@ export namespace reading {
 }
 
 export namespace tiers {
+    export interface AutoLinkPlanParams {
+        Host: string
+    }
+
     export interface AutoLinkPlanResponse {
         "provider_plan_id": string
         "plan_name": string
@@ -1249,9 +1253,14 @@ export namespace tiers {
             this.UpdatePlanProviderID = this.UpdatePlanProviderID.bind(this)
         }
 
-        public async AutoLinkPlan(id: string): Promise<AutoLinkPlanResponse> {
+        public async AutoLinkPlan(id: string, params: AutoLinkPlanParams): Promise<AutoLinkPlanResponse> {
+            // Convert our params into the objects we need for the request
+            const headers = makeRecord<string, string>({
+                host: params.Host,
+            })
+
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/link/${encodeURIComponent(id)}`)
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/link/${encodeURIComponent(id)}`, undefined, {headers})
             return await resp.json() as AutoLinkPlanResponse
         }
 

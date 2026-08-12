@@ -45,9 +45,10 @@ type DepositResponse struct {
 }
 
 type CreatePlanRequest struct {
-	Name        string
-	PriceAmount float64
-	Period      string
+	Name           string
+	PriceAmount    float64
+	Period         string
+	IPNCallbackURL string
 }
 
 type CreatePlanResponse struct {

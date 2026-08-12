@@ -30,6 +30,7 @@ var secrets struct {
 	NowPaymentsIPNKey   string
 	NowPaymentsEmail    string
 	NowPaymentsPassword string
+	NgrokURL            string
 }
 
 var provider PaymentsProvider
@@ -37,6 +38,20 @@ var provider PaymentsProvider
 func init() {
 	provider = NewNowPaymentsProvider(secrets.NowPaymentsAPIKey, secrets.NowPaymentsIPNKey,
 		secrets.NowPaymentsEmail, secrets.NowPaymentsPassword)
+}
+
+func buildCallbackURL(host, path string) string {
+	if (strings.Contains(host, "localhost") || strings.Contains(host, "127.0.0.1")) && secrets.NgrokURL != "" {
+		return strings.TrimRight(secrets.NgrokURL, "/") + path
+	}
+	scheme := "https"
+	if host == "" || strings.Contains(host, "localhost") || strings.Contains(host, ":4000") {
+		scheme = "http"
+	}
+	if host == "" {
+		host = "localhost:4000"
+	}
+	return scheme + "://" + host + path
 }
 
 // ----- Estimate Price -----
@@ -197,14 +212,7 @@ func CreateDeposit(ctx context.Context, p *CreateDepositParams) (*CreateDepositR
 		return nil, err
 	}
 
-	scheme := "https"
-	if p.Host == "" || strings.Contains(p.Host, "localhost") || strings.Contains(p.Host, ":4000") {
-		scheme = "http"
-	}
-	if p.Host == "" {
-		p.Host = "localhost:4000"
-	}
-	callbackURL := scheme + "://" + p.Host + "/webhooks/nowpayments/deposit?deposit_id=" + depositID
+	callbackURL := buildCallbackURL(p.Host, "/webhooks/nowpayments/deposit?deposit_id="+depositID)
 
 	npResp, err := provider.CreateDeposit(ctx, DepositRequest{
 		Crypto:        p.Crypto,
@@ -585,6 +593,7 @@ func fmtNum(n float64) string {
 	return strconv.FormatFloat(n, 'f', -1, 64)
 }
 
-func CreatePlan(ctx context.Context, req CreatePlanRequest) (*CreatePlanResponse, error) {
+func CreatePlan(ctx context.Context, req CreatePlanRequest, host string) (*CreatePlanResponse, error) {
+	req.IPNCallbackURL = buildCallbackURL(host, "/webhooks/nowpayments/subscription")
 	return provider.CreatePlan(ctx, req)
 }
