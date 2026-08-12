@@ -237,16 +237,21 @@ type PollSubResponse struct {
 }
 
 //encore:api auth method=GET path=/billing/subscription/:id/poll
+//encore:api auth method=GET path=/billing/subscription/:id/poll
 func PollSubscription(ctx context.Context, id string) (*PollSubResponse, error) {
-	var active bool
-	err := db.QueryRow(ctx, `SELECT active FROM subscriptions WHERE id = $1`, id).Scan(&active)
+	var finished bool
+	err := db.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM payments WHERE subscription_id = $1 AND status = 'finished'
+		)
+	`, id).Scan(&finished)
 	if err != nil {
 		if isNoRows(err) {
 			return nil, &errs.Error{Code: errs.NotFound, Message: "subscription not found"}
 		}
 		return nil, err
 	}
-	return &PollSubResponse{Active: active}, nil
+	return &PollSubResponse{Active: finished}, nil
 }
 
 // ----- Poll Deposit -----
@@ -294,19 +299,66 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 	var event struct {
 		ID            json.Number `json:"id"`
 		PaymentStatus string      `json:"payment_status"`
+		Amount        json.Number `json:"amount"`
+		Currency      string      `json:"currency"`
+		PriceAmount   json.Number `json:"price_amount"`
 	}
 	json.Unmarshal(body, &event)
 
-	if event.PaymentStatus == "finished" || event.PaymentStatus == "FINISHED" {
-		var userID, tier string
-		err := db.QueryRow(ctx, `
-			SELECT user_id, tier FROM subscriptions
-			WHERE provider_subscription_id = $1 AND active = false
-			ORDER BY created_at DESC LIMIT 1
-		`, event.ID.String()).Scan(&userID, &tier)
+	// Look up subscription, plan, and user info
+	var sub struct {
+		SubID      string
+		UserID     string
+		Tier       string
+		PlanID     string
+		Interval   string
+		PriceCents int
+	}
+	err = db.QueryRow(ctx, `
+		SELECT s.id, s.user_id, s.tier, s.plan_id,
+			COALESCE(p.interval, 'monthly'),
+			COALESCE(p.price_usd_cents, 0)
+		FROM subscriptions s
+		LEFT JOIN plans p ON p.id = s.plan_id
+		WHERE s.provider_subscription_id = $1
+		ORDER BY s.created_at DESC LIMIT 1
+	`, event.ID.String()).Scan(&sub.SubID, &sub.UserID, &sub.Tier, &sub.PlanID, &sub.Interval, &sub.PriceCents)
+
+	status := strings.ToLower(event.PaymentStatus)
+	amtCrypto, _ := event.Amount.Float64()
+	amtUSD, _ := event.PriceAmount.Float64()
+
+	// Calculate amount_usd_cents from price_amount in payload or from plan
+	usdCents := int(amtUSD * 100)
+	if usdCents == 0 {
+		usdCents = sub.PriceCents
+	}
+
+		if err == nil && event.ID.String() != "" {
+		db.Exec(ctx, `
+			INSERT INTO payments
+				(provider, provider_payment_id, user_id, subscription_id, plan_id,
+				 tier, interval, amount_crypto, currency_crypto, amount_usd_cents,
+				 status, raw_payload, updated_at)
+			VALUES
+				('nowpayments', $1, $2, $3, $4,
+				 $5, $6, $7, $8, $9,
+				 $10, $11, now())
+			ON CONFLICT (provider_payment_id) DO UPDATE SET
+				amount_crypto = EXCLUDED.amount_crypto,
+				amount_usd_cents = EXCLUDED.amount_usd_cents,
+				status = EXCLUDED.status,
+				raw_payload = EXCLUDED.raw_payload,
+				updated_at = now()
+		`, event.ID.String(), sub.UserID, sub.SubID, sub.PlanID,
+			sub.Tier, sub.Interval, amtCrypto, event.Currency, usdCents,
+			status, string(body))
+	}
+
+	if status == "finished" {
 		if err == nil {
 			db.Exec(ctx, `UPDATE subscriptions SET active = true, status = 'active' WHERE provider_subscription_id = $1`, event.ID.String())
-			db.Exec(ctx, `UPDATE users SET tier = $1 WHERE id = $2`, tier, userID)
+			db.Exec(ctx, `UPDATE users SET tier = $1 WHERE id = $2`, sub.Tier, sub.UserID)
 		}
 	}
 
@@ -343,23 +395,56 @@ func DepositWebhook(w http.ResponseWriter, req *http.Request) {
 	}
 	json.Unmarshal(body, &event)
 
-	if event.PaymentStatus == "finished" || event.PaymentStatus == "FINISHED" {
-		depositID := req.URL.Query().Get("deposit_id")
-		if depositID != "" {
-			db.Exec(ctx, `
-				UPDATE deposits SET status = 'completed', completed_at = now()
-				WHERE id = $1
-			`, depositID)
-		}
-		// Also try matching by provider_deposit_id
+	status := strings.ToLower(event.PaymentStatus)
+	depositID := req.URL.Query().Get("deposit_id")
+
+	// Always update deposit by deposit_id (exact match from callback URL)
+	if depositID != "" {
 		db.Exec(ctx, `
-			UPDATE deposits SET status = 'completed', completed_at = now()
-			WHERE provider_deposit_id = $1 AND status = 'pending'
-		`, event.PaymentID.String())
+			UPDATE deposits SET status = $1, raw_payload = $2, updated_at = now()
+			WHERE id = $3
+		`, status, string(body), depositID)
+	}
+
+	// Also try matching by provider_deposit_id
+	db.Exec(ctx, `
+		UPDATE deposits SET status = $1, raw_payload = $2, updated_at = now()
+		WHERE provider_deposit_id = $3
+	`, status, string(body), event.PaymentID.String())
+
+	// If finished, also set completed_at
+	if status == "finished" {
+		if depositID != "" {
+			db.Exec(ctx, `UPDATE deposits SET completed_at = now() WHERE id = $1`, depositID)
+		}
+		db.Exec(ctx, `UPDATE deposits SET completed_at = now() WHERE provider_deposit_id = $1`, event.PaymentID.String())
 	}
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"ok":true}`))
+}
+
+// ----- Billing Stats -----
+
+type BillingStats struct {
+	TotalRevenue  int `json:"total_revenue"`
+	ActiveRevenue int `json:"active_revenue"`
+	RecentRevenue int `json:"recent_revenue"`
+}
+
+//encore:api auth method=GET path=/admin/billing-stats
+func GetBillingStats(ctx context.Context) (*BillingStats, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	var stats BillingStats
+	db.QueryRow(ctx, `SELECT COALESCE(SUM(amount_usd_cents), 0) FROM payments WHERE status = 'finished'`).Scan(&stats.TotalRevenue)
+	db.QueryRow(ctx, `SELECT COALESCE(SUM(amount_usd_cents), 0) FROM payments WHERE status = 'finished' AND interval = 'monthly'`).Scan(&stats.ActiveRevenue)
+	db.QueryRow(ctx, `SELECT COALESCE(SUM(amount_usd_cents), 0) FROM payments WHERE status = 'finished' AND created_at > now() - interval '30 days'`).Scan(&stats.RecentRevenue)
+
+	return &stats, nil
 }
 
 // ----- Admin -----
