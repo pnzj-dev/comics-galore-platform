@@ -35,6 +35,12 @@
 		url.searchParams.set('page', String(p));
 		await goto(url.pathname + url.search, { keepFocus: true });
 	}
+	async function toggleFilters() {
+		const url = new URL(page.url);
+		if (data.showFilters) url.searchParams.delete('show_filters');
+		else url.searchParams.set('show_filters', '1');
+		await goto(url.pathname + url.search, { keepFocus: true });
+	}
 	async function restoreComic(id: string) {
 		actionLoading = id;
 		await encore.comics.RestoreComic(id);
@@ -64,6 +70,8 @@
 		sortDir={data.sortDir as 'asc' | 'desc'}
 		search={data.search}
 		filters={data.filters as Record<string, string>}
+		showFilters={data.showFilters}
+		onToggleFilters={toggleFilters}
 		emptyMessage="Recycle bin is empty."
 		{onSort}
 		{onSearch}

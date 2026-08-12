@@ -53,7 +53,7 @@
 	}
 </script>
 
-{#if authed && user?.role === 'admin'}
+{#if authed && user?.role === 'admin' && page.url?.pathname !== '/login'}
 	<div class="flex h-screen overflow-hidden">
 		<!-- Sidebar -->
 		<aside class="w-60 flex-shrink-0 bg-slate-900 dark:bg-slate-950 text-white flex flex-col">

@@ -22,6 +22,7 @@ export const load: PageServerLoad = async ({ cookies, url }) => {
 			search: url.searchParams.get('search') || '',
 			sort: url.searchParams.get('sort') || '',
 			sortDir: url.searchParams.get('sort_dir') || '',
+			showFilters: url.searchParams.get('show_filters') === '1',
 			filters: {
 				status: url.searchParams.get('filter_status') || '',
 				author: url.searchParams.get('filter_author') || '',
@@ -29,6 +30,6 @@ export const load: PageServerLoad = async ({ cookies, url }) => {
 			},
 		};
 	} catch {
-		return { results: [], total: 0, page: 1, limit: 20, search: '', sort: '', sortDir: '', filters: {} };
+		return { results: [], total: 0, page: 1, limit: 20, search: '', sort: '', sortDir: '', showFilters: false, filters: {} };
 	}
 };

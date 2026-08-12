@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
+	import { formatDate } from '$lib/utils/format';
 
 	let { data } = $props();
 
@@ -41,6 +42,12 @@
 		url.searchParams.set('page', String(p));
 		await goto(url.pathname + url.search, { keepFocus: true });
 	}
+	async function toggleFilters() {
+		const url = new URL(page.url);
+		if (data.showFilters) url.searchParams.delete('show_filters');
+		else url.searchParams.set('show_filters', '1');
+		await goto(url.pathname + url.search, { keepFocus: true });
+	}
 </script>
 
 <svelte:head><title>Subscriptions — Admin</title></svelte:head>
@@ -58,6 +65,8 @@
 		sortDir={data.sortDir as 'asc' | 'desc'}
 		search={data.search}
 		filters={data.filters as Record<string, string>}
+		showFilters={data.showFilters}
+		onToggleFilters={toggleFilters}
 		{onSort}
 		{onSearch}
 		{onFilter}
@@ -71,7 +80,7 @@
 			{:else if col.key === 'tier'}
 				<span class="text-xs capitalize">{row.tier as string}</span>
 			{:else if col.key === 'expires_at' || col.key === 'created_at'}
-				<span class="text-xs text-muted-foreground">{row[col.key] ? new Date(row[col.key] as string).toLocaleDateString() : '—'}</span>
+				<span class="text-xs text-muted-foreground">{formatDate(row[col.key] as string)}</span>
 			{/if}
 		{/snippet}
 	</AdminTable>

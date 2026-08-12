@@ -4,6 +4,7 @@
 	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card/index.js';
+	import { formatDate } from '$lib/utils/format';
 
 	let { data } = $props();
 
@@ -110,7 +111,7 @@
 							<input type="checkbox" checked={selected.has(comic.id)} onchange={() => toggleSelect(comic.id)} class="mt-1.5 rounded" />
 							<div class="flex-1">
 								<CardTitle>{comic.title}</CardTitle>
-								<p class="text-sm text-muted-foreground">Submitted: {new Date(comic.created_at).toLocaleDateString()}</p>
+								<p class="text-sm text-muted-foreground">Submitted: {formatDate(comic.created_at)}</p>
 							</div>
 						</div>
 					</CardHeader>

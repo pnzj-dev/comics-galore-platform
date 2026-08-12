@@ -4,6 +4,7 @@
 	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
+	import { formatDate } from '$lib/utils/format';
 
 	let { data } = $props();
 	let confirmDelete = $state('');
@@ -42,6 +43,12 @@
 		url.searchParams.set('page', String(p));
 		await goto(url.pathname + url.search, { keepFocus: true });
 	}
+	async function toggleFilters() {
+		const url = new URL(page.url);
+		if (data.showFilters) url.searchParams.delete('show_filters');
+		else url.searchParams.set('show_filters', '1');
+		await goto(url.pathname + url.search, { keepFocus: true });
+	}
 	async function deleteComic(id: string) {
 		await encore.comics.DeleteComic(id);
 		confirmDelete = '';
@@ -64,6 +71,8 @@
 		sortDir={data.sortDir as 'asc' | 'desc'}
 		search={data.search}
 		filters={data.filters as Record<string, string>}
+		showFilters={data.showFilters}
+		onToggleFilters={toggleFilters}
 		{onSort}
 		{onSearch}
 		{onFilter}
@@ -86,7 +95,7 @@
 			{:else if col.key === 'download_count'}
 				<span class="text-xs">{row.download_count as number}</span>
 			{:else if col.key === 'created_at'}
-				<span class="text-xs text-muted-foreground">{new Date(row.created_at as string).toLocaleDateString()}</span>
+				<span class="text-xs text-muted-foreground">{formatDate(row.created_at as string)}</span>
 			{/if}
 		{/snippet}
 		{#snippet actions(row)}

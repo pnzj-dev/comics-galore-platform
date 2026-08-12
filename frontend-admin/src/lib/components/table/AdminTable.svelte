@@ -31,6 +31,8 @@
 		onPage: (page: number) => void;
 		children: import('svelte').Snippet<[item: TData, col: ColumnDef]>;
 		actions?: import('svelte').Snippet<[item: TData]>;
+		showFilters?: boolean;
+		onToggleFilters?: () => void;
 		searchPlaceholder?: string;
 		searchClass?: string;
 		containerClass?: string;
@@ -65,6 +67,8 @@
 		onPage,
 		children,
 		actions,
+		showFilters = false,
+		onToggleFilters,
 		searchPlaceholder = 'Search...',
 		searchClass = 'max-w-xs rounded-md border border-input bg-background px-3 py-1.5 text-sm',
 		containerClass = 'space-y-3',
@@ -110,6 +114,8 @@
 					{filters}
 					{onSort}
 					{onFilter}
+					{showFilters}
+					{onToggleFilters}
 					{headerClass}
 					{sortBtnClass}
 					{headerRowClass}
