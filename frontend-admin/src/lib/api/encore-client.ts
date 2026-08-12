@@ -303,13 +303,13 @@ export namespace auth {
             // Convert our params into the objects we need for the request
             const query = makeRecord<string, string | string[]>({
                 "filter_email": params.FilterEmail,
-                "filter_role": params.FilterRole,
-                "filter_tier": params.FilterTier,
-                limit:         String(params.Limit),
-                page:          String(params.Page),
-                search:        params.Search,
-                sort:          params.Sort,
-                "sort_dir":    params.SortDir,
+                "filter_role":  params.FilterRole,
+                "filter_tier":  params.FilterTier,
+                limit:          String(params.Limit),
+                page:           String(params.Page),
+                search:         params.Search,
+                sort:           params.Sort,
+                "sort_dir":     params.SortDir,
             })
 
             // Now make the actual call to the API
@@ -476,6 +476,12 @@ export namespace billing {
         PendingAmount: number
     }
 
+    export interface BillingStats {
+        "total_revenue": number
+        "active_revenue": number
+        "recent_revenue": number
+    }
+
     export interface CheckBalanceResponse {
         balances: { [key: string]: BalanceEntry }
     }
@@ -544,6 +550,7 @@ export namespace billing {
             this.DepositWebhook = this.DepositWebhook.bind(this)
             this.DevSeedBilling = this.DevSeedBilling.bind(this)
             this.EstimatePrice = this.EstimatePrice.bind(this)
+            this.GetBillingStats = this.GetBillingStats.bind(this)
             this.PollDeposit = this.PollDeposit.bind(this)
             this.PollSubscription = this.PollSubscription.bind(this)
             this.SubscriptionWebhook = this.SubscriptionWebhook.bind(this)
@@ -555,11 +562,11 @@ export namespace billing {
                 "filter_status":  params.FilterStatus,
                 "filter_tier":    params.FilterTier,
                 "filter_user_id": params.FilterUserID,
-                limit:           String(params.Limit),
-                page:            String(params.Page),
-                search:          params.Search,
-                sort:            params.Sort,
-                "sort_dir":      params.SortDir,
+                limit:            String(params.Limit),
+                page:             String(params.Page),
+                search:           params.Search,
+                sort:             params.Sort,
+                "sort_dir":       params.SortDir,
             })
 
             // Now make the actual call to the API
@@ -610,6 +617,12 @@ export namespace billing {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/billing/estimate-price`, JSON.stringify(params))
             return await resp.json() as EstimateResponse
+        }
+
+        public async GetBillingStats(): Promise<BillingStats> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/billing-stats`)
+            return await resp.json() as BillingStats
         }
 
         public async PollDeposit(id: string): Promise<PollDepositResponse> {

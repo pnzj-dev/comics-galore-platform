@@ -237,7 +237,6 @@ type PollSubResponse struct {
 }
 
 //encore:api auth method=GET path=/billing/subscription/:id/poll
-//encore:api auth method=GET path=/billing/subscription/:id/poll
 func PollSubscription(ctx context.Context, id string) (*PollSubResponse, error) {
 	var finished bool
 	err := db.QueryRow(ctx, `

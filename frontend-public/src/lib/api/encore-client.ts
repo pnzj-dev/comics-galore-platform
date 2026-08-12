@@ -96,6 +96,17 @@ export interface ClientOptions {
 }
 
 export namespace auth {
+    export interface AdminListUsersParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterRole: string
+        FilterTier: string
+        FilterEmail: string
+    }
+
     export interface AdminUser {
         id: string
         email: string
@@ -130,9 +141,16 @@ export namespace auth {
         "quota_silver_gb": number
         "quota_gold_gb": number
         "quota_platinum_gb": number
-        "boost_5gb_price": number
-        "boost_10gb_price": number
-        "boost_20gb_price": number
+        "boost_1_gb": number
+        "boost_1_price": number
+        "boost_2_gb": number
+        "boost_2_price": number
+        "boost_3_gb": number
+        "boost_3_price": number
+        "contact_email": string
+        "hide_mature_default": boolean
+        "enable_comments": boolean
+        "default_meta_description": string
     }
 
     export interface AuthParams {
@@ -281,9 +299,21 @@ export namespace auth {
             return await resp.json() as DashboardStats
         }
 
-        public async AdminListUsers(): Promise<AdminUserListResponse> {
+        public async AdminListUsers(params: AdminListUsersParams): Promise<AdminUserListResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "filter_email": params.FilterEmail,
+                "filter_role":  params.FilterRole,
+                "filter_tier":  params.FilterTier,
+                limit:          String(params.Limit),
+                page:           String(params.Page),
+                search:         params.Search,
+                sort:           params.Sort,
+                "sort_dir":     params.SortDir,
+            })
+
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/users`)
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/users`, undefined, {query})
             return await resp.json() as AdminUserListResponse
         }
 
@@ -413,8 +443,20 @@ export namespace auth {
  * Base URL: https://api.nowpayments.io
  */
 export namespace billing {
+    export interface AdminListSubscriptionsParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterStatus: string
+        FilterTier: string
+        FilterUserID: string
+    }
+
     export interface AdminSubList {
         subscriptions: AdminSubscription[]
+        total: number
     }
 
     export interface AdminSubscription {
@@ -432,6 +474,12 @@ export namespace billing {
     export interface BalanceEntry {
         Amount: number
         PendingAmount: number
+    }
+
+    export interface BillingStats {
+        "total_revenue": number
+        "active_revenue": number
+        "recent_revenue": number
     }
 
     export interface CheckBalanceResponse {
@@ -502,14 +550,27 @@ export namespace billing {
             this.DepositWebhook = this.DepositWebhook.bind(this)
             this.DevSeedBilling = this.DevSeedBilling.bind(this)
             this.EstimatePrice = this.EstimatePrice.bind(this)
+            this.GetBillingStats = this.GetBillingStats.bind(this)
             this.PollDeposit = this.PollDeposit.bind(this)
             this.PollSubscription = this.PollSubscription.bind(this)
             this.SubscriptionWebhook = this.SubscriptionWebhook.bind(this)
         }
 
-        public async AdminListSubscriptions(): Promise<AdminSubList> {
+        public async AdminListSubscriptions(params: AdminListSubscriptionsParams): Promise<AdminSubList> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "filter_status":  params.FilterStatus,
+                "filter_tier":    params.FilterTier,
+                "filter_user_id": params.FilterUserID,
+                limit:            String(params.Limit),
+                page:             String(params.Page),
+                search:           params.Search,
+                sort:             params.Sort,
+                "sort_dir":       params.SortDir,
+            })
+
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/subscriptions`)
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/subscriptions`, undefined, {query})
             return await resp.json() as AdminSubList
         }
 
@@ -558,6 +619,12 @@ export namespace billing {
             return await resp.json() as EstimateResponse
         }
 
+        public async GetBillingStats(): Promise<BillingStats> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/billing-stats`)
+            return await resp.json() as BillingStats
+        }
+
         public async PollDeposit(id: string): Promise<PollDepositResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/billing/deposit/${encodeURIComponent(id)}/poll`)
@@ -577,6 +644,17 @@ export namespace billing {
 }
 
 export namespace comics {
+    export interface AdminListComicsParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterStatus: string
+        FilterAuthor: string
+        FilterTitle: string
+    }
+
     export interface AuditLogEntry {
         id: string
         "actor_id": string
@@ -718,6 +796,25 @@ export namespace comics {
         "created_at": string
     }
 
+    export interface PendingComicsParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+    }
+
+    export interface RecycleBinParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterStatus: string
+        FilterAuthor: string
+        FilterTitle: string
+    }
+
     export interface RejectParams {
         reason: string
     }
@@ -807,9 +904,21 @@ export namespace comics {
             return await resp.json() as AuditLogsResponse
         }
 
-        public async AdminListComics(): Promise<ListComicsResponse> {
+        public async AdminListComics(params: AdminListComicsParams): Promise<ListComicsResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "filter_author": params.FilterAuthor,
+                "filter_status": params.FilterStatus,
+                "filter_title":  params.FilterTitle,
+                limit:           String(params.Limit),
+                page:            String(params.Page),
+                search:          params.Search,
+                sort:            params.Sort,
+                "sort_dir":      params.SortDir,
+            })
+
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/comics`)
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/comics`, undefined, {query})
             return await resp.json() as ListComicsResponse
         }
 
@@ -930,9 +1039,18 @@ export namespace comics {
             return await resp.json() as ListComicsResponse
         }
 
-        public async PendingComics(): Promise<ListPendingResponse> {
+        public async PendingComics(params: PendingComicsParams): Promise<ListPendingResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                limit:      String(params.Limit),
+                page:       String(params.Page),
+                search:     params.Search,
+                sort:       params.Sort,
+                "sort_dir": params.SortDir,
+            })
+
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/moderation/comics`)
+            const resp = await this.baseClient.callTypedAPI("GET", `/moderation/comics`, undefined, {query})
             return await resp.json() as ListPendingResponse
         }
 
@@ -940,9 +1058,21 @@ export namespace comics {
             return this.baseClient.callAPI(method, `/rss`, body, options)
         }
 
-        public async RecycleBin(): Promise<ListComicsResponse> {
+        public async RecycleBin(params: RecycleBinParams): Promise<ListComicsResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "filter_author": params.FilterAuthor,
+                "filter_status": params.FilterStatus,
+                "filter_title":  params.FilterTitle,
+                limit:           String(params.Limit),
+                page:            String(params.Page),
+                search:          params.Search,
+                sort:            params.Sort,
+                "sort_dir":      params.SortDir,
+            })
+
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/recycle-bin`)
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/recycle-bin`, undefined, {query})
             return await resp.json() as ListComicsResponse
         }
 
@@ -1057,6 +1187,11 @@ export namespace reading {
 }
 
 export namespace tiers {
+    export interface AutoLinkPlanResponse {
+        "provider_plan_id": string
+        "plan_name": string
+    }
+
     export interface ListPlansResponse {
         plans: Plan[]
     }
@@ -1091,6 +1226,10 @@ export namespace tiers {
         "created_at": string
     }
 
+    export interface UnlinkAllPlansResponse {
+        count: number
+    }
+
     export interface UpdatePlanProviderParams {
         "provider_plan_id": string
     }
@@ -1100,12 +1239,20 @@ export namespace tiers {
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
+            this.AutoLinkPlan = this.AutoLinkPlan.bind(this)
             this.GetTier = this.GetTier.bind(this)
             this.ListPlans = this.ListPlans.bind(this)
             this.ListTiers = this.ListTiers.bind(this)
             this.PlanMatrixStatus = this.PlanMatrixStatus.bind(this)
             this.PlansReady = this.PlansReady.bind(this)
+            this.UnlinkAllPlans = this.UnlinkAllPlans.bind(this)
             this.UpdatePlanProviderID = this.UpdatePlanProviderID.bind(this)
+        }
+
+        public async AutoLinkPlan(id: string): Promise<AutoLinkPlanResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/link/${encodeURIComponent(id)}`)
+            return await resp.json() as AutoLinkPlanResponse
         }
 
         public async GetTier(id: string): Promise<Tier> {
@@ -1136,6 +1283,12 @@ export namespace tiers {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/plans/ready`)
             return await resp.json() as MatrixStatus
+        }
+
+        public async UnlinkAllPlans(): Promise<UnlinkAllPlansResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/unlink`)
+            return await resp.json() as UnlinkAllPlansResponse
         }
 
         public async UpdatePlanProviderID(id: string, params: UpdatePlanProviderParams): Promise<void> {
