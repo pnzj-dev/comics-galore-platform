@@ -159,7 +159,6 @@
 							Save Settings
 						{/if}
 					</Button>
-					{#if saved}<span class="text-sm text-green-500 flex-shrink-0">Saved!</span>{/if}
 				</div>
 			</div>
 		</div>
