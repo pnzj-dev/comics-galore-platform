@@ -69,13 +69,7 @@
 			{/if}
 		</th>
 	{/each}
-	<th class="px-4 py-2.5 w-24">
-		{#if hasFilters}
-			<button class={toggleBtnClass} onclick={() => onToggleFilters?.()}>
-				{showFilters ? 'Hide' : 'Filter'}
-			</button>
-		{/if}
-	</th>
+	<th class="px-4 py-2.5 w-24"></th>
 </tr>
 {#if showFilters && hasFilters}
 	<tr class={filterRowClass}>

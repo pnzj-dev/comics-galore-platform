@@ -104,6 +104,17 @@
 		/>
 	</div>
 
+	{#if columns.some((c) => c.filterable) && onToggleFilters}
+		<div class="flex justify-end">
+			<button
+				class="text-xs font-medium text-primary/70 hover:text-primary border border-primary/30 rounded px-2.5 py-1 bg-transparent cursor-pointer"
+				onclick={onToggleFilters}
+			>
+				{showFilters ? 'Hide Filters ↑' : 'Show Filters ↓'}
+			</button>
+		</div>
+	{/if}
+
 	<div class={tableWrapperClass}>
 		<table class={tableClass}>
 			<thead>
