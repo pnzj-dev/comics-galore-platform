@@ -443,6 +443,43 @@ export namespace auth {
  * Base URL: https://api.nowpayments.io
  */
 export namespace billing {
+    export interface AdminDeposit {
+        id: string
+        "user_id": string
+        "provider_deposit_id": string
+        "amount_crypto": string
+        "currency_crypto": string
+        "amount_usd_cents": number
+        status: string
+        "pay_address": string
+        "created_at": string
+        "completed_at": string
+    }
+
+    export interface AdminDepositList {
+        deposits: AdminDeposit[]
+        total: number
+    }
+
+    export interface AdminListDepositsParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterStatus: string
+    }
+
+    export interface AdminListPaymentsParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterStatus: string
+        FilterTier: string
+    }
+
     export interface AdminListSubscriptionsParams {
         Page: number
         Limit: number
@@ -452,6 +489,25 @@ export namespace billing {
         FilterStatus: string
         FilterTier: string
         FilterUserID: string
+    }
+
+    export interface AdminPayment {
+        id: string
+        "provider_payment_id": string
+        "user_id": string
+        "subscription_id": string
+        tier: string
+        interval: string
+        "amount_crypto": string
+        "currency_crypto": string
+        "amount_usd_cents": number
+        status: string
+        "created_at": string
+    }
+
+    export interface AdminPaymentList {
+        payments: AdminPayment[]
+        total: number
     }
 
     export interface AdminSubList {
@@ -543,6 +599,8 @@ export namespace billing {
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
+            this.AdminListDeposits = this.AdminListDeposits.bind(this)
+            this.AdminListPayments = this.AdminListPayments.bind(this)
             this.AdminListSubscriptions = this.AdminListSubscriptions.bind(this)
             this.CheckBalance = this.CheckBalance.bind(this)
             this.CreateDeposit = this.CreateDeposit.bind(this)
@@ -554,6 +612,39 @@ export namespace billing {
             this.PollDeposit = this.PollDeposit.bind(this)
             this.PollSubscription = this.PollSubscription.bind(this)
             this.SubscriptionWebhook = this.SubscriptionWebhook.bind(this)
+        }
+
+        public async AdminListDeposits(params: AdminListDepositsParams): Promise<AdminDepositList> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "filter_status": params.FilterStatus,
+                limit:           String(params.Limit),
+                page:            String(params.Page),
+                search:          params.Search,
+                sort:            params.Sort,
+                "sort_dir":      params.SortDir,
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/deposits`, undefined, {query})
+            return await resp.json() as AdminDepositList
+        }
+
+        public async AdminListPayments(params: AdminListPaymentsParams): Promise<AdminPaymentList> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "filter_status": params.FilterStatus,
+                "filter_tier":   params.FilterTier,
+                limit:           String(params.Limit),
+                page:            String(params.Page),
+                search:          params.Search,
+                sort:            params.Sort,
+                "sort_dir":      params.SortDir,
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/payments`, undefined, {query})
+            return await resp.json() as AdminPaymentList
         }
 
         public async AdminListSubscriptions(params: AdminListSubscriptionsParams): Promise<AdminSubList> {

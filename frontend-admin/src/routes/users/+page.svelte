@@ -4,6 +4,8 @@
 	import { encore } from '$lib/api/encore';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
+	import TierBadge from '$lib/components/TierBadge.svelte';
+	import { TIER_OPTIONS } from '$lib/constants/tiers';
 	import { formatDate } from '$lib/utils/format';
 
 	let { data } = $props();
@@ -16,13 +18,7 @@
 			{ value: 'moderator', label: 'Moderator' },
 			{ value: 'admin', label: 'Admin' },
 		]},
-		{ key: 'tier', label: 'Tier', sortable: true, filterable: true, filterType: 'select' as const, filterOptions: [
-			{ value: 'free', label: 'Free' },
-			{ value: 'bronze', label: 'Bronze' },
-			{ value: 'silver', label: 'Silver' },
-			{ value: 'gold', label: 'Gold' },
-			{ value: 'platinum', label: 'Platinum' },
-		]},
+		{ key: 'tier', label: 'Tier', sortable: true, filterable: true, filterType: 'select' as const, filterOptions: TIER_OPTIONS },
 		{ key: 'status', label: 'Status' },
 		{ key: 'created_at', label: 'Created', sortable: true },
 	];
@@ -93,7 +89,7 @@
 					<option value="user">user</option><option value="uploader">uploader</option><option value="moderator">moderator</option><option value="admin">admin</option>
 				</select>
 			{:else if col.key === 'tier'}
-				<span class="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 capitalize">{row.tier as string}</span>
+				<TierBadge tier={row.tier as string} />
 			{:else if col.key === 'status'}
 				{@const st = statusBadge(row)}
 				{#if st === 'banned'}<span class="px-2 py-0.5 rounded-full text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">Banned</span>

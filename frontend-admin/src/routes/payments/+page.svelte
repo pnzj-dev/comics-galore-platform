@@ -4,22 +4,30 @@
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
 	import TierBadge from '$lib/components/TierBadge.svelte';
 	import { PAID_TIER_OPTIONS } from '$lib/constants/tiers';
-	import { formatDate } from '$lib/utils/format';
+	import { formatDate, formatUSD } from '$lib/utils/format';
 
 	let { data } = $props();
 
 	const columns = [
 		{ key: 'user_id', label: 'User ID', filterable: true, filterType: 'text' as const, filterPlaceholder: 'User ID...' },
-		{ key: 'plan_id', label: 'Plan ID' },
-		{ key: 'status', label: 'Status', sortable: true, filterable: true, filterType: 'select' as const, filterOptions: [
-			{ value: 'active', label: 'Active' },
-			{ value: 'inactive', label: 'Inactive' },
-			{ value: 'expired', label: 'Expired' },
-		]},
 		{ key: 'tier', label: 'Tier', sortable: true, filterable: true, filterType: 'select' as const, filterOptions: PAID_TIER_OPTIONS },
-		{ key: 'expires_at', label: 'Expires', sortable: true },
+		{ key: 'interval', label: 'Interval', sortable: true },
+		{ key: 'amount_crypto', label: 'Amount (crypto)', sortable: true },
+		{ key: 'amount_usd_cents', label: 'USD', sortable: true },
+		{ key: 'status', label: 'Status', sortable: true, filterable: true, filterType: 'select' as const, filterOptions: [
+			{ value: 'finished', label: 'Finished' },
+			{ value: 'pending', label: 'Pending' },
+			{ value: 'failed', label: 'Failed' },
+			{ value: 'refunded', label: 'Refunded' },
+		]},
 		{ key: 'created_at', label: 'Created', sortable: true },
 	];
+
+	function statusClass(s: string): string {
+		return s === 'finished' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+			: s === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+			: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
+	}
 
 	function buildUrl(updates: Record<string, string | undefined>) {
 		const url = new URL(page.url);
@@ -46,10 +54,10 @@
 	}
 </script>
 
-<svelte:head><title>Subscriptions — Admin</title></svelte:head>
+<svelte:head><title>Payments — Admin</title></svelte:head>
 
 <section>
-	<h1 class="text-3xl font-bold mb-6">Subscriptions</h1>
+	<h1 class="text-3xl font-bold mb-6">Payments</h1>
 
 	<AdminTable
 		{columns}
@@ -69,14 +77,20 @@
 		{onPage}
 	>
 		{#snippet children(row, col)}
-			{#if col.key === 'user_id' || col.key === 'plan_id'}
-				<span class="font-mono text-xs truncate block" title={String(row[col.key])}>{String(row[col.key])}</span>
-			{:else if col.key === 'status'}
-				<span class="text-xs px-2 py-0.5 rounded-full {row.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}">{row.status as string}</span>
+			{#if col.key === 'user_id'}
+				<span class="font-mono text-xs truncate block" title={String(row.user_id)}>{String(row.user_id)}</span>
 			{:else if col.key === 'tier'}
 				<TierBadge tier={row.tier as string} />
-			{:else if col.key === 'expires_at' || col.key === 'created_at'}
-				<span class="text-xs text-muted-foreground">{formatDate(row[col.key] as string)}</span>
+			{:else if col.key === 'interval'}
+				<span class="text-xs capitalize">{row.interval as string || '—'}</span>
+			{:else if col.key === 'amount_crypto'}
+				<span class="font-mono text-xs">{row.amount_crypto as string || '—'}</span>
+			{:else if col.key === 'amount_usd_cents'}
+				<span class="text-xs font-medium">{formatUSD(row.amount_usd_cents as number)}</span>
+			{:else if col.key === 'status'}
+				<span class="text-xs px-2 py-0.5 rounded-full w-fit {statusClass(row.status as string)}">{(row.status as string)?.replace('_', ' ')}</span>
+			{:else if col.key === 'created_at'}
+				<span class="text-xs text-muted-foreground">{formatDate(row.created_at as string)}</span>
 			{/if}
 		{/snippet}
 	</AdminTable>

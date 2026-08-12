@@ -129,6 +129,9 @@ func CreateSubscription(ctx context.Context, p *CreateSubParams) (*CreateSubResp
 	if providerPlanID == "" {
 		return nil, &errs.Error{Code: errs.FailedPrecondition, Message: "this plan is not yet configured with a provider plan ID — contact admin"}
 	}
+	if strings.ToLower(tierName) == "free" {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "cannot subscribe to the free tier"}
+	}
 
 	// Call NowPayments to create the subscription
 	npResp, err := provider.CreateSubscription(ctx, SubscriptionRequest{
@@ -492,7 +495,7 @@ func AdminListSubscriptions(ctx context.Context, p *AdminListSubscriptionsParams
 	}
 	if strings.ToLower(p.SortDir) == "asc" { sortDir = "ASC" }
 
-	where := "WHERE (user_id::text ILIKE $1 OR plan_id::text ILIKE $1)"
+	where := "WHERE tier <> 'free' AND (user_id::text ILIKE $1 OR plan_id::text ILIKE $1)"
 	args := []interface{}{search}
 	argIdx := 2
 
@@ -538,6 +541,164 @@ func AdminListSubscriptions(ctx context.Context, p *AdminListSubscriptionsParams
 	return &AdminSubList{Subscriptions: subs, Total: total}, rows.Err()
 }
 
+// ----- Admin Deposits -----
+
+type AdminListDepositsParams struct {
+	Page         int    `query:"page"`
+	Limit        int    `query:"limit"`
+	Search       string `query:"search"`
+	Sort         string `query:"sort"`
+	SortDir      string `query:"sort_dir"`
+	FilterStatus string `query:"filter_status"`
+}
+
+//encore:api auth method=GET path=/admin/deposits
+func AdminListDeposits(ctx context.Context, p *AdminListDepositsParams) (*AdminDepositList, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	page := p.Page
+	if page <= 0 { page = 1 }
+	limit := p.Limit
+	if limit <= 0 { limit = 20 }
+	if limit > 100 { limit = 100 }
+	offset := (page - 1) * limit
+
+	search := "%" + p.Search + "%"
+	sortCol := "created_at"
+	sortDir := "DESC"
+	switch p.Sort {
+	case "created_at": sortCol = "created_at"
+	case "status": sortCol = "status"
+	case "amount_usd_cents": sortCol = "amount_usd_cents"
+	case "completed_at": sortCol = "completed_at"
+	}
+	if strings.ToLower(p.SortDir) == "asc" { sortDir = "ASC" }
+
+	where := "WHERE (user_id::text ILIKE $1 OR pay_address ILIKE $1 OR provider_deposit_id ILIKE $1)"
+	args := []interface{}{search}
+	argIdx := 2
+
+	if p.FilterStatus != "" {
+		where += fmt.Sprintf(" AND status = $%d", argIdx)
+		args = append(args, p.FilterStatus)
+		argIdx++
+	}
+
+	var total int
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM deposits `+where, args...).Scan(&total)
+
+	query := fmt.Sprintf(`
+		SELECT id, user_id, COALESCE(provider_deposit_id,''), COALESCE(amount_crypto,''),
+			currency_crypto, COALESCE(amount_usd_cents,0), status,
+			COALESCE(pay_address,''), created_at, completed_at
+		FROM deposits %s ORDER BY %s %s LIMIT $%d OFFSET $%d
+	`, where, sortCol, sortDir, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := db.Query(ctx, query, args...)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	var deps []AdminDeposit
+	for rows.Next() {
+		var d AdminDeposit
+		if err := rows.Scan(&d.ID, &d.UserID, &d.ProviderDepositID, &d.AmountCrypto,
+			&d.CurrencyCrypto, &d.AmountUsdCents, &d.Status,
+			&d.PayAddress, &d.CreatedAt, timePtr(&d.CompletedAt)); err != nil {
+			return nil, err
+		}
+		deps = append(deps, d)
+	}
+
+	return &AdminDepositList{Deposits: deps, Total: total}, rows.Err()
+}
+
+// ----- Admin Payments -----
+
+type AdminListPaymentsParams struct {
+	Page         int    `query:"page"`
+	Limit        int    `query:"limit"`
+	Search       string `query:"search"`
+	Sort         string `query:"sort"`
+	SortDir      string `query:"sort_dir"`
+	FilterStatus string `query:"filter_status"`
+	FilterTier   string `query:"filter_tier"`
+}
+
+//encore:api auth method=GET path=/admin/payments
+func AdminListPayments(ctx context.Context, p *AdminListPaymentsParams) (*AdminPaymentList, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	page := p.Page
+	if page <= 0 { page = 1 }
+	limit := p.Limit
+	if limit <= 0 { limit = 20 }
+	if limit > 100 { limit = 100 }
+	offset := (page - 1) * limit
+
+	search := "%" + p.Search + "%"
+	sortCol := "created_at"
+	sortDir := "DESC"
+	switch p.Sort {
+	case "created_at": sortCol = "created_at"
+	case "status": sortCol = "status"
+	case "tier": sortCol = "tier"
+	case "amount_usd_cents": sortCol = "amount_usd_cents"
+	}
+	if strings.ToLower(p.SortDir) == "asc" { sortDir = "ASC" }
+
+	where := "WHERE (user_id::text ILIKE $1 OR provider_payment_id ILIKE $1)"
+	args := []interface{}{search}
+	argIdx := 2
+
+	if p.FilterStatus != "" {
+		where += fmt.Sprintf(" AND status = $%d", argIdx)
+		args = append(args, p.FilterStatus)
+		argIdx++
+	}
+	if p.FilterTier != "" {
+		where += fmt.Sprintf(" AND tier = $%d", argIdx)
+		args = append(args, p.FilterTier)
+		argIdx++
+	}
+
+	var total int
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM payments `+where, args...).Scan(&total)
+
+	query := fmt.Sprintf(`
+		SELECT id, provider_payment_id, COALESCE(user_id::text,''), COALESCE(subscription_id::text,''),
+			tier, COALESCE(interval,''), COALESCE(amount_crypto,0), COALESCE(currency_crypto,''),
+			COALESCE(amount_usd_cents,0), status, created_at
+		FROM payments %s ORDER BY %s %s LIMIT $%d OFFSET $%d
+	`, where, sortCol, sortDir, argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := db.Query(ctx, query, args...)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	var pays []AdminPayment
+	for rows.Next() {
+		var pm AdminPayment
+		var amountCrypto float64
+		if err := rows.Scan(&pm.ID, &pm.ProviderPaymentID, &pm.UserID, &pm.SubscriptionID,
+			&pm.Tier, &pm.Interval, &amountCrypto, &pm.CurrencyCrypto,
+			&pm.AmountUsdCents, &pm.Status, &pm.CreatedAt); err != nil {
+			return nil, err
+		}
+		pm.AmountCrypto = strconv.FormatFloat(amountCrypto, 'f', -1, 64)
+		pays = append(pays, pm)
+	}
+
+	return &AdminPaymentList{Payments: pays, Total: total}, rows.Err()
+}
+
 // ----- Types -----
 
 type AdminSubList struct {
@@ -555,6 +716,43 @@ type AdminSubscription struct {
 	ActivatedAt time.Time `json:"activated_at,omitempty"`
 	ExpiresAt   time.Time `json:"expires_at,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+type AdminDepositList struct {
+	Deposits []AdminDeposit `json:"deposits"`
+	Total    int            `json:"total"`
+}
+
+type AdminDeposit struct {
+	ID                string    `json:"id"`
+	UserID            string    `json:"user_id"`
+	ProviderDepositID string    `json:"provider_deposit_id"`
+	AmountCrypto      string    `json:"amount_crypto"`
+	CurrencyCrypto    string    `json:"currency_crypto"`
+	AmountUsdCents    int       `json:"amount_usd_cents"`
+	Status            string    `json:"status"`
+	PayAddress        string    `json:"pay_address"`
+	CreatedAt         time.Time `json:"created_at"`
+	CompletedAt       time.Time `json:"completed_at,omitempty"`
+}
+
+type AdminPaymentList struct {
+	Payments []AdminPayment `json:"payments"`
+	Total    int            `json:"total"`
+}
+
+type AdminPayment struct {
+	ID                string    `json:"id"`
+	ProviderPaymentID string    `json:"provider_payment_id"`
+	UserID            string    `json:"user_id"`
+	SubscriptionID    string    `json:"subscription_id"`
+	Tier              string    `json:"tier"`
+	Interval          string    `json:"interval"`
+	AmountCrypto      string    `json:"amount_crypto"`
+	CurrencyCrypto    string    `json:"currency_crypto"`
+	AmountUsdCents    int       `json:"amount_usd_cents"`
+	Status            string    `json:"status"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // ----- Helpers -----
