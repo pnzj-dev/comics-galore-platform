@@ -1015,6 +1015,118 @@ func DeleteComment(ctx context.Context, id string) error {
 	return err
 }
 
+// ----- Comment Flagging -----
+
+type FlagCommentParams struct {
+	Reason string `json:"reason"`
+}
+
+//encore:api auth method=POST path=/comments/:id/flag
+func FlagComment(ctx context.Context, id string, p *FlagCommentParams) error {
+	ad := auth.Data().(*myauth.AuthData)
+
+	var exists bool
+	err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM comments WHERE id = $1)`, id).Scan(&exists)
+	if err != nil {
+		return &errs.Error{Code: errs.NotFound, Message: "comment not found"}
+	}
+	if !exists {
+		return &errs.Error{Code: errs.NotFound, Message: "comment not found"}
+	}
+
+	// Idempotent: one flag per user per comment (unique index).
+	_, err = db.Exec(ctx, `
+		INSERT INTO comment_flags (comment_id, user_id, reason)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (comment_id, user_id) DO NOTHING
+	`, id, ad.UserID, p.Reason)
+	return err
+}
+
+type FlaggedComment struct {
+	FlagID      string    `json:"flag_id"`
+	CommentID   string    `json:"comment_id"`
+	ComicID     string    `json:"comic_id"`
+	ComicTitle  string    `json:"comic_title"`
+	UserID      string    `json:"user_id"`
+	BodyText    string    `json:"body_text"`
+	Reason      string    `json:"reason"`
+	FlagCount   int       `json:"flag_count"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type ListFlaggedCommentsResponse struct {
+	Flags []FlaggedComment `json:"flags"`
+	Total int              `json:"total"`
+}
+
+type ListFlaggedCommentsParams struct {
+	Page  int    `query:"page"`
+	Limit int    `query:"limit"`
+}
+
+//encore:api auth method=GET path=/moderation/flags
+func ListFlaggedComments(ctx context.Context, p *ListFlaggedCommentsParams) (*ListFlaggedCommentsResponse, error) {
+	ad, hasAuth := getAuthData(ctx)
+	if !hasAuth || (ad.Role != "moderator" && ad.Role != "admin") {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "requires moderator or admin"}
+	}
+
+	page := defaultValue(p.Page, 1)
+	limit := defaultValue(p.Limit, 20)
+	if limit > 100 {
+		limit = 100
+	}
+	offset := (page - 1) * limit
+
+	var total int
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM comment_flags WHERE status = 'open'`).Scan(&total)
+
+	rows, err := db.Query(ctx, `
+		SELECT f.id, c.id, c.comic_id, co.title, c.user_id, c.body_text, COALESCE(f.reason, ''),
+			(SELECT COUNT(*) FROM comment_flags fc WHERE fc.comment_id = c.id AND fc.status = 'open'),
+			f.created_at
+		FROM comment_flags f
+		JOIN comments c ON c.id = f.comment_id
+		JOIN comics co ON co.id = c.comic_id
+		WHERE f.status = 'open'
+		ORDER BY f.created_at ASC
+		LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var flags []FlaggedComment
+	for rows.Next() {
+		var f FlaggedComment
+		if err := rows.Scan(&f.FlagID, &f.CommentID, &f.ComicID, &f.ComicTitle, &f.UserID, &f.BodyText, &f.Reason, &f.FlagCount, &f.CreatedAt); err != nil {
+			return nil, err
+		}
+		flags = append(flags, f)
+	}
+
+	if flags == nil {
+		flags = []FlaggedComment{}
+	}
+	return &ListFlaggedCommentsResponse{Flags: flags, Total: total}, rows.Err()
+}
+
+//encore:api auth method=POST path=/moderation/flags/:id/resolve
+func ResolveFlag(ctx context.Context, id string) error {
+	ad, hasAuth := getAuthData(ctx)
+	if !hasAuth || (ad.Role != "moderator" && ad.Role != "admin") {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "requires moderator or admin"}
+	}
+
+	_, err := db.Exec(ctx, `
+		UPDATE comment_flags SET status = 'resolved', resolved_at = now(), resolved_by = $1
+		WHERE id = $2 AND status = 'open'
+	`, ad.UserID, id)
+	return err
+}
+
 // ----- Series -----
 
 type Series struct {

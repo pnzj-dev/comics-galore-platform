@@ -16,13 +16,14 @@
 		comments: Comment[];
 		onReply: (commentId: string) => void;
 		onDelete: (commentId: string) => void;
+		onFlag: (commentId: string) => void;
 		onSubmitComment: (bodyText: string, parentId?: string) => Promise<void>;
 		userId?: string;
 		role?: string;
 		depth?: number;
 	}
 
-	let { comments, onReply, onDelete, onSubmitComment, userId, role = 'user', depth = 0 }: Props = $props();
+	let { comments, onReply, onDelete, onFlag, onSubmitComment, userId, role = 'user', depth = 0 }: Props = $props();
 
 	let activeReply = $state<string | null>(null);
 
@@ -32,6 +33,10 @@
 
 	function canDelete(commentUserId: string): boolean {
 		return userId === commentUserId || role === 'admin' || role === 'moderator';
+	}
+
+	function canFlag(commentUserId: string): boolean {
+		return !!userId && userId !== commentUserId;
 	}
 
 	async function handleReply(bodyText: string) {
@@ -55,6 +60,9 @@
 							{#if canDelete(comment.user_id)}
 								<button onclick={() => onDelete(comment.id)} class="text-[10px] text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Delete comment">Delete</button>
 							{/if}
+							{#if canFlag(comment.user_id)}
+								<button onclick={() => onFlag(comment.id)} class="text-[10px] text-muted-foreground hover:text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Flag comment">Flag</button>
+							{/if}
 						</div>
 						<p class="text-sm mt-0.5 leading-relaxed">{comment.body_text}</p>
 						<button
@@ -73,7 +81,7 @@
 				</div>
 
 				{#if comment.replies && comment.replies.length > 0}
-					<CommentList comments={comment.replies} {onReply} {onDelete} {onSubmitComment} {userId} {role} depth={depth + 1} />
+					<CommentList comments={comment.replies} {onReply} {onDelete} {onFlag} {onSubmitComment} {userId} {role} depth={depth + 1} />
 				{/if}
 			</div>
 		{/each}

@@ -12,6 +12,9 @@
 	let pending = $state(data.results);
 	let selected = $state<Set<string>>(new Set());
 
+	// svelte-ignore state_referenced_locally
+	let flagged = $state(data.flags);
+
 	const totalPages = $derived(Math.max(1, Math.ceil(data.total / data.limit)));
 
 	// svelte-ignore state_referenced_locally
@@ -70,12 +73,46 @@
 		pending = pending.filter(c => !selected.has(c.id));
 		selected = new Set();
 	}
+
+	async function resolveFlag(flagId: string) {
+		await encore.comics.ResolveFlag(flagId);
+		flagged = flagged.filter(f => f.flag_id !== flagId);
+	}
 </script>
 
 <svelte:head><title>Moderation - Comics Galore</title></svelte:head>
 
 <section>
 	<h1 class="text-3xl font-bold mb-6">Moderation Queue</h1>
+
+	{#if flagged.length > 0}
+		<div class="mb-8">
+			<h2 class="text-xl font-semibold mb-3">Flagged Comments ({flagged.length})</h2>
+			<div class="space-y-3">
+				{#each flagged as flag (flag.flag_id)}
+					<Card>
+						<CardHeader>
+							<div class="flex items-start justify-between gap-3">
+								<div class="flex-1">
+									<CardTitle>{flag.comic_title}</CardTitle>
+									<p class="text-sm mt-1">{flag.body_text}</p>
+									<div class="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+										<span>{flag.flag_count} flag{flag.flag_count !== 1 ? 's' : ''}</span>
+										{#if flag.reason}<span>Reason: {flag.reason}</span>{/if}
+										<span>Flagged {formatDate(flag.created_at)}</span>
+									</div>
+								</div>
+								<div class="flex gap-2 shrink-0">
+									<Button size="sm" variant="outline" onclick={() => resolveFlag(flag.flag_id)}>Resolve</Button>
+									<Button size="sm" variant="destructive" onclick={async () => { await encore.comics.DeleteComment(flag.comment_id); await resolveFlag(flag.flag_id); }}>Delete</Button>
+								</div>
+							</div>
+						</CardHeader>
+					</Card>
+				{/each}
+			</div>
+		</div>
+	{/if}
 
 	<div class="flex items-center gap-3 mb-4">
 		<input

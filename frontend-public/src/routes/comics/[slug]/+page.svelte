@@ -170,6 +170,14 @@
 		}
 	}
 
+	async function flagComment(commentId: string) {
+		try {
+			await encore.comics.FlagComment(commentId, { reason: '' });
+		} catch (e) {
+			console.error('[comments] flag failed:', e);
+		}
+	}
+
 	async function handleDownload() {
 		try {
 			const res = await encore.reading.RecordDownload(comic.id);
@@ -380,7 +388,7 @@
 			{/if}
 
 			{#if comments.length > 0}
-				<CommentList comments={comments} onReply={(id) => replyTarget = id} onSubmitComment={submitComment} onDelete={deleteComment} userId={user?.id} role={user?.role} />
+				<CommentList comments={comments} onReply={(id) => replyTarget = id} onSubmitComment={submitComment} onDelete={deleteComment} onFlag={flagComment} userId={user?.id} role={user?.role} />
 			{:else}
 				<p class="text-sm text-muted-foreground text-center py-4">No comments yet. Be the first!</p>
 			{/if}

@@ -530,7 +530,7 @@ func TestAdminListComics_ReturnsAllComics(t *testing.T) {
 	_ = ApproveComic(modCtx, "550e8400-e29b-41d4-a716-446655440000")
 
 	admCtx := adminCtx
-	resp, err := AdminListComics(admCtx)
+	resp, err := AdminListComics(admCtx, &AdminListComicsParams{})
 	if err != nil {
 		t.Fatalf("admin list error: %v", err)
 	}
@@ -543,7 +543,7 @@ func TestAdminListComics_RequiresAdmin(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
 	uCtx := userCtx
-	_, err := AdminListComics(uCtx)
+	_, err := AdminListComics(uCtx, &AdminListComicsParams{})
 	if err == nil {
 		t.Fatal("expected permission error, got nil")
 	}
@@ -602,7 +602,7 @@ func TestArchiveComic(t *testing.T) {
 		t.Fatalf("archive error: %v", err)
 	}
 
-	resp, err := RecycleBin(admCtx)
+	resp, err := RecycleBin(admCtx, &RecycleBinParams{})
 	if err != nil {
 		t.Fatalf("recycle bin error: %v", err)
 	}
@@ -658,7 +658,7 @@ func TestRestoreComic(t *testing.T) {
 		t.Fatalf("restore error: %v", err)
 	}
 
-	resp, err := RecycleBin(admCtx)
+	resp, err := RecycleBin(admCtx, &RecycleBinParams{})
 	if err != nil {
 		t.Fatalf("recycle bin error: %v", err)
 	}
@@ -687,7 +687,7 @@ func TestRecycleBin_ListsDeletedComics(t *testing.T) {
 		t.Fatalf("archive error: %v", err)
 	}
 
-	resp, err := RecycleBin(admCtx)
+	resp, err := RecycleBin(admCtx, &RecycleBinParams{})
 	if err != nil {
 		t.Fatalf("recycle bin error: %v", err)
 	}
@@ -700,7 +700,7 @@ func TestRecycleBin_RequiresModeratorOrAdmin(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
 
 	uCtx := userCtx
-	_, err := RecycleBin(uCtx)
+	_, err := RecycleBin(uCtx, &RecycleBinParams{})
 	if err == nil {
 		t.Fatal("expected permission error, got nil")
 	}
@@ -922,5 +922,119 @@ func TestAdminAuditLogs_RequiresAdmin(t *testing.T) {
 	}
 	if e.Code != errs.PermissionDenied {
 		t.Errorf("expected PermissionDenied, got %v", e.Code)
+	}
+}
+
+func TestFlagComment_AndList(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Flag Comic",
+		CoverKey: "covers/flag.jpg",
+		FileKey:  "files/flag.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create comic error: %v", err)
+	}
+
+	comment, err := CreateComment(userCtx, comic.ID, &CreateCommentParams{BodyText: "spam comment"})
+	if err != nil {
+		t.Fatalf("create comment error: %v", err)
+	}
+
+	// A different user flags it.
+	flagCtx := fixtures.TierGatedCtx("550e8400-e29b-41d4-a716-446655440010", "user", "free")
+	if err := FlagComment(flagCtx, comment.ID, &FlagCommentParams{Reason: "spam"}); err != nil {
+		t.Fatalf("flag error: %v", err)
+	}
+
+	// Idempotent: same user flags again → no error, no duplicate.
+	if err := FlagComment(flagCtx, comment.ID, &FlagCommentParams{Reason: "spam"}); err != nil {
+		t.Fatalf("duplicate flag error: %v", err)
+	}
+
+	// Moderator lists flags.
+	modCtx := moderatorCtx
+	resp, err := ListFlaggedComments(modCtx, &ListFlaggedCommentsParams{Page: 1, Limit: 20})
+	if err != nil {
+		t.Fatalf("list flags error: %v", err)
+	}
+	if resp.Total < 1 {
+		t.Fatal("expected at least 1 flagged comment")
+	}
+	var found bool
+	for _, f := range resp.Flags {
+		if f.CommentID == comment.ID && f.FlagCount >= 1 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected the flagged comment in list")
+	}
+}
+
+func TestFlagComment_NotFound(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	err := FlagComment(userCtx, "550e8400-e29b-41d4-a716-446655440099", &FlagCommentParams{})
+	if err == nil {
+		t.Fatal("expected not found error, got nil")
+	}
+}
+
+func TestListFlaggedComments_RequiresModerator(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	_, err := ListFlaggedComments(userCtx, &ListFlaggedCommentsParams{})
+	if err == nil {
+		t.Fatal("expected permission error, got nil")
+	}
+	var e *errs.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("expected errs.Error, got %T", err)
+	}
+	if e.Code != errs.PermissionDenied {
+		t.Errorf("expected PermissionDenied, got %v", e.Code)
+	}
+}
+
+func TestResolveFlag_MarksResolved(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	comic, err := CreateComic(upCtx, &CreateComicParams{
+		Title:    "Resolve Comic",
+		CoverKey: "covers/resolve.jpg",
+		FileKey:  "files/resolve.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create comic error: %v", err)
+	}
+
+	comment, err := CreateComment(userCtx, comic.ID, &CreateCommentParams{BodyText: "flagged once"})
+	if err != nil {
+		t.Fatalf("create comment error: %v", err)
+	}
+
+	flagCtx := fixtures.TierGatedCtx("550e8400-e29b-41d4-a716-446655440011", "user", "free")
+	if err := FlagComment(flagCtx, comment.ID, &FlagCommentParams{}); err != nil {
+		t.Fatalf("flag error: %v", err)
+	}
+
+	modCtx := moderatorCtx
+	before, _ := ListFlaggedComments(modCtx, &ListFlaggedCommentsParams{Page: 1, Limit: 20})
+	if before.Total < 1 {
+		t.Fatal("expected open flag before resolve")
+	}
+
+	if err := ResolveFlag(modCtx, before.Flags[0].FlagID); err != nil {
+		t.Fatalf("resolve error: %v", err)
+	}
+
+	after, _ := ListFlaggedComments(modCtx, &ListFlaggedCommentsParams{Page: 1, Limit: 20})
+	if after.Total >= before.Total {
+		t.Errorf("expected fewer open flags after resolve, got %d", after.Total)
 	}
 }

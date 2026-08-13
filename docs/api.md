@@ -56,6 +56,9 @@
 | GET | `/comics/:id/comments` | List threaded comments | No |
 | POST | `/comics/:id/comments` | Create comment (or reply) | Yes |
 | DELETE | `/comments/:id` | Delete comment (owner or mod/admin); cascades to replies | Yes |
+| POST | `/comments/:id/flag` | Flag a comment for review (idempotent per user) | Yes |
+| GET | `/moderation/flags` | List open comment flags (moderation queue) | Moderator/Admin |
+| POST | `/moderation/flags/:id/resolve` | Resolve a comment flag | Moderator/Admin |
 | GET (SSE) | `/comments-stream/:id` | SSE stream of new comments for a comic | No |
 
 ## Tiers & Plans

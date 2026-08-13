@@ -431,13 +431,6 @@ export namespace auth {
     }
 }
 
-/**
- * Package billing implements the PaymentsProvider interface using the
- * NowPayments REST API.
- * 
- * Full API reference: backend/billing/nowpayments-openapi.yaml
- * Base URL: https://api.nowpayments.io
- */
 export namespace billing {
     export interface AdminDeposit {
         id: string
@@ -523,10 +516,7 @@ export namespace billing {
         "created_at": string
     }
 
-    export interface BalanceEntry {
-        Amount: number
-        PendingAmount: number
-    }
+    export type BalanceEntry = nowpayments.BalanceEntry
 
     export interface BillingStats {
         "total_revenue": number
@@ -568,12 +558,6 @@ export namespace billing {
     export interface EstimatePriceParams {
         "plan_id": string
         crypto: string
-    }
-
-    export interface EstimateResponse {
-        EstimatedAmount: number
-        FromCurrency: string
-        ToCurrency: string
     }
 
     export interface PollDepositResponse {
@@ -709,10 +693,10 @@ export namespace billing {
             return await resp.json() as SeedBillingResponse
         }
 
-        public async EstimatePrice(params: EstimatePriceParams): Promise<EstimateResponse> {
+        public async EstimatePrice(params: EstimatePriceParams): Promise<nowpayments.EstimateResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/billing/estimate-price`, JSON.stringify(params))
-            return await resp.json() as EstimateResponse
+            return await resp.json() as nowpayments.EstimateResponse
         }
 
         public async GetBillingStats(): Promise<BillingStats> {
@@ -859,6 +843,22 @@ export namespace comics {
         description: string
     }
 
+    export interface FlagCommentParams {
+        reason: string
+    }
+
+    export interface FlaggedComment {
+        "flag_id": string
+        "comment_id": string
+        "comic_id": string
+        "comic_title": string
+        "user_id": string
+        "body_text": string
+        reason: string
+        "flag_count": number
+        "created_at": string
+    }
+
     export interface LikeStatus {
         liked: boolean
         favorited: boolean
@@ -882,6 +882,16 @@ export namespace comics {
 
     export interface ListCommentsResponse {
         comments: CommentData[]
+    }
+
+    export interface ListFlaggedCommentsParams {
+        Page: number
+        Limit: number
+    }
+
+    export interface ListFlaggedCommentsResponse {
+        flags: FlaggedComment[]
+        total: number
     }
 
     export interface ListPendingResponse {
@@ -991,6 +1001,7 @@ export namespace comics {
             this.DeleteComment = this.DeleteComment.bind(this)
             this.DevSeedComics = this.DevSeedComics.bind(this)
             this.DevSeedEngagement = this.DevSeedEngagement.bind(this)
+            this.FlagComment = this.FlagComment.bind(this)
             this.FollowSeries = this.FollowSeries.bind(this)
             this.GetComic = this.GetComic.bind(this)
             this.GetComicsStats = this.GetComicsStats.bind(this)
@@ -998,12 +1009,14 @@ export namespace comics {
             this.GetSeries = this.GetSeries.bind(this)
             this.ListComics = this.ListComics.bind(this)
             this.ListComments = this.ListComments.bind(this)
+            this.ListFlaggedComments = this.ListFlaggedComments.bind(this)
             this.ListSeries = this.ListSeries.bind(this)
             this.MyComics = this.MyComics.bind(this)
             this.PendingComics = this.PendingComics.bind(this)
             this.RSSFeed = this.RSSFeed.bind(this)
             this.RecycleBin = this.RecycleBin.bind(this)
             this.RejectComic = this.RejectComic.bind(this)
+            this.ResolveFlag = this.ResolveFlag.bind(this)
             this.RestoreComic = this.RestoreComic.bind(this)
             this.SeriesComics = this.SeriesComics.bind(this)
             this.ToggleDislike = this.ToggleDislike.bind(this)
@@ -1096,6 +1109,10 @@ export namespace comics {
             return await resp.json() as SeedEngagementResponse
         }
 
+        public async FlagComment(id: string, params: FlagCommentParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/comments/${encodeURIComponent(id)}/flag`, JSON.stringify(params))
+        }
+
         public async FollowSeries(id: string): Promise<void> {
             await this.baseClient.callTypedAPI("POST", `/series/${encodeURIComponent(id)}/follow`)
         }
@@ -1145,6 +1162,18 @@ export namespace comics {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/comics/${encodeURIComponent(id)}/comments`)
             return await resp.json() as ListCommentsResponse
+        }
+
+        public async ListFlaggedComments(params: ListFlaggedCommentsParams): Promise<ListFlaggedCommentsResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                limit: String(params.Limit),
+                page:  String(params.Page),
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/moderation/flags`, undefined, {query})
+            return await resp.json() as ListFlaggedCommentsResponse
         }
 
         public async ListSeries(): Promise<ListSeriesResponse> {
@@ -1198,6 +1227,10 @@ export namespace comics {
 
         public async RejectComic(id: string, params: RejectParams): Promise<void> {
             await this.baseClient.callTypedAPI("POST", `/moderation/comics/${encodeURIComponent(id)}/reject`, JSON.stringify(params))
+        }
+
+        public async ResolveFlag(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/moderation/flags/${encodeURIComponent(id)}/resolve`)
         }
 
         public async RestoreComic(id: string): Promise<void> {
@@ -1557,6 +1590,19 @@ export namespace upload {
         public async ServeMedia(method: "GET", key: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
             return this.baseClient.callAPI(method, `/media/${encodeURIComponent(key)}`, body, options)
         }
+    }
+}
+
+export namespace nowpayments {
+    export interface BalanceEntry {
+        Amount: number
+        PendingAmount: number
+    }
+
+    export interface EstimateResponse {
+        EstimatedAmount: number
+        FromCurrency: string
+        ToCurrency: string
     }
 }
 
