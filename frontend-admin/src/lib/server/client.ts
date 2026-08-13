@@ -153,6 +153,16 @@ export namespace auth {
         "hide_mature_default": boolean
         "enable_comments": boolean
         "default_meta_description": string
+        /**
+         * AI moderation (ADR 0018)
+         */
+        "ai_moderation_enabled": boolean
+
+        "ai_model": string
+        "ai_endpoint": string
+        "ai_prompt": string
+        "ai_auto_approve_threshold": number
+        "ai_auto_reject_threshold": number
     }
 
     export interface AuthParams {
@@ -726,6 +736,33 @@ export namespace billing {
 }
 
 export namespace comics {
+    export interface AIDecision {
+        id: string
+        "target_type": string
+        "target_id": string
+        decision: string
+        confidence: number
+        reason: string
+        model: string
+        "created_at": string
+    }
+
+    export interface AIDecisionsResponse {
+        decisions: AIDecision[]
+    }
+
+    export interface AIReviewItem {
+        id: string
+        "target_type": string
+        "target_id": string
+        preview: string
+        "created_at": string
+    }
+
+    export interface AIReviewQueueResponse {
+        items: AIReviewItem[]
+    }
+
     export interface AdminListComicsParams {
         Page: number
         Limit: number
@@ -946,6 +983,13 @@ export namespace comics {
         reason: string
     }
 
+    export interface ResolveAIReviewParams {
+        /**
+         * approve | reject
+         */
+        action: string
+    }
+
     export interface SeedComicsResponse {
         created: number
         skipped: number
@@ -1003,6 +1047,8 @@ export namespace comics {
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
+            this.AIDecisions = this.AIDecisions.bind(this)
+            this.AIReviewQueue = this.AIReviewQueue.bind(this)
             this.AdminAuditLogs = this.AdminAuditLogs.bind(this)
             this.AdminListComics = this.AdminListComics.bind(this)
             this.ApproveComic = this.ApproveComic.bind(this)
@@ -1035,6 +1081,7 @@ export namespace comics {
             this.RSSFeed = this.RSSFeed.bind(this)
             this.RecycleBin = this.RecycleBin.bind(this)
             this.RejectComic = this.RejectComic.bind(this)
+            this.ResolveAIReview = this.ResolveAIReview.bind(this)
             this.ResolveFlag = this.ResolveFlag.bind(this)
             this.RestoreComic = this.RestoreComic.bind(this)
             this.SeriesComics = this.SeriesComics.bind(this)
@@ -1043,6 +1090,18 @@ export namespace comics {
             this.ToggleLike = this.ToggleLike.bind(this)
             this.UnfollowSeries = this.UnfollowSeries.bind(this)
             this.UnfollowUploader = this.UnfollowUploader.bind(this)
+        }
+
+        public async AIDecisions(): Promise<AIDecisionsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/ai/decisions`)
+            return await resp.json() as AIDecisionsResponse
+        }
+
+        public async AIReviewQueue(): Promise<AIReviewQueueResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/ai/queue`)
+            return await resp.json() as AIReviewQueueResponse
         }
 
         public async AdminAuditLogs(): Promise<AuditLogsResponse> {
@@ -1263,6 +1322,10 @@ export namespace comics {
 
         public async RejectComic(id: string, params: RejectParams): Promise<void> {
             await this.baseClient.callTypedAPI("POST", `/moderation/comics/${encodeURIComponent(id)}/reject`, JSON.stringify(params))
+        }
+
+        public async ResolveAIReview(id: string, params: ResolveAIReviewParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/admin/ai/queue/${encodeURIComponent(id)}/resolve`, JSON.stringify(params))
         }
 
         public async ResolveFlag(id: string): Promise<void> {

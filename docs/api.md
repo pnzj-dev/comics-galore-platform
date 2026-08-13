@@ -190,7 +190,7 @@ Summarised from ADRs 0017–0021. All auth-required unless noted.
 | POST | `/admin/support/tickets/:id/resolve` | Resolve | Moderator/Admin |
 | POST | `/admin/broadcasts` | Send announcement | Admin |
 
-### AI Moderation — ADR 0018
+## AI Moderation — ADR 0018 (implemented)
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | GET | `/admin/ai/queue` | Uncertain AI decisions | Moderator/Admin |

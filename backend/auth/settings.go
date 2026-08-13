@@ -45,10 +45,18 @@ type AppSettings struct {
 	Boost2Price          float64 `json:"boost_2_price"`
 	Boost3GB             int     `json:"boost_3_gb"`
 	Boost3Price          float64 `json:"boost_3_price"`
-	ContactEmail         string  `json:"contact_email"`
-	HideMatureDefault    bool    `json:"hide_mature_default"`
-	EnableComments       bool    `json:"enable_comments"`
+	ContactEmail         string `json:"contact_email"`
+	HideMatureDefault    bool   `json:"hide_mature_default"`
+	EnableComments       bool   `json:"enable_comments"`
 	DefaultMetaDescription string `json:"default_meta_description"`
+
+	// AI moderation (ADR 0018)
+	AIModerationEnabled      bool    `json:"ai_moderation_enabled"`
+	AIModel                  string  `json:"ai_model"`
+	AIEndpoint               string  `json:"ai_endpoint"`
+	AIPrompt                 string  `json:"ai_prompt"`
+	AIAutoApproveThreshold   float64 `json:"ai_auto_approve_threshold"`
+	AIAutoRejectThreshold    float64 `json:"ai_auto_reject_threshold"`
 }
 
 var defaultPreferences = UserPreferences{
@@ -210,5 +218,12 @@ func defaultAppSettings() *AppSettings {
 		HideMatureDefault:    false,
 		EnableComments:       true,
 		DefaultMetaDescription: "",
+
+		AIModerationEnabled:    false,
+		AIModel:                "gpt-4o-mini",
+		AIEndpoint:             "https://api.openai.com/v1/chat/completions",
+		AIPrompt:               "You moderate user-generated content on a comics platform. Reply with only JSON: {\"decision\":\"approved|rejected|uncertain\",\"confidence\":0.0,\"reason\":\"...\"}.",
+		AIAutoApproveThreshold: 0.85,
+		AIAutoRejectThreshold:  0.15,
 	}
 }

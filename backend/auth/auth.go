@@ -470,6 +470,54 @@ func NotifySupportReply(ctx context.Context, p *NotifySupportReplyParams) error 
 	return nil
 }
 
+// AIModerationConfig is the moderation configuration exposed to the comics
+// service (which owns the AI decision flow). The API key stays a secret in the
+// comics service; this endpoint returns non-secret configuration only.
+type AIModerationConfig struct {
+	Enabled             bool    `json:"enabled"`
+	Model               string  `json:"model"`
+	Endpoint            string  `json:"endpoint"`
+	Prompt              string  `json:"prompt"`
+	AutoApproveThreshold float64 `json:"auto_approve_threshold"`
+	AutoRejectThreshold  float64 `json:"auto_reject_threshold"`
+}
+
+//encore:api private method=GET path=/auth/ai-moderation-config
+func GetAIModerationConfig(ctx context.Context) (*AIModerationConfig, error) {
+	var raw []byte
+	err := db.QueryRow(ctx, `SELECT value FROM app_settings WHERE key = 'defaults'`).Scan(&raw)
+	if err != nil || len(raw) == 0 {
+		return &AIModerationConfig{}, nil
+	}
+
+	var settings AppSettings
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		return &AIModerationConfig{}, nil
+	}
+
+	cfg := &AIModerationConfig{
+		Enabled:              settings.AIModerationEnabled,
+		Model:                settings.AIModel,
+		Endpoint:             settings.AIEndpoint,
+		Prompt:               settings.AIPrompt,
+		AutoApproveThreshold: settings.AIAutoApproveThreshold,
+		AutoRejectThreshold:  settings.AIAutoRejectThreshold,
+	}
+	if cfg.Model == "" {
+		cfg.Model = "gpt-4o-mini"
+	}
+	if cfg.Endpoint == "" {
+		cfg.Endpoint = "https://api.openai.com/v1/chat/completions"
+	}
+	if cfg.AutoApproveThreshold <= 0 {
+		cfg.AutoApproveThreshold = 0.85
+	}
+	if cfg.AutoRejectThreshold >= cfg.AutoApproveThreshold {
+		cfg.AutoRejectThreshold = 0.15
+	}
+	return cfg, nil
+}
+
 //encore:api auth method=POST path=/auth/resend-verification
 func ResendVerification(ctx context.Context) error {
 	data := auth.Data().(*AuthData)

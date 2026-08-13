@@ -194,6 +194,8 @@ func CreateComic(ctx context.Context, p *CreateComicParams) (*Comic, error) {
 			p.UploadSessionID, ad.UserID)
 	}
 
+	moderationTopic.Publish(ctx, ModerationEvent{TargetType: "comic", TargetID: comic.ID})
+
 	return &comic, nil
 }
 
@@ -977,6 +979,7 @@ func CreateComment(ctx context.Context, id string, p *CreateCommentParams) (*Com
 		return nil, err
 	}
 	publishComment(id, c)
+	moderationTopic.Publish(ctx, ModerationEvent{TargetType: "comment", TargetID: c.ID})
 	return &c, nil
 }
 

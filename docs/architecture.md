@@ -53,7 +53,7 @@ Comics-Galore/
 │   ├── upload/                  # presigned uploads, media
 │   ├── fixtures/                # test fixtures
 │   ├── social/                  # messaging, support tickets, broadcasts
-│   └── (planned) aiprovider/    # shared OpenAI-compatible client package
+│   └── aiprovider/              # shared OpenAI-compatible client package
 ├── frontend-public/             # SvelteKit web app — comics-galore.com
 ├── frontend-admin/              # SvelteKit web app — admin.comics-galore.com
 ├── desktop/                     # Wails v2 application
@@ -195,8 +195,8 @@ The full vision adds these domains. Detailed specs are in the ADRs; this section
 - Email fan-out via `auth.NotifySupportReply` (private), honouring preferences.
 
 ### AI Moderation (shared `aiprovider` package) — ADR 0018
-- OpenAI-compatible client package; config in `AppSettings` (`ai_moderation_enabled`, `ai_model`, `ai_endpoint`, `ai_api_key`, `ai_prompt`, thresholds).
-- Encore workers subscribe to `comic-created` / `comment-created` Pub/Sub topics, write `ai_decisions` and `ai_review_queue` (comics service), auto-approve/reject by threshold, else queue for a human.
+- **Implemented.** OpenAI-compatible client package; config in `AppSettings` (`ai_moderation_enabled`, `ai_model`, `ai_endpoint`, `ai_prompt`, thresholds) + `AIModeratorAPIKey` secret.
+- Encore Pub/Sub topic `ai-moderation` (published on comic/comment creation) + subscription worker that writes `ai_decisions`/`ai_review_queue`, auto-approve/reject by threshold, else queue for human.
 
 ### Admin Power Tools — ADR 0019
 - Audited impersonation via a scoped `impersonated_as` JWT claim (no session table).

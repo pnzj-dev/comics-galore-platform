@@ -1,7 +1,7 @@
 # ADR 0018 – AI Moderation (Generic LLM Provider)
 
 ## Status
-Proposed (supersedes the high-level ADR 0008)
+Accepted (supersedes the high-level ADR 0008)
 
 ## Context
 Human moderators alone may not scale. We want optional AI assistance for new comics and comments, but with no vendor lock-in and human moderators always in control (ADR 0008).
