@@ -13,10 +13,11 @@ import (
 const tokenDuration = 72 * time.Hour
 
 type Claims struct {
-	UserID string `json:"uid"`
-	Email  string `json:"email"`
-	Role   string `json:"role"`
-	Tier   string `json:"tier"`
+	UserID           string `json:"uid"`
+	Email            string `json:"email"`
+	Role             string `json:"role"`
+	Tier             string `json:"tier"`
+	ImpersonatedBy   string `json:"impersonated_by,omitempty"`
 	jwt.RegisteredClaims
 }
 

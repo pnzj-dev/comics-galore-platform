@@ -1117,3 +1117,49 @@ func TestLanguageFacets_CountsPublishedByLanguage(t *testing.T) {
 		t.Errorf("expected ja count >= 2, got %d", counts["ja"])
 	}
 }
+
+func TestStaffPicks_AndSavedViews(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	comic, err := CreateComic(uploaderCtx, &CreateComicParams{
+		Title:    "Staff Pick Comic",
+		CoverKey: "covers/sp.jpg",
+		FileKey:  "files/sp.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	_ = ApproveComic(moderatorCtx, comic.ID)
+
+	if err := AddStaffPick(adminCtx, &AddStaffPickParams{ComicID: comic.ID}); err != nil {
+		t.Fatalf("add staff pick error: %v", err)
+	}
+
+	picks, err := ListStaffPicks(context.Background())
+	if err != nil {
+		t.Fatalf("list staff picks error: %v", err)
+	}
+	found := false
+	for _, p := range picks.Picks {
+		if p.ComicID == comic.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected staff pick to be listed")
+	}
+
+	// Saved views
+	sv, err := SaveView(adminCtx, &SaveViewParams{Resource: "users", Name: "My view", Filters: `{"tier":"gold"}`})
+	if err != nil {
+		t.Fatalf("save view error: %v", err)
+	}
+	views, err := ListSavedViews(adminCtx)
+	if err != nil {
+		t.Fatalf("list views error: %v", err)
+	}
+	if len(views.Views) < 1 {
+		t.Error("expected at least 1 saved view")
+	}
+	_ = sv
+}

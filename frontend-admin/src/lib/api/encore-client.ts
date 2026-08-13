@@ -183,6 +183,11 @@ export namespace auth {
         "new_users_this_month": number
     }
 
+    export interface ImpersonateResponse {
+        token: string
+        user: User
+    }
+
     export interface LoginParams {
         email: string
         password: string
@@ -272,6 +277,7 @@ export namespace auth {
             this.baseClient = baseClient
             this.AdminBanUser = this.AdminBanUser.bind(this)
             this.AdminDashboardStats = this.AdminDashboardStats.bind(this)
+            this.AdminImpersonateUser = this.AdminImpersonateUser.bind(this)
             this.AdminListUsers = this.AdminListUsers.bind(this)
             this.AdminSuspendUser = this.AdminSuspendUser.bind(this)
             this.AdminUnbanUser = this.AdminUnbanUser.bind(this)
@@ -279,6 +285,7 @@ export namespace auth {
             this.AdminUpdateUserRole = this.AdminUpdateUserRole.bind(this)
             this.ConfirmPasswordReset = this.ConfirmPasswordReset.bind(this)
             this.DevSeedUsers = this.DevSeedUsers.bind(this)
+            this.ExportCSV = this.ExportCSV.bind(this)
             this.GetAdminSettings = this.GetAdminSettings.bind(this)
             this.GetAvatar = this.GetAvatar.bind(this)
             this.GetNotificationPrefs = this.GetNotificationPrefs.bind(this)
@@ -305,6 +312,12 @@ export namespace auth {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/admin/stats`)
             return await resp.json() as DashboardStats
+        }
+
+        public async AdminImpersonateUser(id: string): Promise<ImpersonateResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/users/${encodeURIComponent(id)}/impersonate`)
+            return await resp.json() as ImpersonateResponse
         }
 
         public async AdminListUsers(params: AdminListUsersParams): Promise<AdminUserListResponse> {
@@ -349,6 +362,10 @@ export namespace auth {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/dev/seed-users`, JSON.stringify(params))
             return await resp.json() as SeedUsersResponse
+        }
+
+        public async ExportCSV(method: "GET", resource: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
+            return this.baseClient.callAPI(method, `/admin/export/${encodeURIComponent(resource)}`, body, options)
         }
 
         public async GetAdminSettings(): Promise<AppSettings> {
@@ -763,6 +780,10 @@ export namespace comics {
         items: AIReviewItem[]
     }
 
+    export interface AddStaffPickParams {
+        "comic_id": string
+    }
+
     export interface AdminListComicsParams {
         Page: number
         Limit: number
@@ -948,8 +969,16 @@ export namespace comics {
         total: number
     }
 
+    export interface ListSavedViewsResponse {
+        views: SavedView[]
+    }
+
     export interface ListSeriesResponse {
         series: Series[]
+    }
+
+    export interface ListStaffPicksResponse {
+        picks: StaffPick[]
     }
 
     export interface PendingComic {
@@ -990,6 +1019,19 @@ export namespace comics {
         action: string
     }
 
+    export interface SaveViewParams {
+        resource: string
+        name: string
+        filters: string
+    }
+
+    export interface SavedView {
+        id: string
+        resource: string
+        name: string
+        filters: string
+    }
+
     export interface SeedComicsResponse {
         created: number
         skipped: number
@@ -1013,6 +1055,14 @@ export namespace comics {
         description: string
         "uploader_id": string
         "created_at": string
+    }
+
+    export interface StaffPick {
+        "comic_id": string
+        title: string
+        "cover_url": string
+        slug: string
+        position: number
     }
 
     export interface ToggleDislikeResponse {
@@ -1049,6 +1099,7 @@ export namespace comics {
             this.baseClient = baseClient
             this.AIDecisions = this.AIDecisions.bind(this)
             this.AIReviewQueue = this.AIReviewQueue.bind(this)
+            this.AddStaffPick = this.AddStaffPick.bind(this)
             this.AdminAuditLogs = this.AdminAuditLogs.bind(this)
             this.AdminListComics = this.AdminListComics.bind(this)
             this.ApproveComic = this.ApproveComic.bind(this)
@@ -1061,6 +1112,7 @@ export namespace comics {
             this.CreateSeries = this.CreateSeries.bind(this)
             this.DeleteComic = this.DeleteComic.bind(this)
             this.DeleteComment = this.DeleteComment.bind(this)
+            this.DeleteSavedView = this.DeleteSavedView.bind(this)
             this.DevSeedComics = this.DevSeedComics.bind(this)
             this.DevSeedEngagement = this.DevSeedEngagement.bind(this)
             this.FlagComment = this.FlagComment.bind(this)
@@ -1075,15 +1127,19 @@ export namespace comics {
             this.ListComics = this.ListComics.bind(this)
             this.ListComments = this.ListComments.bind(this)
             this.ListFlaggedComments = this.ListFlaggedComments.bind(this)
+            this.ListSavedViews = this.ListSavedViews.bind(this)
             this.ListSeries = this.ListSeries.bind(this)
+            this.ListStaffPicks = this.ListStaffPicks.bind(this)
             this.MyComics = this.MyComics.bind(this)
             this.PendingComics = this.PendingComics.bind(this)
             this.RSSFeed = this.RSSFeed.bind(this)
             this.RecycleBin = this.RecycleBin.bind(this)
             this.RejectComic = this.RejectComic.bind(this)
+            this.RemoveStaffPick = this.RemoveStaffPick.bind(this)
             this.ResolveAIReview = this.ResolveAIReview.bind(this)
             this.ResolveFlag = this.ResolveFlag.bind(this)
             this.RestoreComic = this.RestoreComic.bind(this)
+            this.SaveView = this.SaveView.bind(this)
             this.SeriesComics = this.SeriesComics.bind(this)
             this.ToggleDislike = this.ToggleDislike.bind(this)
             this.ToggleFavorite = this.ToggleFavorite.bind(this)
@@ -1102,6 +1158,10 @@ export namespace comics {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/admin/ai/queue`)
             return await resp.json() as AIReviewQueueResponse
+        }
+
+        public async AddStaffPick(params: AddStaffPickParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/admin/staff-picks`, JSON.stringify(params))
         }
 
         public async AdminAuditLogs(): Promise<AuditLogsResponse> {
@@ -1174,6 +1234,10 @@ export namespace comics {
 
         public async DeleteComment(id: string): Promise<void> {
             await this.baseClient.callTypedAPI("DELETE", `/comments/${encodeURIComponent(id)}`)
+        }
+
+        public async DeleteSavedView(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("DELETE", `/admin/views/${encodeURIComponent(id)}`)
         }
 
         public async DevSeedComics(params: SeedParams): Promise<SeedComicsResponse> {
@@ -1271,10 +1335,22 @@ export namespace comics {
             return await resp.json() as ListFlaggedCommentsResponse
         }
 
+        public async ListSavedViews(): Promise<ListSavedViewsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/views`)
+            return await resp.json() as ListSavedViewsResponse
+        }
+
         public async ListSeries(): Promise<ListSeriesResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/series`)
             return await resp.json() as ListSeriesResponse
+        }
+
+        public async ListStaffPicks(): Promise<ListStaffPicksResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/staff-picks`)
+            return await resp.json() as ListStaffPicksResponse
         }
 
         public async MyComics(): Promise<ListComicsResponse> {
@@ -1324,6 +1400,10 @@ export namespace comics {
             await this.baseClient.callTypedAPI("POST", `/moderation/comics/${encodeURIComponent(id)}/reject`, JSON.stringify(params))
         }
 
+        public async RemoveStaffPick(comicId: string): Promise<void> {
+            await this.baseClient.callTypedAPI("DELETE", `/admin/staff-picks/${encodeURIComponent(comicId)}`)
+        }
+
         public async ResolveAIReview(id: string, params: ResolveAIReviewParams): Promise<void> {
             await this.baseClient.callTypedAPI("POST", `/admin/ai/queue/${encodeURIComponent(id)}/resolve`, JSON.stringify(params))
         }
@@ -1334,6 +1414,12 @@ export namespace comics {
 
         public async RestoreComic(id: string): Promise<void> {
             await this.baseClient.callTypedAPI("POST", `/admin/comics/${encodeURIComponent(id)}/restore`)
+        }
+
+        public async SaveView(params: SaveViewParams): Promise<SavedView> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/views`, JSON.stringify(params))
+            return await resp.json() as SavedView
         }
 
         public async SeriesComics(id: string): Promise<ListComicsResponse> {

@@ -1,7 +1,7 @@
 # ADR 0019 – Admin Power Tools
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 The v1 admin panel covers core lists, moderation, settings, and KPI cards. The full vision (product.md "Admin Control Panel") adds impersonation, saved views, CSV export, background-job oversight, Staff Picks ordering, and storage usage. These extend existing services rather than introducing new domains.

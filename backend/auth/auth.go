@@ -45,10 +45,11 @@ type AuthParams struct {
 }
 
 type AuthData struct {
-	UserID string
-	Email  string
-	Role   string
-	Tier   string
+	UserID         string
+	Email          string
+	Role           string
+	Tier           string
+	ImpersonatedBy string
 }
 
 //encore:authhandler
@@ -100,10 +101,11 @@ func AuthHandler(ctx context.Context, p *AuthParams) (auth.UID, *AuthData, error
 	}
 
 	return auth.UID(claims.UserID), &AuthData{
-		UserID: claims.UserID,
-		Email:  claims.Email,
-		Role:   claims.Role,
-		Tier:   claims.Tier,
+		UserID:         claims.UserID,
+		Email:          claims.Email,
+		Role:           claims.Role,
+		Tier:           claims.Tier,
+		ImpersonatedBy: claims.ImpersonatedBy,
 	}, nil
 }
 
@@ -919,6 +921,44 @@ func AdminUnsuspendUser(ctx context.Context, id string) error {
 	return err
 }
 
+type ImpersonateResponse struct {
+	Token string `json:"token"`
+	User  User   `json:"user"`
+}
+
+//encore:api auth method=POST path=/admin/users/:id/impersonate
+func AdminImpersonateUser(ctx context.Context, id string) (*ImpersonateResponse, error) {
+	data := auth.Data().(*AuthData)
+	if data.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	user, err := getUserByID(ctx, id)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, &errs.Error{Code: errs.NotFound, Message: "user not found"}
+		}
+		return nil, err
+	}
+
+	token, err := generateToken(&Claims{
+		UserID:         user.ID,
+		Email:          user.Email,
+		Role:           user.Role,
+		Tier:           user.Tier,
+		ImpersonatedBy: data.UserID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	details, _ := json.Marshal(map[string]string{"impersonated": id})
+	db.Exec(ctx, `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details) VALUES ($1, 'impersonate', 'user', $2, $3)`,
+		data.UserID, id, string(details))
+
+	return &ImpersonateResponse{Token: token, User: *user}, nil
+}
+
 // ----- Notification Preferences -----
 
 type NotificationPrefs struct {
@@ -983,4 +1023,39 @@ func AdminDashboardStats(ctx context.Context) (*DashboardStats, error) {
 	db.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE created_at >= date_trunc('month', now())`).Scan(&stats.NewUsersThisMonth)
 
 	return &stats, nil
+}
+
+// ----- CSV Export -----
+
+//encore:api auth raw method=GET path=/admin/export/:resource
+func ExportCSV(w http.ResponseWriter, req *http.Request) {
+	data, ok := auth.Data().(*AuthData)
+	if !ok || data.Role != "admin" {
+		http.Error(w, "admin only", http.StatusForbidden)
+		return
+	}
+
+	resource := req.PathValue("resource")
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+resource+`.csv"`)
+
+	switch resource {
+	case "users":
+		rows, err := db.Query(req.Context(), `SELECT id, email, role, tier, created_at FROM users ORDER BY created_at DESC`)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+		fmt.Fprintln(w, "id,email,role,tier,created_at")
+		for rows.Next() {
+			var id, email, role, tier string
+			var createdAt time.Time
+			if rows.Scan(&id, &email, &role, &tier, &createdAt) == nil {
+				fmt.Fprintf(w, "%s,%s,%s,%s,%s\n", id, email, role, tier, createdAt.Format(time.RFC3339))
+			}
+		}
+	default:
+		http.Error(w, "unsupported resource", http.StatusNotFound)
+	}
 }

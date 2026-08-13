@@ -58,12 +58,35 @@
 	async function unbanUser(userId: string) { await encore.auth.AdminUnbanUser(userId); await goto(page.url.pathname + page.url.search); }
 	async function suspendUser(userId: string) { await encore.auth.AdminSuspendUser(userId, { reason: '' }); await goto(page.url.pathname + page.url.search); }
 	async function unsuspendUser(userId: string) { await encore.auth.AdminUnsuspendUser(userId); await goto(page.url.pathname + page.url.search); }
+	async function impersonate(userId: string) {
+		const res = await encore.auth.AdminImpersonateUser(userId);
+		document.cookie = `token=${res.token}; path=/; SameSite=Lax; max-age=2592000`;
+		window.location.href = '/';
+	}
+
+	async function exportCSV() {
+		try {
+			const res = await encore.auth.ExportCSV('GET', 'users');
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = 'users.csv';
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			console.error('[export] failed:', e);
+		}
+	}
 </script>
 
 <svelte:head><title>Users — Admin</title></svelte:head>
 
 <section>
-	<h1 class="text-3xl font-bold mb-6">Users</h1>
+	<div class="flex items-center justify-between mb-6">
+		<h1 class="text-3xl font-bold">Users</h1>
+		<Button size="sm" variant="outline" onclick={exportCSV}>Export CSV</Button>
+	</div>
 
 	<AdminTable
 		{columns}
@@ -108,6 +131,7 @@
 			{:else if st === 'suspended'}
 				<Button size="sm" variant="outline" onclick={() => unsuspendUser(row.id as string)}>Unsuspend</Button>
 			{:else}
+				<Button size="sm" variant="outline" onclick={() => impersonate(row.id as string)}>Impersonate</Button>
 				<Button size="sm" variant="outline" onclick={() => suspendUser(row.id as string)}>Suspend</Button>
 				<Button size="sm" variant="destructive" onclick={() => banUser(row.id as string)}>Ban</Button>
 			{/if}

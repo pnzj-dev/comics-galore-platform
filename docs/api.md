@@ -197,14 +197,15 @@ Summarised from ADRs 0017–0021. All auth-required unless noted.
 | POST | `/admin/ai/queue/:id/resolve` | Resolve queued item | Moderator/Admin |
 | GET | `/admin/ai/decisions` | AI decision log | Admin |
 
-### Admin Power Tools — ADR 0019
+## Admin Power Tools — ADR 0019 (implemented)
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | POST | `/admin/users/:id/impersonate` | Start audited impersonation | Admin |
 | GET/POST/DELETE | `/admin/views` | Saved datalist views | Admin |
-| GET | `/admin/export/:resource` | CSV export (users/comics/payments) | Admin |
-| GET | `/admin/jobs` | Background job status | Admin |
-| POST | `/admin/jobs/:id/retry` | Retry failed job | Admin |
+| GET (raw) | `/admin/export/users` | CSV export of users | Admin |
+| GET | `/staff-picks` | Featured comics rail | No |
+| POST | `/admin/staff-picks` | Add a staff pick | Admin |
+| DELETE | `/admin/staff-picks/:comicId` | Remove a staff pick | Admin |
 
 ### Billing Growth — ADR 0020
 | Method | Path | Description | Auth |
