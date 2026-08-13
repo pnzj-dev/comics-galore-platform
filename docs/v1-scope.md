@@ -101,7 +101,7 @@ V1.1 builds on the shipped v1 web spine. The following **IN (v1.1)** items are t
 
 ### SOON — V1.1.1 (next after v1.1)
 
-- **Real notification emails** (Resend) — requires uploader-follow as the trigger source (only series-follow exists today); respect `email_new_from_following` pref. *Deferred from v1.1.*
+- ~~Real notification emails (Resend)~~ — **DONE** — uploader-follow (follow/unfollow/status) + `NotifyFollowersNewComic` email on publish, respecting `email_new_from_following` pref.
 - Additional UI locales (ja, es, ko, fr, pt-BR, …) as translation packs land.
 - Language facet polish (facets, counts).
 
@@ -216,5 +216,6 @@ When all boxes are checked, v1 is done—then execute SOON.
 - [x] Series progress % / missing-issue gaps
 - [x] Language facet UI on public browse
 - [x] Backend test suite green
+- [x] Uploader follow + notification emails on publish
 
-Remaining for v1.1.1 (SOON): notification emails (needs uploader-follow), additional locale packs, language facet polish.
+Remaining for v1.1.1 (SOON): additional locale packs, language facet polish.

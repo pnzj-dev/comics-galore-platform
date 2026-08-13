@@ -79,6 +79,6 @@
 - [x] Soft quota warning (~80%)
 - [x] Series progress % / missing-issue gaps
 - [x] Language facet UI on public browse
-- [ ] Real notification emails (Resend) — deferred to v1.1.1 (needs uploader-follow trigger)
+- [x] Real notification emails (Resend) + uploader follow
 
 See `docs/v1-scope.md` for the authoritative IN (v1.1) list and the original SOON items already shipped in v1.

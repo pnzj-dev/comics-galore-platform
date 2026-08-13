@@ -14,7 +14,7 @@
 	import CommentForm from '$lib/components/CommentForm.svelte';
 	import { currentUser } from '$lib/stores/auth';
 	import { createCommentStream } from '$lib/stores/live-comments';
-	import { Eye, Download, BookOpen, Globe, Clock, ThumbsDown, BookOpenCheck } from 'lucide-svelte';
+	import { Eye, Download, BookOpen, Globe, Clock, ThumbsDown, BookOpenCheck, Bell, BellOff } from 'lucide-svelte';
 
 	let { data } = $props();
 
@@ -34,6 +34,9 @@
 	let dislikeCount = $derived(data.comic?.dislike_count ?? 0);
 	let likeLoading = $state(false);
 	let dislikeLoading = $state(false);
+
+	let followingUploader = $state(false);
+	let followLoading = $state(false);
 
 
 	let related = $derived(data.related);
@@ -94,6 +97,14 @@
 			loadCommentsFallback();
 		});
 		return () => { stream.close(); unsub(); };
+	});
+
+	$effect(() => {
+		if (user && comic?.uploader_id && user.id !== comic.uploader_id) {
+			encore.comics.GetUploaderFollowStatus(comic.uploader_id)
+				.then((res) => { followingUploader = res.following; })
+				.catch(() => {});
+		}
 	});
 
 	async function toggleLike() {
@@ -175,6 +186,24 @@
 			await encore.comics.FlagComment(commentId, { reason: '' });
 		} catch (e) {
 			console.error('[comments] flag failed:', e);
+		}
+	}
+
+	async function toggleFollowUploader() {
+		if (!comic?.uploader_id || !user) return;
+		followLoading = true;
+		try {
+			if (followingUploader) {
+				await encore.comics.UnfollowUploader(comic.uploader_id);
+				followingUploader = false;
+			} else {
+				await encore.comics.FollowUploader(comic.uploader_id);
+				followingUploader = true;
+			}
+		} catch (e) {
+			console.error('[follow] toggle failed:', e);
+		} finally {
+			followLoading = false;
 		}
 	}
 
@@ -290,6 +319,20 @@
 							{(comic.author || 'U').charAt(0).toUpperCase()}
 						</div>
 						<span class="text-xs text-muted-foreground">Uploader</span>
+						{#if user && user.id !== comic.uploader_id}
+							<button
+								onclick={toggleFollowUploader}
+								disabled={followLoading}
+								class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-border hover:bg-muted transition-colors"
+								aria-label={followingUploader ? 'Unfollow uploader' : 'Follow uploader'}
+							>
+								{#if followingUploader}
+									<BellOff class="size-3" /> Following
+								{:else}
+									<Bell class="size-3" /> Follow
+								{/if}
+							</button>
+						{/if}
 					</div>
 				{/if}
 

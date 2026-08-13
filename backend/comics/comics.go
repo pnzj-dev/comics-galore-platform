@@ -620,6 +620,7 @@ func ApproveComic(ctx context.Context, id string) error {
 		INSERT INTO audit_logs (actor_id, action, target_type, target_id)
 		VALUES ($1, 'approve_comic', 'comic', $2)
 	`, ad.UserID, id)
+	go notifyUploaderFollowers(context.Background(), id)
 	return nil
 }
 
@@ -665,6 +666,7 @@ func BulkModerate(ctx context.Context, p *BulkActionParams) error {
 		if p.Action == "approve" {
 			db.Exec(ctx, `UPDATE comics SET status = 'published', published_at = now(), updated_at = now() WHERE id = $1 AND status = 'pending_review'`, id)
 			db.Exec(ctx, `INSERT INTO audit_logs (actor_id, action, target_type, target_id) VALUES ($1, 'approve_comic', 'comic', $2)`, ad.UserID, id)
+			go notifyUploaderFollowers(context.Background(), id)
 		} else {
 			db.Exec(ctx, `UPDATE comics SET status = 'rejected', updated_at = now() WHERE id = $1 AND status = 'pending_review'`, id)
 			db.Exec(ctx, `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details) VALUES ($1, 'reject_comic', 'comic', $2, '{"bulk":true}')`, ad.UserID, id)
@@ -1252,6 +1254,72 @@ func UnfollowSeries(ctx context.Context, id string) error {
 	ad := auth.Data().(*myauth.AuthData)
 	_, err := db.Exec(ctx, `DELETE FROM series_follows WHERE user_id = $1 AND series_id = $2`, ad.UserID, id)
 	return err
+}
+
+// ----- Uploader follow -----
+
+//encore:api auth method=POST path=/uploaders/:id/follow
+func FollowUploader(ctx context.Context, id string) error {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.UserID == id {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "cannot follow yourself"}
+	}
+	_, err := db.Exec(ctx, `INSERT INTO uploader_follows (user_id, uploader_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, ad.UserID, id)
+	return err
+}
+
+//encore:api auth method=DELETE path=/uploaders/:id/follow
+func UnfollowUploader(ctx context.Context, id string) error {
+	ad := auth.Data().(*myauth.AuthData)
+	_, err := db.Exec(ctx, `DELETE FROM uploader_follows WHERE user_id = $1 AND uploader_id = $2`, ad.UserID, id)
+	return err
+}
+
+type UploaderFollowStatus struct {
+	Following bool `json:"following"`
+}
+
+//encore:api auth method=GET path=/uploaders/:id/follow-status
+func GetUploaderFollowStatus(ctx context.Context, id string) (*UploaderFollowStatus, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	var following bool
+	db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM uploader_follows WHERE user_id = $1 AND uploader_id = $2)`, ad.UserID, id).Scan(&following)
+	return &UploaderFollowStatus{Following: following}, nil
+}
+
+// notifyUploaderFollowers emails followers of a newly published comic. Called
+// after a comic transitions to published. Best-effort; errors are logged, not
+// propagated (publishing must not fail because email delivery failed).
+func notifyUploaderFollowers(ctx context.Context, comicID string) {
+	var uploaderID, title string
+	if err := db.QueryRow(ctx, `SELECT uploader_id, title FROM comics WHERE id = $1`, comicID).Scan(&uploaderID, &title); err != nil {
+		return
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT user_id FROM uploader_follows WHERE uploader_id = $1
+	`, uploaderID)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	var followerIDs []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			followerIDs = append(followerIDs, id)
+		}
+	}
+	if len(followerIDs) == 0 {
+		return
+	}
+
+	// Delegate email delivery to the auth service (owns users + prefs).
+	myauth.NotifyFollowersNewComic(ctx, &myauth.NotifyFollowersNewComicParams{
+		UserIDs:    followerIDs,
+		ComicTitle: title,
+	})
 }
 
 // ----- RSS Feed -----

@@ -983,6 +983,10 @@ export namespace comics {
         "like_count": number
     }
 
+    export interface UploaderFollowStatus {
+        following: boolean
+    }
+
     export class ServiceClient {
         private baseClient: BaseClient
 
@@ -1004,10 +1008,12 @@ export namespace comics {
             this.DevSeedEngagement = this.DevSeedEngagement.bind(this)
             this.FlagComment = this.FlagComment.bind(this)
             this.FollowSeries = this.FollowSeries.bind(this)
+            this.FollowUploader = this.FollowUploader.bind(this)
             this.GetComic = this.GetComic.bind(this)
             this.GetComicsStats = this.GetComicsStats.bind(this)
             this.GetLikeStatus = this.GetLikeStatus.bind(this)
             this.GetSeries = this.GetSeries.bind(this)
+            this.GetUploaderFollowStatus = this.GetUploaderFollowStatus.bind(this)
             this.ListComics = this.ListComics.bind(this)
             this.ListComments = this.ListComments.bind(this)
             this.ListFlaggedComments = this.ListFlaggedComments.bind(this)
@@ -1024,6 +1030,7 @@ export namespace comics {
             this.ToggleFavorite = this.ToggleFavorite.bind(this)
             this.ToggleLike = this.ToggleLike.bind(this)
             this.UnfollowSeries = this.UnfollowSeries.bind(this)
+            this.UnfollowUploader = this.UnfollowUploader.bind(this)
         }
 
         public async AdminAuditLogs(): Promise<AuditLogsResponse> {
@@ -1118,6 +1125,10 @@ export namespace comics {
             await this.baseClient.callTypedAPI("POST", `/series/${encodeURIComponent(id)}/follow`)
         }
 
+        public async FollowUploader(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/uploaders/${encodeURIComponent(id)}/follow`)
+        }
+
         public async GetComic(slug: string): Promise<Comic> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/comics/${encodeURIComponent(slug)}`)
@@ -1140,6 +1151,12 @@ export namespace comics {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/series/${encodeURIComponent(id)}`)
             return await resp.json() as Series
+        }
+
+        public async GetUploaderFollowStatus(id: string): Promise<UploaderFollowStatus> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/uploaders/${encodeURIComponent(id)}/follow-status`)
+            return await resp.json() as UploaderFollowStatus
         }
 
         public async ListComics(params: ListComicsParams): Promise<ListComicsResponse> {
@@ -1264,6 +1281,10 @@ export namespace comics {
 
         public async UnfollowSeries(id: string): Promise<void> {
             await this.baseClient.callTypedAPI("DELETE", `/series/${encodeURIComponent(id)}/follow`)
+        }
+
+        public async UnfollowUploader(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("DELETE", `/uploaders/${encodeURIComponent(id)}/follow`)
         }
     }
 }

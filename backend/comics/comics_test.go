@@ -1038,3 +1038,40 @@ func TestResolveFlag_MarksResolved(t *testing.T) {
 		t.Errorf("expected fewer open flags after resolve, got %d", after.Total)
 	}
 }
+
+func TestFollowUploader_AndStatus(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	uploaderID := "550e8400-e29b-41d4-a716-446655440001" // fixtures.TestUploaderID
+	followerCtx := fixtures.TierGatedCtx("550e8400-e29b-41d4-a716-446655440099", "user", "free")
+
+	if err := FollowUploader(followerCtx, uploaderID); err != nil {
+		t.Fatalf("follow error: %v", err)
+	}
+
+	status, err := GetUploaderFollowStatus(followerCtx, uploaderID)
+	if err != nil {
+		t.Fatalf("status error: %v", err)
+	}
+	if !status.Following {
+		t.Error("expected following=true after follow")
+	}
+
+	if err := UnfollowUploader(followerCtx, uploaderID); err != nil {
+		t.Fatalf("unfollow error: %v", err)
+	}
+	status, _ = GetUploaderFollowStatus(followerCtx, uploaderID)
+	if status.Following {
+		t.Error("expected following=false after unfollow")
+	}
+}
+
+func TestFollowUploader_CannotFollowSelf(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	err := FollowUploader(upCtx, fixtures.TestUploaderID)
+	if err == nil {
+		t.Fatal("expected error for self-follow, got nil")
+	}
+}

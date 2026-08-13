@@ -57,3 +57,13 @@ func sendPasswordResetEmail(to, token string) {
 	`, token, token)
 	sendEmail(to, subject, body)
 }
+
+func sendNewComicFromFollowingEmail(to, title string) {
+	subject := "New comic from an uploader you follow"
+	body := fmt.Sprintf(`
+		<p>A new comic you might like was just published:</p>
+		<p style="font-size:18px;font-weight:600">%s</p>
+		<p><a href="https://comicsgalore.com/comics">Read it on Comics Galore</a></p>
+	`, title)
+	sendEmail(to, subject, body)
+}

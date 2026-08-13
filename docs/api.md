@@ -86,6 +86,7 @@ Private endpoints callable only from other Encore services — never exposed pub
 | POST | `/auth/ensure-sub-partner-id` | Get-or-create the user's NowPayments `sub_partner_id` | billing |
 | POST | `/auth/set-user-tier` | Set a user's tier (after subscription webhook activation) | billing |
 | GET | `/internal/plans/:id` | Plan details (provider plan id, interval, tier name, price) | billing |
+| POST | `/auth/notify-followers-new-comic` | Email followers of a newly published comic (respects prefs) | comics |
 
 ## Notes
 
@@ -125,6 +126,9 @@ Private endpoints callable only from other Encore services — never exposed pub
 | GET | `/tags/:slug` | Tag page (comics) | Opt |
 | POST | `/series/:id/follow` | Follow series | Yes |
 | DELETE | `/series/:id/follow` | Unfollow series | Yes |
+| POST | `/uploaders/:id/follow` | Follow an uploader | Yes |
+| DELETE | `/uploaders/:id/follow` | Unfollow an uploader | Yes |
+| GET | `/uploaders/:id/follow-status` | Whether current user follows an uploader | Yes |
 | POST | `/reading-progress-batch` | Batch reading progress for a set of comic IDs | Yes |
 | GET | `/me/notification-preferences` | Get prefs | Yes |
 | PATCH | `/me/notification-preferences` | Update prefs | Yes |

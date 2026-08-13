@@ -409,6 +409,39 @@ func SetUserTier(ctx context.Context, p *SetUserTierParams) error {
 	return err
 }
 
+type NotifyFollowersNewComicParams struct {
+	UserIDs    []string `json:"user_ids"`
+	ComicTitle string   `json:"comic_title"`
+}
+
+//encore:api private method=POST path=/auth/notify-followers-new-comic
+func NotifyFollowersNewComic(ctx context.Context, p *NotifyFollowersNewComicParams) error {
+	if len(p.UserIDs) == 0 {
+		return nil
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT u.email
+		FROM users u
+		LEFT JOIN notification_preferences np ON np.user_id = u.id
+		WHERE u.id = ANY($1)
+		  AND u.email_verified_at IS NOT NULL
+		  AND COALESCE(np.email_new_from_following, true) = true
+	`, p.UserIDs)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var email string
+		if rows.Scan(&email) == nil && email != "" {
+			go sendNewComicFromFollowingEmail(email, p.ComicTitle)
+		}
+	}
+	return rows.Err()
+}
+
 //encore:api auth method=POST path=/auth/resend-verification
 func ResendVerification(ctx context.Context) error {
 	data := auth.Data().(*AuthData)
