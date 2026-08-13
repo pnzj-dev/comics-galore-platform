@@ -5,14 +5,29 @@
 	import Pagination from '$lib/components/Pagination.svelte';
 	import { Label } from '$lib/components/ui/label/index.js';
 
+	import { onDestroy, untrack } from 'svelte';
+
 	let { data } = $props();
 
 	const comics = $derived(data.comics);
 	const totalPages = $derived(Math.max(1, Math.ceil(data.total / data.limit)));
 	const langFilter = $derived(data.lang || '');
-	const search = $derived(data.search);
+	// svelte-ignore state_referenced_locally
+	let searchInput = $state(data.search);
+	let searchTimer = $state<ReturnType<typeof setTimeout> | undefined>(undefined);
 	const searchField = $derived(data.searchField);
 	const activeTag = $derived(data.tag);
+
+	// Keep the input in sync when the URL changes (back/forward, tag/lang nav).
+	$effect(() => {
+		if (untrack(() => searchInput) !== data.search) {
+			searchInput = data.search;
+		}
+	});
+
+	onDestroy(() => {
+		if (searchTimer) clearTimeout(searchTimer);
+	});
 
 	const facets = $derived(data.facets || []);
 	const popularTags = $derived(data.popularTags || []);
@@ -51,7 +66,11 @@
 
 	function onSearch(e: Event) {
 		const value = (e.target as HTMLInputElement).value;
-		updateParams({ search: value || undefined });
+		searchInput = value;
+		if (searchTimer) clearTimeout(searchTimer);
+		searchTimer = setTimeout(() => {
+			updateParams({ search: value || undefined });
+		}, 300);
 	}
 
 	function changeField(e: Event) {
@@ -86,7 +105,7 @@
 				</div>
 				<input
 					type="text"
-					value={search}
+					value={searchInput}
 					oninput={onSearch}
 					placeholder="Search by title, author, or description..."
 					class="w-full pl-10 pr-4 py-2.5 bg-background border border-input rounded-lg text-sm placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
