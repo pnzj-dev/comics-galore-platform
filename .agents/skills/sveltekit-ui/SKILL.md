@@ -58,6 +58,16 @@ Location: `frontend-public/src/lib/i18n/` (foundation shipped in v1.1; English o
 - Upgrade CTAs open the plans modal flow.
 - Empty and quota-blocked states must be explicit.
 
+### Layout stability (scrollbar gutter)
+
+The app centers content with `mx-auto`. `frontend-public/src/app.css` must keep:
+
+```css
+html { scrollbar-gutter: stable both-edges; }
+```
+
+This reserves the scrollbar gutter so centered layouts don't shift horizontally when the classic vertical scrollbar appears/disappears. **Never remove it.** Do not "fix" scrollbar shift with `overflow-y: scroll`, JS scrollbar-width calculation, or `100vw` padding hacks. `both-edges` is required (not plain `stable`) so the layout stays stable for both LTR and future RTL locales.
+
 ### Svelte 5 Runes & Common Warnings
 
 **`$state(prop)` only captures initial value**

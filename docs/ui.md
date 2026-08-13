@@ -764,6 +764,14 @@ Submit button uses standardized pattern: `submitting ? 'Saving...' : 'Save Setti
 - All chrome strings go through i18n catalogs (SvelteKit-friendly i18n library).
 - Default locale `en`; fallback chain user → browser → en.
 
+## Layout & scrollbars
+
+- The app centers content with `mx-auto` (navbar inner `max-w-7xl`, `<main>`, footer).
+- `frontend-public/src/app.css` sets `html { scrollbar-gutter: stable both-edges; }`.
+- **Do not remove it.** Without it, centered `mx-auto` content shifts left by ~half the scrollbar width whenever the classic vertical scrollbar appears/disappears (short vs. long pages, modal opens, etc.).
+- `both-edges` (not plain `stable`) keeps the layout stable for both LTR and future RTL locales (i18n).
+- Do not work around this with `overflow-y: scroll`, JS scrollbar-width calculation, or `100vw` padding hacks — `scrollbar-gutter` is the CSS-native fix.
+
 ## Tier-gated image gallery
 
 - Main image, dots, thumbnails, fullscreen lightbox (see skill `tier-gated-gallery` and reference TS gallery).
