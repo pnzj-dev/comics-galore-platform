@@ -1,7 +1,7 @@
 # ADR 0021 – Social Engagement (Reading Lists & Recommendations)
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Beyond likes/favorites/follows, the product vision includes shareable public shelves and a "People also liked" discovery rail. These extend the comics service and reading lists without new infrastructure.

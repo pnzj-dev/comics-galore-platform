@@ -215,7 +215,7 @@ Summarised from ADRs 0017–0021. All auth-required unless noted.
 | POST | `/admin/subscriptions/:id/revoke` | Revoke subscription | Admin |
 | GET | `/admin/payments/past-due` | Failed/past-due list | Admin |
 
-### Social Engagement — ADR 0021
+## Social Engagement — ADR 0021 (implemented)
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | POST/GET | `/reading-lists` | Create/list shelves | Yes |

@@ -18,14 +18,7 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 
 	if (comic.id) {
 		const [relatedRes, commentsRes] = await Promise.all([
-			client.comics.ListComics({
-				Page: 1, Limit: 4,
-				Language: '',
-				Search: '',
-				Tag: '',
-				Sort: '',
-				ExcludeMature: ''
-			}).then(r => r.comics || []),
+			client.comics.RelatedComics(comic.id).then(r => r.comics || []),
 			client.comics.ListComments(comic.id),
 		]);
 		related = relatedRes.filter(c => c.id !== comic.id);

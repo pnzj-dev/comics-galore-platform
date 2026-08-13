@@ -1163,3 +1163,59 @@ func TestStaffPicks_AndSavedViews(t *testing.T) {
 	}
 	_ = sv
 }
+
+func TestReadingLists_CRUD(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	userCtx2 := fixtures.TierGatedCtx("550e8400-e29b-41d4-a716-4466554400f1", "user", "free")
+	list, err := CreateReadingList(userCtx2, &CreateReadingListParams{Name: "My Shelf", IsPublic: true})
+	if err != nil {
+		t.Fatalf("create list error: %v", err)
+	}
+	if list.ID == "" {
+		t.Fatal("expected list id")
+	}
+
+	comic, err := CreateComic(uploaderCtx, &CreateComicParams{
+		Title:    "List Comic",
+		CoverKey: "covers/list.jpg",
+		FileKey:  "files/list.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create comic error: %v", err)
+	}
+	_ = ApproveComic(moderatorCtx, comic.ID)
+
+	if err := AddToReadingList(userCtx2, list.ID, &AddToListParams{ComicID: comic.ID}); err != nil {
+		t.Fatalf("add to list error: %v", err)
+	}
+
+	// Public fetch includes the comic.
+	pub, err := GetReadingList(context.Background(), list.ID)
+	if err != nil {
+		t.Fatalf("get public list error: %v", err)
+	}
+	if len(pub.Comics) != 1 {
+		t.Errorf("expected 1 comic in public list, got %d", len(pub.Comics))
+	}
+
+	if err := RemoveFromReadingList(userCtx2, list.ID, comic.ID); err != nil {
+		t.Fatalf("remove from list error: %v", err)
+	}
+	pub2, _ := GetReadingList(context.Background(), list.ID)
+	if len(pub2.Comics) != 0 {
+		t.Errorf("expected 0 comics after remove, got %d", len(pub2.Comics))
+	}
+}
+
+func TestRelatedComics_ReturnsPublished(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	resp, err := RelatedComics(context.Background(), "550e8400-e29b-41d4-a716-446655440099")
+	if err != nil {
+		t.Fatalf("related error: %v", err)
+	}
+	if resp.Comics == nil {
+		t.Error("expected non-nil comics slice")
+	}
+}

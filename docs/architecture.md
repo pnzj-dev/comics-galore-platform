@@ -205,7 +205,7 @@ The full vision adds these domains. Detailed specs are in the ADRs; this section
 - **Implemented.** `coupons` table + admin CRUD; manual grant/revoke; past-due list. Force-sync and `revenue_by_tier_interval` deferred; second provider = new adapter behind `PaymentsProvider` (interface already in place).
 
 ### Social Engagement — ADR 0021
-- `reading_lists` / `reading_list_items` (public shelves) in comics; `GET /comics/:id/related` (co-occurrence, no new table).
+- **Implemented.** `reading_lists` / `reading_list_items` (public shelves) in comics; `GET /comics/:id/related` (co-occurrence).
 
 ## Upload & Creation Flow (identical on web and desktop)
 
