@@ -60,6 +60,7 @@
 | GET | `/moderation/flags` | List open comment flags (moderation queue) | Moderator/Admin |
 | POST | `/moderation/flags/:id/resolve` | Resolve a comment flag | Moderator/Admin |
 | GET (SSE) | `/comments-stream/:id` | SSE stream of new comments for a comic | No |
+| GET | `/comics-language-facets` | Language facet counts for published comics | No |
 
 ## Tiers & Plans
 

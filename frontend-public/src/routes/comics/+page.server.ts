@@ -6,6 +6,11 @@ export const load: PageServerLoad = async ({ url }) => {
 	const lang = url.searchParams.get('language');
 	const params: any = { Page: 1, Limit: 20 };
 	if (lang) params.Language = lang;
-	const res = await client.comics.ListComics(params);
-	return { comics: res.comics || [] };
+
+	const [res, facets] = await Promise.all([
+		client.comics.ListComics(params),
+		client.comics.LanguageFacets().catch(() => ({ facets: [] })),
+	]);
+
+	return { comics: res.comics || [], facets: facets.facets || [] };
 };

@@ -11,20 +11,13 @@ describe('detectLocale', () => {
 		expect(detectLocale('en-US,en;q=0.9', 'en')).toBe('en');
 	});
 
-	it('ignores disabled user locale and falls through', () => {
-		// 'ja' is not enabled in v1.1 → falls back to default
-		expect(detectLocale(undefined, 'ja')).toBe('en');
+	it('honors an enabled user locale', () => {
+		expect(detectLocale(undefined, 'ja')).toBe('ja');
 	});
 
 	it('parses Accept-Language header for an enabled locale', () => {
-		expect(detectLocale('en-US,en;q=0.9', null)).toBe('en');
-	});
-
-	it('falls back to en for not-yet-enabled locales', () => {
-		// fr / pt-BR / zh-CN are not enabled until their packs land (v1.1 ships en only)
-		expect(detectLocale('pt-BR,pt;q=0.9', null)).toBe('en');
-		expect(detectLocale('zh-CN', null)).toBe('en');
-		expect(detectLocale('fr-FR,fr;q=0.9', null)).toBe('en');
+		expect(detectLocale('ja-JP,ja;q=0.9', null)).toBe('ja');
+		expect(detectLocale('pt-BR,pt;q=0.9', null)).toBe('pt-BR');
 	});
 
 	it('falls back to en for unknown languages', () => {
@@ -49,13 +42,29 @@ describe('t', () => {
 		expect(t('common.welcome', { name: 'Ada' })).toBe('Welcome, Ada');
 	});
 
-	it('setLocale only applies enabled locales', () => {
-		setLocale('ja' as any);
+	it('translates to a non-en locale', () => {
+		state.locale = 'ja';
+		expect(t('nav.browse')).toBe('閲覧');
+	});
+
+	it('falls back to en for a missing non-en key', () => {
+		state.locale = 'ja';
+		expect(t('footer.dmca')).toBe('DMCA');
+	});
+
+	it('setLocale applies enabled locales', () => {
+		setLocale('ja');
+		expect(state.locale).toBe('ja');
+	});
+
+	it('setLocale rejects disabled locales', () => {
+		setLocale('en');
+		setLocale('xx' as any);
 		expect(state.locale).toBe('en');
 	});
 
 	it('initializeLocale applies enabled locale', () => {
-		initializeLocale('en');
-		expect(state.locale).toBe('en');
+		initializeLocale('fr');
+		expect(state.locale).toBe('fr');
 	});
 });

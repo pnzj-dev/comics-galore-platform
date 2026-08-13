@@ -6,6 +6,15 @@
 
 import { isEnabledLocale, type Locale } from './locales';
 import en from './messages/en';
+import ja from './messages/ja';
+import es from './messages/es';
+import ko from './messages/ko';
+import fr from './messages/fr';
+import ptBR from './messages/pt-BR';
+import zhCN from './messages/zh-CN';
+import de from './messages/de';
+import it from './messages/it';
+import id from './messages/id';
 
 export type { Locale } from './locales';
 export { DEFAULT_LOCALE, ENABLED_LOCALES, PRIORITY_LOCALES, LOCALE_META, isEnabledLocale } from './locales';
@@ -14,7 +23,18 @@ export { detectLocale } from './detect';
 export type MessageKey = keyof typeof en;
 type Params = Record<string, string | number>;
 
-const catalogs: Record<string, Partial<Record<MessageKey, string>>> = { en };
+const catalogs: Record<string, Partial<Record<MessageKey, string>>> = {
+	en,
+	ja,
+	es,
+	ko,
+	fr,
+	'pt-BR': ptBR,
+	'zh-CN': zhCN,
+	de,
+	it,
+	id,
+};
 
 export function registerCatalog(locale: Locale, messages: Partial<Record<MessageKey, string>>) {
 	catalogs[locale] = messages;
@@ -27,6 +47,8 @@ export function setLocale(next: Locale) {
 	state.locale = next;
 	if (typeof document !== 'undefined') {
 		document.documentElement.lang = next;
+		// Persist so the server resolves the same locale on subsequent SSR loads.
+		document.cookie = `locale=${next}; path=/; SameSite=Lax; max-age=2592000`;
 	}
 }
 

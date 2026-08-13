@@ -1075,3 +1075,45 @@ func TestFollowUploader_CannotFollowSelf(t *testing.T) {
 		t.Fatal("expected error for self-follow, got nil")
 	}
 }
+
+func TestLanguageFacets_CountsPublishedByLanguage(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	upCtx := uploaderCtx
+	// Create + publish two comics in different languages.
+	mk := func(title, lang string) string {
+		c, err := CreateComic(upCtx, &CreateComicParams{
+			Title:           title,
+			CoverKey:        "covers/" + title + ".jpg",
+			FileKey:         "files/" + title + ".cbz",
+			ContentLanguage: lang,
+		})
+		if err != nil {
+			t.Fatalf("create error: %v", err)
+		}
+		if err := ApproveComic(moderatorCtx, c.ID); err != nil {
+			t.Fatalf("approve error: %v", err)
+		}
+		return c.ID
+	}
+
+	mk("English One", "en")
+	mk("Japanese One", "ja")
+	mk("Japanese Two", "ja")
+
+	resp, err := LanguageFacets(context.Background())
+	if err != nil {
+		t.Fatalf("facets error: %v", err)
+	}
+
+	counts := map[string]int{}
+	for _, f := range resp.Facets {
+		counts[f.Language] = f.Count
+	}
+	if counts["en"] < 1 {
+		t.Errorf("expected en count >= 1, got %d", counts["en"])
+	}
+	if counts["ja"] < 2 {
+		t.Errorf("expected ja count >= 2, got %d", counts["ja"])
+	}
+}

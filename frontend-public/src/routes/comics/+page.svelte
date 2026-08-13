@@ -11,7 +11,23 @@
 	let langFilter = $state('');
 	let hideMature = $state(false);
 
-	const languages = ['', 'en', 'ja', 'es', 'ko', 'fr', 'pt-BR', 'zh-CN', 'de', 'it', 'id'];
+	const facets = $derived(data.facets || []);
+	const languages = $derived.by(() => {
+		const codes = new Set(['']);
+		for (const f of facets) codes.add(f.language);
+		for (const c of ['en', 'ja', 'es', 'ko', 'fr', 'pt-BR', 'zh-CN', 'de', 'it', 'id']) codes.add(c);
+		return [...codes];
+	});
+	const facetCount = $derived.by(() => {
+		const map: Record<string, number> = {};
+		for (const f of facets) map[f.language] = f.count;
+		return map;
+	});
+
+	function langLabel(code: string): string {
+		if (code === '') return 'All languages';
+		return code + (facetCount[code] ? ` (${facetCount[code]})` : '');
+	}
 
 	async function loadComics() {
 		loading = true;
@@ -41,9 +57,8 @@
 		<div class="flex items-center gap-2">
 			<Label for="lang-filter" class="text-sm text-muted-foreground">Language:</Label>
 			<select id="lang-filter" value={langFilter} onchange={changeLang} class="rounded-md border border-input bg-background px-3 py-1.5 text-sm">
-				<option value="">All languages</option>
-				{#each languages.filter(l => l !== '') as lang}
-					<option value={lang}>{lang}</option>
+				{#each languages as lang}
+					<option value={lang}>{langLabel(lang)}</option>
 				{/each}
 			</select>
 		</div>

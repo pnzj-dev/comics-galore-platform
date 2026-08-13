@@ -80,5 +80,7 @@
 - [x] Series progress % / missing-issue gaps
 - [x] Language facet UI on public browse
 - [x] Real notification emails (Resend) + uploader follow
+- [x] Additional UI locales (ja/es/ko/fr/pt-BR/zh-CN/de/it/id) + locale switcher
+- [x] Language facet counts on browse
 
 See `docs/v1-scope.md` for the authoritative IN (v1.1) list and the original SOON items already shipped in v1.

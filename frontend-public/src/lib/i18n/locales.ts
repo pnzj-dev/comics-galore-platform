@@ -7,9 +7,9 @@ export type Locale = 'en' | 'ja' | 'es' | 'ko' | 'fr' | 'pt-BR' | 'zh-CN' | 'de'
 
 export const DEFAULT_LOCALE: Locale = 'en';
 
-// v1.1 ships English only; new packs enable their code here (and provide a
-// matching catalog under `./messages/<locale>.ts`).
-export const ENABLED_LOCALES: Locale[] = ['en'];
+// v1.1.1 enables the priority locales; each provides a catalog under
+// `./messages/<locale>.ts`. Add new packs by registering their catalog here.
+export const ENABLED_LOCALES: Locale[] = ['en', 'ja', 'es', 'ko', 'fr', 'pt-BR', 'zh-CN', 'de', 'it', 'id'];
 
 // Priority locales for engagement (ADR 0015). Ordering is informational.
 export const PRIORITY_LOCALES: Locale[] = [

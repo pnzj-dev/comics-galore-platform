@@ -4,6 +4,7 @@
 	import { currentUser, isAuthenticated } from '$lib/stores/auth';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
 	import UserProfileModal from '$lib/components/UserProfileModal.svelte';
 	import AppSettingsModal from '$lib/components/AppSettingsModal.svelte';
 	import LogoutConfirmationModal from '$lib/components/LogoutConfirmationModal.svelte';
@@ -53,6 +54,7 @@
 				</button>
 			{/if}
 			<ThemeToggle />
+			<LocaleSwitcher compact />
 			{#if authed && user}
 				<button onclick={() => profileOpen = true} class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-muted transition-colors text-left">
 					<span class="text-sm text-muted-foreground">{user.email}</span>

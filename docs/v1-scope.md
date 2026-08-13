@@ -102,8 +102,8 @@ V1.1 builds on the shipped v1 web spine. The following **IN (v1.1)** items are t
 ### SOON — V1.1.1 (next after v1.1)
 
 - ~~Real notification emails (Resend)~~ — **DONE** — uploader-follow (follow/unfollow/status) + `NotifyFollowersNewComic` email on publish, respecting `email_new_from_following` pref.
-- Additional UI locales (ja, es, ko, fr, pt-BR, …) as translation packs land.
-- Language facet polish (facets, counts).
+- ~~Additional UI locales~~ — **DONE** — ja, es, ko, fr, pt-BR, zh-CN, de, it, id catalogs + locale switcher (cookie-persisted).
+- ~~Language facet polish (facets, counts)~~ — **DONE** — `/comics-language-facets` endpoint + counts in browse dropdown.
 
 ---
 
@@ -217,5 +217,7 @@ When all boxes are checked, v1 is done—then execute SOON.
 - [x] Language facet UI on public browse
 - [x] Backend test suite green
 - [x] Uploader follow + notification emails on publish
+- [x] Additional UI locales (ja/es/ko/fr/pt-BR/zh-CN/de/it/id) + locale switcher
+- [x] Language facet counts on browse
 
-Remaining for v1.1.1 (SOON): additional locale packs, language facet polish.
+v1.1.1 (SOON) complete. Next up: LATER items (AI moderation, messaging/support, full admin suite, Wails desktop).

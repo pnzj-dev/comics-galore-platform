@@ -860,6 +860,15 @@ export namespace comics {
         "created_at": string
     }
 
+    export interface LanguageFacet {
+        language: string
+        count: number
+    }
+
+    export interface LanguageFacetsResponse {
+        facets: LanguageFacet[]
+    }
+
     export interface LikeStatus {
         liked: boolean
         favorited: boolean
@@ -1014,6 +1023,7 @@ export namespace comics {
             this.GetLikeStatus = this.GetLikeStatus.bind(this)
             this.GetSeries = this.GetSeries.bind(this)
             this.GetUploaderFollowStatus = this.GetUploaderFollowStatus.bind(this)
+            this.LanguageFacets = this.LanguageFacets.bind(this)
             this.ListComics = this.ListComics.bind(this)
             this.ListComments = this.ListComments.bind(this)
             this.ListFlaggedComments = this.ListFlaggedComments.bind(this)
@@ -1157,6 +1167,12 @@ export namespace comics {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/uploaders/${encodeURIComponent(id)}/follow-status`)
             return await resp.json() as UploaderFollowStatus
+        }
+
+        public async LanguageFacets(): Promise<LanguageFacetsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/comics-language-facets`)
+            return await resp.json() as LanguageFacetsResponse
         }
 
         public async ListComics(params: ListComicsParams): Promise<ListComicsResponse> {

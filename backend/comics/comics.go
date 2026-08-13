@@ -291,6 +291,44 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 	return &ListComicsResponse{Comics: comics, Total: total}, nil
 }
 
+// ----- Language facets -----
+
+type LanguageFacet struct {
+	Language string `json:"language"`
+	Count    int    `json:"count"`
+}
+
+type LanguageFacetsResponse struct {
+	Facets []LanguageFacet `json:"facets"`
+}
+
+//encore:api public method=GET path=/comics-language-facets
+func LanguageFacets(ctx context.Context) (*LanguageFacetsResponse, error) {
+	rows, err := db.Query(ctx, `
+		SELECT COALESCE(NULLIF(content_language, ''), 'en'), COUNT(*)
+		FROM comics WHERE status = 'published'
+		GROUP BY content_language
+		ORDER BY COUNT(*) DESC, content_language ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var facets []LanguageFacet
+	for rows.Next() {
+		var f LanguageFacet
+		if err := rows.Scan(&f.Language, &f.Count); err != nil {
+			return nil, err
+		}
+		facets = append(facets, f)
+	}
+	if facets == nil {
+		facets = []LanguageFacet{}
+	}
+	return &LanguageFacetsResponse{Facets: facets}, rows.Err()
+}
+
 //encore:api public method=GET path=/comics/:slug
 func GetComic(ctx context.Context, slug string) (*Comic, error) {
 	ad, hasAuth := getAuthData(ctx)
