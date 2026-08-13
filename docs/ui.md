@@ -131,7 +131,7 @@
 
 ### Favorites
 
-**Route: `/favorites`** (authenticated, `(app)` group). Shows the user's favorited comics as a `ComicCard` grid, newest favorite first. Each card shows the inline ★ toggle (already active), so unfavoriting refreshes the list. Empty state: "No favorites yet — tap the ★ on any comic to save it here."
+**Route: `/favorites`** (authenticated, `(app)` group). Shows the user's favorited comics as a `ComicCard` grid, newest favorite first. Each card shows the inline ★ toggle (already active). **Unfavoriting removes the card from the grid immediately** (`ComicCard`'s optional `onUnfavorite` callback prunes the local list and decrements the local total, so pagination stays consistent). Empty state: "No favorites yet — tap the ★ on any comic to save it here."
 
 ### Pagination
 

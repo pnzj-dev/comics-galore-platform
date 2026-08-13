@@ -6,13 +6,21 @@
 
 	let { data } = $props();
 
-	const comics = $derived(data.comics);
-	const totalPages = $derived(Math.max(1, Math.ceil(data.total / data.limit)));
+	// svelte-ignore state_referenced_locally
+	let comics = $state(data.comics);
+	// svelte-ignore state_referenced_locally
+	let total = $state(data.total);
+	const totalPages = $derived(Math.max(1, Math.ceil(total / data.limit)));
 
 	function goPage(p: number) {
 		const url = new URL(page.url);
 		url.searchParams.set('page', String(p));
 		goto(url.pathname + url.search, { keepFocus: true });
+	}
+
+	function handleUnfavorite(id: string) {
+		comics = comics.filter((c) => c.id !== id);
+		total = Math.max(0, total - 1);
 	}
 </script>
 
@@ -28,8 +36,8 @@
 		</div>
 	{:else}
 		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-			{#each comics as comic}
-				<ComicCard {...comic} />
+			{#each comics as comic (comic.id)}
+				<ComicCard {...comic} onUnfavorite={handleUnfavorite} />
 			{/each}
 		</div>
 		<Pagination page={data.page} {totalPages} onPage={goPage} />

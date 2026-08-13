@@ -28,6 +28,7 @@
 		published_at?: string;
 		created_at?: string;
 		is_favorited?: boolean;
+		onUnfavorite?: (id: string) => void;
 	}
 
 	let {
@@ -51,7 +52,8 @@
 		is_premium = false,
 		published_at = '',
 		created_at = '',
-		is_favorited = false
+		is_favorited = false,
+		onUnfavorite,
 	}: Props = $props();
 
 	const user = $derived($currentUser);
@@ -77,6 +79,7 @@
 			const res = await encore.comics.ToggleFavorite(id);
 			favorited = res.favorited;
 			favCount = res.fav_count;
+			if (!res.favorited) onUnfavorite?.(id);
 		} catch {
 			favorited = !next;
 			favCount += next ? -1 : 1;
