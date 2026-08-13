@@ -1,7 +1,7 @@
 # ADR 0017 – Messaging, Support & Broadcasts (`social` service)
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Users need to message uploaders and each other, open support tickets, and admins need to reach users (announcements). Comments are public and threaded; messaging is private and pairwise. Support is a distinct, staff-facing queue. None of this exists yet.

@@ -263,11 +263,13 @@ Summarised from ADRs 0017–0021. All new tables follow the one-database-per-ser
 conversations     id, participant_a UUID, participant_b UUID, created_at, last_message_at
                   UNIQUE(participant_a, participant_b)  -- normalised ordering
 messages          id, conversation_id FK, sender_id UUID, body TEXT, read_at, created_at
-support_tickets   id, user_id UUID, subject, status (pending|open|resolved|closed),
+support_tickets   id, user_id UUID, subject, status (open|resolved|closed),
                   priority, assigned_to UUID, created_at, resolved_at
 support_messages  id, ticket_id FK, sender_id UUID, is_staff bool, body, created_at
 broadcasts        id, title, body, target (all|tier), tier, sent_at, created_at
 ```
+
+*Implemented in v1.2 (ADR 0017).*
 
 ### `comics` service (extensions)
 ```sql

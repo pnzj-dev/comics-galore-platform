@@ -442,6 +442,34 @@ func NotifyFollowersNewComic(ctx context.Context, p *NotifyFollowersNewComicPara
 	return rows.Err()
 }
 
+type NotifySupportReplyParams struct {
+	UserID   string `json:"user_id"`
+	Subject  string `json:"subject"`
+}
+
+//encore:api private method=POST path=/auth/notify-support-reply
+func NotifySupportReply(ctx context.Context, p *NotifySupportReplyParams) error {
+	if p.UserID == "" {
+		return nil
+	}
+
+	var email string
+	err := db.QueryRow(ctx, `
+		SELECT u.email
+		FROM users u
+		LEFT JOIN notification_preferences np ON np.user_id = u.id
+		WHERE u.id = $1
+		  AND u.email_verified_at IS NOT NULL
+		  AND COALESCE(np.email_support_replies, true) = true
+	`, p.UserID).Scan(&email)
+	if err != nil || email == "" {
+		return nil
+	}
+
+	go sendSupportReplyEmail(email, p.Subject)
+	return nil
+}
+
 //encore:api auth method=POST path=/auth/resend-verification
 func ResendVerification(ctx context.Context) error {
 	data := auth.Data().(*AuthData)

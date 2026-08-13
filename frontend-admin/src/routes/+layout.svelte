@@ -6,7 +6,7 @@
 	import { encore } from '$lib/api/encore';
 	import LogoutConfirmationModal from '$lib/components/LogoutConfirmationModal.svelte';
 	import NowPaymentsLinkWizard from '$lib/components/NowPaymentsLinkWizard.svelte';
-	import { LayoutDashboard, Shield, Users, CreditCard, BookOpen, Trash2, Settings, LogOut, AlertTriangle, ArrowDownToLine, ReceiptText } from 'lucide-svelte';
+	import { LayoutDashboard, Shield, Users, CreditCard, BookOpen, Trash2, Settings, LogOut, AlertTriangle, ArrowDownToLine, ReceiptText, LifeBuoy } from 'lucide-svelte';
 
 	let { data, children } = $props();
 	let logoutOpen = $state(false);
@@ -43,6 +43,7 @@
 			? [
 				{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
 				{ href: '/moderation', label: 'Moderation', icon: Shield },
+				{ href: '/support', label: 'Support', icon: LifeBuoy },
 				{ href: '/users', label: 'Users', icon: Users },
 				{ href: '/subscriptions', label: 'Subscriptions', icon: CreditCard },
 				{ href: '/deposits', label: 'Deposits', icon: ArrowDownToLine },

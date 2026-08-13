@@ -171,11 +171,12 @@ Admin settings include `image_serving_mode` and proxy base URL.
 
 Summarised from ADRs 0017–0021. All auth-required unless noted.
 
-### Messaging & Support (`social`) — ADR 0017
+## Messaging & Support (`social`) — ADR 0017 (implemented)
+
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | GET | `/messages/conversations` | List my conversations | Yes |
-| POST | `/messages/:userId` | Get-or-create conversation | Yes |
+| POST | `/messages/start/:userId` | Get-or-create conversation | Yes |
 | GET | `/messages/conversation/:id` | List messages (marks read) | Yes |
 | POST | `/messages/conversation/:id` | Send message | Yes |
 | POST | `/messages/conversation/:id/read` | Mark read | Yes |
@@ -183,9 +184,8 @@ Summarised from ADRs 0017–0021. All auth-required unless noted.
 | POST | `/support/tickets` | Create ticket | Yes |
 | GET | `/support/tickets` | My tickets | Yes |
 | GET | `/support/tickets/:id` | Ticket thread | Yes |
-| POST | `/support/tickets/:id/reply` | Reply (user) | Yes |
+| POST | `/support/tickets/:id/reply` | Reply (user or staff) | Yes |
 | GET | `/admin/support/tickets` | All tickets | Moderator/Admin |
-| POST | `/admin/support/tickets/:id/reply` | Staff reply | Moderator/Admin |
 | POST | `/admin/support/tickets/:id/assign` | Assign | Admin |
 | POST | `/admin/support/tickets/:id/resolve` | Resolve | Moderator/Admin |
 | POST | `/admin/broadcasts` | Send announcement | Admin |

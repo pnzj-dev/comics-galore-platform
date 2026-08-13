@@ -67,3 +67,12 @@ func sendNewComicFromFollowingEmail(to, title string) {
 	`, title)
 	sendEmail(to, subject, body)
 }
+
+func sendSupportReplyEmail(to, subject string) {
+	body := fmt.Sprintf(`
+		<p>A member of our support team replied to your ticket:</p>
+		<p style="font-size:18px;font-weight:600">%s</p>
+		<p><a href="https://comicsgalore.com/support">View the full conversation</a></p>
+	`, subject)
+	sendEmail(to, "Support reply — Comics Galore", body)
+}

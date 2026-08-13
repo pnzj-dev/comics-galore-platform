@@ -52,8 +52,8 @@ Comics-Galore/
 │   ├── reading/                 # progress, downloads
 │   ├── upload/                  # presigned uploads, media
 │   ├── fixtures/                # test fixtures
-│   └── (planned) social/        # messaging, support tickets, broadcasts
-│       (planned) aiprovider/    # shared OpenAI-compatible client package
+│   ├── social/                  # messaging, support tickets, broadcasts
+│   └── (planned) aiprovider/    # shared OpenAI-compatible client package
 ├── frontend-public/             # SvelteKit web app — comics-galore.com
 ├── frontend-admin/              # SvelteKit web app — admin.comics-galore.com
 ├── desktop/                     # Wails v2 application
@@ -190,9 +190,9 @@ Shared Go libraries that are not services (e.g. `backend/nowpayments/`) may be i
 The full vision adds these domains. Detailed specs are in the ADRs; this section summarises the service/table/endpoint shape so implementation can start from here.
 
 ### Messaging & Support (`social` service) — ADR 0017
-- New `socialdb`. Tables: `conversations`, `messages`, `support_tickets`, `support_messages`, `broadcasts`.
+- **Implemented.** `socialdb` with `conversations`, `messages`, `support_tickets`, `support_messages`, `broadcasts`.
 - Endpoints: messaging (`/messages/*` + SSE), support (`/support/*`, admin `/admin/support/*`), broadcasts (`/admin/broadcasts`).
-- Email fan-out via `auth.NotifySupportReply` / `auth.NotifyBroadcast` (private), honouring preferences.
+- Email fan-out via `auth.NotifySupportReply` (private), honouring preferences.
 
 ### AI Moderation (shared `aiprovider` package) — ADR 0018
 - OpenAI-compatible client package; config in `AppSettings` (`ai_moderation_enabled`, `ai_model`, `ai_endpoint`, `ai_api_key`, `ai_prompt`, thresholds).

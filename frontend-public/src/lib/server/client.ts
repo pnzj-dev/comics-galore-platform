@@ -36,6 +36,7 @@ export default class Client {
     public readonly billing: billing.ServiceClient
     public readonly comics: comics.ServiceClient
     public readonly reading: reading.ServiceClient
+    public readonly social: social.ServiceClient
     public readonly tiers: tiers.ServiceClient
     public readonly upload: upload.ServiceClient
     private readonly options: ClientOptions
@@ -56,6 +57,7 @@ export default class Client {
         this.billing = new billing.ServiceClient(base)
         this.comics = new comics.ServiceClient(base)
         this.reading = new reading.ServiceClient(base)
+        this.social = new social.ServiceClient(base)
         this.tiers = new tiers.ServiceClient(base)
         this.upload = new upload.ServiceClient(base)
     }
@@ -1406,6 +1408,220 @@ export namespace reading {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/reading-progress-batch`, JSON.stringify(params))
             return await resp.json() as SeriesProgressResponse
+        }
+    }
+}
+
+export namespace social {
+    export interface AdminListTicketsParams {
+        Status: string
+    }
+
+    export interface AssignTicketParams {
+        "assigned_to": string
+    }
+
+    export interface Broadcast {
+        id: string
+        title: string
+        body: string
+        target: string
+        tier: string
+        "sent_at": string
+        "created_at": string
+    }
+
+    export interface Conversation {
+        id: string
+        "other_user_id": string
+        "last_message": string
+        "unread_count": number
+        "last_message_at": string
+    }
+
+    export interface ConversationMessagesResponse {
+        conversation: Conversation
+        messages: Message[]
+    }
+
+    export interface CreateBroadcastParams {
+        title: string
+        body: string
+        target: string
+        tier: string
+    }
+
+    export interface CreateTicketParams {
+        subject: string
+        body: string
+        priority: string
+    }
+
+    export interface ListBroadcastsResponse {
+        broadcasts: Broadcast[]
+    }
+
+    export interface ListConversationsResponse {
+        conversations: Conversation[]
+    }
+
+    export interface ListTicketsResponse {
+        tickets: SupportTicket[]
+    }
+
+    export interface Message {
+        id: string
+        "conversation_id": string
+        "sender_id": string
+        body: string
+        "read_at": string
+        "created_at": string
+    }
+
+    export interface ReplyTicketParams {
+        body: string
+    }
+
+    export interface SendMessageParams {
+        body: string
+    }
+
+    export interface StartConversationParams {
+        body: string
+    }
+
+    export interface SupportMessage {
+        id: string
+        "ticket_id": string
+        "sender_id": string
+        "is_staff": boolean
+        body: string
+        "created_at": string
+    }
+
+    export interface SupportTicket {
+        id: string
+        "user_id": string
+        subject: string
+        status: string
+        priority: string
+        "assigned_to": string
+        "created_at": string
+        "resolved_at": string
+    }
+
+    export interface TicketResponse {
+        ticket: SupportTicket
+        messages: SupportMessage[]
+    }
+
+    export class ServiceClient {
+        private baseClient: BaseClient
+
+        constructor(baseClient: BaseClient) {
+            this.baseClient = baseClient
+            this.AdminListTickets = this.AdminListTickets.bind(this)
+            this.AssignTicket = this.AssignTicket.bind(this)
+            this.CreateBroadcast = this.CreateBroadcast.bind(this)
+            this.CreateTicket = this.CreateTicket.bind(this)
+            this.GetConversation = this.GetConversation.bind(this)
+            this.GetTicket = this.GetTicket.bind(this)
+            this.ListBroadcasts = this.ListBroadcasts.bind(this)
+            this.ListConversations = this.ListConversations.bind(this)
+            this.ListMyTickets = this.ListMyTickets.bind(this)
+            this.MarkConversationRead = this.MarkConversationRead.bind(this)
+            this.MessageStream = this.MessageStream.bind(this)
+            this.ReplyTicket = this.ReplyTicket.bind(this)
+            this.ResolveTicket = this.ResolveTicket.bind(this)
+            this.SendMessage = this.SendMessage.bind(this)
+            this.StartConversation = this.StartConversation.bind(this)
+        }
+
+        public async AdminListTickets(params: AdminListTicketsParams): Promise<ListTicketsResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                status: params.Status,
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/support/tickets`, undefined, {query})
+            return await resp.json() as ListTicketsResponse
+        }
+
+        public async AssignTicket(id: string, params: AssignTicketParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/admin/support/tickets/${encodeURIComponent(id)}/assign`, JSON.stringify(params))
+        }
+
+        public async CreateBroadcast(params: CreateBroadcastParams): Promise<Broadcast> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/broadcasts`, JSON.stringify(params))
+            return await resp.json() as Broadcast
+        }
+
+        public async CreateTicket(params: CreateTicketParams): Promise<TicketResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/support/tickets`, JSON.stringify(params))
+            return await resp.json() as TicketResponse
+        }
+
+        public async GetConversation(id: string): Promise<ConversationMessagesResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/messages/conversation/${encodeURIComponent(id)}`)
+            return await resp.json() as ConversationMessagesResponse
+        }
+
+        public async GetTicket(id: string): Promise<TicketResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/support/tickets/${encodeURIComponent(id)}`)
+            return await resp.json() as TicketResponse
+        }
+
+        public async ListBroadcasts(): Promise<ListBroadcastsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/broadcasts`)
+            return await resp.json() as ListBroadcastsResponse
+        }
+
+        public async ListConversations(): Promise<ListConversationsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/messages/conversations`)
+            return await resp.json() as ListConversationsResponse
+        }
+
+        public async ListMyTickets(): Promise<ListTicketsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/support/tickets`)
+            return await resp.json() as ListTicketsResponse
+        }
+
+        public async MarkConversationRead(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/messages/conversation/${encodeURIComponent(id)}/read`)
+        }
+
+        public async MessageStream(method: "GET", userId: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
+            return this.baseClient.callAPI(method, `/messages-stream/${encodeURIComponent(userId)}`, body, options)
+        }
+
+        public async ReplyTicket(id: string, params: ReplyTicketParams): Promise<SupportMessage> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/support/tickets/${encodeURIComponent(id)}/reply`, JSON.stringify(params))
+            return await resp.json() as SupportMessage
+        }
+
+        public async ResolveTicket(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/admin/support/tickets/${encodeURIComponent(id)}/resolve`)
+        }
+
+        public async SendMessage(id: string, params: SendMessageParams): Promise<Message> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/messages/conversation/${encodeURIComponent(id)}`, JSON.stringify(params))
+            return await resp.json() as Message
+        }
+
+        public async StartConversation(userId: string, params: StartConversationParams): Promise<ConversationMessagesResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/messages/start/${encodeURIComponent(userId)}`, JSON.stringify(params))
+            return await resp.json() as ConversationMessagesResponse
         }
     }
 }
