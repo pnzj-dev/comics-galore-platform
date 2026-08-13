@@ -91,17 +91,17 @@ V1.1 builds on the shipped v1 web spine. The following **IN (v1.1)** items are t
 
 ### IN — V1.1 (must ship)
 
-- **i18n foundation** — message catalog, default `en`, `ui_locale` wiring, locale detection (user → Accept-Language → `en`), locale switcher (optional if only `en` enabled). First item; foundational for all surfaces.
-- **Comment flagging / report flow** — flags table + endpoints, moderator queue integration.
-- **Real notification emails** (Resend) — a few key events (e.g. new from followed uploader, support replies) beyond verify/reset.
-- **Archive `comic.json` metadata extraction** — libarchive.js client-side parse of `comic.json`/`metadata.json`, auto-building the same `POST /comics` payload.
-- **Cloudflare Images wiring in upload forms** — cover/preview go through CF upload URLs (backend already exists); `image_serving_mode` resolver applied to cover/preview.
-- **Soft quota warning (~80%)**.
-- **Series progress % / missing-issue gaps** on series pages.
-- **Language facet UI** on public browse (`language=` filter is backend-ready).
+- ~~i18n foundation~~ — **DONE** — catalog + `en` messages + runes store (`$lib/i18n`), server-side locale detection, `<html lang>`.
+- ~~Comment flagging / report flow~~ — **DONE** — `comment_flags` table, flag/list/resolve endpoints, moderator queue section.
+- ~~Archive `comic.json` metadata extraction~~ — **DONE** — libarchive.js client-side parse + form prefill.
+- ~~Cloudflare Images wiring in upload forms~~ — **DONE** — `ComicForm` cover/preview already use `CloudflarePresignedUpload`; resolver stub matches v1 `direct` mode.
+- ~~Soft quota warning (~80%)~~ — **DONE** — comic detail warns at ≥80% quota.
+- ~~Series progress % / missing-issue gaps~~ — **DONE** — progress bar, "X of Y read", missing-issue gaps, Read badges.
+- ~~Language facet UI~~ — **DONE** — browse page has a Language dropdown filter.
 
 ### SOON — V1.1.1 (next after v1.1)
 
+- **Real notification emails** (Resend) — requires uploader-follow as the trigger source (only series-follow exists today); respect `email_new_from_following` pref. *Deferred from v1.1.*
 - Additional UI locales (ja, es, ko, fr, pt-BR, …) as translation packs land.
 - Language facet polish (facets, counts).
 
@@ -173,8 +173,9 @@ V1.1 builds on the shipped v1 web spine. The following **IN (v1.1)** items are t
 | Foundation (auth, scaffold, admin bootstrap) | IN (v1) |
 | Core comics + public reader + manual upload + review | IN (v1) |
 | Basic tiers + NowPayments path | IN (v1) |
-| i18n foundation, flagging, notification emails, archive JSON, CF Images, quota/series polish | IN (v1.1) |
+| i18n, flagging, archive JSON, CF Images, quota/series polish | DONE (v1.1) |
 | Archive JSON upload, CF Images, comments, series | DONE (v1) |
+| Notification emails, extra locales, facet polish | SOON (v1.1.1) |
 | Full admin suite, AI, messaging, support | LATER |
 | Wails + offline + native polish | LATER |
 
@@ -204,3 +205,16 @@ V1.1 builds on the shipped v1 web spine. The following **IN (v1.1)** items are t
 - [x] Basic admin lists work (users, comics, payments/subs)  
 
 When all boxes are checked, v1 is done—then execute SOON.
+
+## V1.1 exit checklist
+
+- [x] i18n foundation (catalog, `en`, locale detection)
+- [x] Comment flagging + moderator queue
+- [x] Archive `comic.json` extraction
+- [x] Cloudflare Images wiring in upload forms
+- [x] Soft quota warning (~80%)
+- [x] Series progress % / missing-issue gaps
+- [x] Language facet UI on public browse
+- [x] Backend test suite green
+
+Remaining for v1.1.1 (SOON): notification emails (needs uploader-follow), additional locale packs, language facet polish.

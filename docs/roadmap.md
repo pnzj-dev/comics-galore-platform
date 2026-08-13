@@ -72,13 +72,13 @@
 - Observability, backups, tests, performance
 
 ## Phase 11 – V1.1 (shipped-after-v1 refinements)
-- [ ] i18n foundation (catalog, `en`, `ui_locale`, locale detection) — first
-- [ ] Comment flagging / report flow
-- [ ] Real notification emails (Resend)
-- [ ] Archive `comic.json` metadata extraction (libarchive.js)
-- [ ] Cloudflare Images wiring in upload forms + `image_serving_mode` resolver
-- [ ] Soft quota warning (~80%)
-- [ ] Series progress % / missing-issue gaps
-- [ ] Language facet UI on public browse
+- [x] i18n foundation (catalog, `en`, `ui_locale`, locale detection) — first
+- [x] Comment flagging / report flow
+- [x] Archive `comic.json` metadata extraction (libarchive.js)
+- [x] Cloudflare Images wiring in upload forms + `image_serving_mode` resolver
+- [x] Soft quota warning (~80%)
+- [x] Series progress % / missing-issue gaps
+- [x] Language facet UI on public browse
+- [ ] Real notification emails (Resend) — deferred to v1.1.1 (needs uploader-follow trigger)
 
 See `docs/v1-scope.md` for the authoritative IN (v1.1) list and the original SOON items already shipped in v1.
