@@ -30,12 +30,11 @@ func DevSeedBilling(ctx context.Context, p *SeedBillingParams) (*SeedBillingResp
 		return &SeedBillingResponse{Created: 0, Skipped: count, Message: "billing data already seeded"}, nil
 	}
 
-	// Set sub_partner_id for member_free user (for NowPayments balance testing)
-	db.Exec(ctx, `UPDATE users SET sub_partner_id = '254825522' WHERE id = '10000000-0000-0000-0000-000000000004'`)
+	// User tiers and sub_partner_id are owned by the auth service (see
+	// backend/auth/seed.go); billing seed only creates billing-local data.
 
 	// Plan IDs from tiers service (must match the seed)
 	// We just need ANY monthly plan ID for each tier; the exact ID doesn't matter for demo data
-	// Use a subquery on the subscriptions table or just use placeholder plan IDs
 	type subEntry struct {
 		UserID string
 		Tier   string
@@ -62,8 +61,6 @@ func DevSeedBilling(ctx context.Context, p *SeedBillingParams) (*SeedBillingResp
 			return nil, err
 		}
 		created++
-
-		db.Exec(ctx, `UPDATE users SET tier = $1 WHERE id = $2`, s.Tier, s.UserID)
 	}
 
 	// Sample deposits

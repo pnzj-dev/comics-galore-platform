@@ -22,10 +22,11 @@ type SeedUsersResponse struct {
 }
 
 type demoUser struct {
-	ID    string
-	Email string
-	Role  string
-	Tier  string
+	ID            string
+	Email         string
+	Role          string
+	Tier          string
+	SubPartnerID  string
 }
 
 //encore:api public method=POST path=/dev/seed-users
@@ -38,7 +39,7 @@ func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error
 		{ID: "10000000-0000-0000-0000-000000000001", Email: "admin@comics-galore.dev", Role: "admin", Tier: "platinum"},
 		{ID: "10000000-0000-0000-0000-000000000002", Email: "author-free@pnzj.dev", Role: "uploader", Tier: "free"},
 		{ID: "10000000-0000-0000-0000-000000000003", Email: "author-gold@pnzj.dev", Role: "uploader", Tier: "gold"},
-		{ID: "10000000-0000-0000-0000-000000000004", Email: "member-free@pnzj.dev", Role: "user", Tier: "free"},
+		{ID: "10000000-0000-0000-0000-000000000004", Email: "member-free@pnzj.dev", Role: "user", Tier: "free", SubPartnerID: "254825522"},
 		{ID: "10000000-0000-0000-0000-000000000005", Email: "member-bronze@pnzj.dev", Role: "user", Tier: "bronze"},
 		{ID: "10000000-0000-0000-0000-000000000006", Email: "member-silver@pnzj.dev", Role: "user", Tier: "silver"},
 		{ID: "10000000-0000-0000-0000-000000000007", Email: "member-gold@pnzj.dev", Role: "user", Tier: "gold"},
@@ -63,9 +64,9 @@ func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error
 		}
 
 		_, err := db.Exec(ctx, `
-			INSERT INTO users (id, email, password_hash, role, tier)
-			VALUES ($1, $2, $3, $4, $5)
-		`, u.ID, u.Email, hash, u.Role, u.Tier)
+			INSERT INTO users (id, email, password_hash, role, tier, sub_partner_id)
+			VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''))
+		`, u.ID, u.Email, hash, u.Role, u.Tier, u.SubPartnerID)
 		if err != nil {
 			return nil, err
 		}

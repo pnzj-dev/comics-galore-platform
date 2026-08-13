@@ -6,9 +6,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"comics-galore/backend/nowpayments"
 
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
@@ -17,7 +20,18 @@ import (
 )
 
 var secrets struct {
-	JWTSecret string
+	JWTSecret           string
+	NowPaymentsAPIKey   string
+	NowPaymentsIPNKey   string
+	NowPaymentsEmail    string
+	NowPaymentsPassword string
+}
+
+var npProvider *nowpayments.Provider
+
+func init() {
+	npProvider = nowpayments.NewProvider(secrets.NowPaymentsAPIKey, secrets.NowPaymentsIPNKey,
+		secrets.NowPaymentsEmail, secrets.NowPaymentsPassword)
 }
 
 var db = sqldb.NewDatabase("authdb", sqldb.DatabaseConfig{
@@ -306,18 +320,93 @@ func VerifyEmail(ctx context.Context, p *VerifyEmailParams) error {
 	if p.Token == "" {
 		return &errs.Error{Code: errs.InvalidArgument, Message: "token is required"}
 	}
-	result, err := db.Exec(ctx, `
+
+	var userID string
+	err := db.QueryRow(ctx, `
 		UPDATE users SET email_verified_at = now(), verify_token = NULL, verify_token_expires_at = NULL
 		WHERE verify_token = $1 AND verify_token_expires_at > now() AND email_verified_at IS NULL
-	`, p.Token)
+		RETURNING id
+	`, p.Token).Scan(&userID)
 	if err != nil {
+		if isNoRows(err) {
+			return &errs.Error{Code: errs.InvalidArgument, Message: "invalid or expired verification token"}
+		}
 		return err
 	}
-	n := result.RowsAffected()
-	if n == 0 {
-		return &errs.Error{Code: errs.InvalidArgument, Message: "invalid or expired verification token"}
+
+	// Eagerly provision the NowPayments customer (synchronous). Failure is
+	// non-fatal: subscription creation retries lazily via EnsureSubPartnerID.
+	if _, err := ensureSubPartnerID(ctx, userID); err != nil {
+		log.Printf("[auth] ensure sub_partner_id for %s: %v", userID, err)
 	}
+
 	return nil
+}
+
+// ensureSubPartnerID returns the user's NowPayments sub-partner id, creating
+// the customer on NowPayments and saving it atomically when missing.
+func ensureSubPartnerID(ctx context.Context, userID string) (string, error) {
+	var existing string
+	err := db.QueryRow(ctx, `SELECT COALESCE(sub_partner_id, '') FROM users WHERE id = $1`, userID).Scan(&existing)
+	if err != nil {
+		return "", err
+	}
+	if existing != "" {
+		return existing, nil
+	}
+
+	var email string
+	if err := db.QueryRow(ctx, `SELECT email FROM users WHERE id = $1`, userID).Scan(&email); err != nil {
+		return "", err
+	}
+
+	subID, err := npProvider.CreateCustomer(ctx, email)
+	if err != nil {
+		return "", err
+	}
+
+	// Atomic claim: only set if still empty, guarding against concurrent creation.
+	res, err := db.Exec(ctx, `
+		UPDATE users SET sub_partner_id = $1
+		WHERE id = $2 AND sub_partner_id IS NULL
+	`, subID, userID)
+	if err != nil {
+		return "", err
+	}
+	if res.RowsAffected() == 0 {
+		// Lost the race; return whatever won.
+		_ = db.QueryRow(ctx, `SELECT COALESCE(sub_partner_id, '') FROM users WHERE id = $1`, userID).Scan(&existing)
+		return existing, nil
+	}
+	return subID, nil
+}
+
+type EnsureSubPartnerIDParams struct {
+	UserID string `json:"user_id"`
+}
+
+type SubPartnerIDResponse struct {
+	SubPartnerID string `json:"sub_partner_id"`
+}
+
+//encore:api private method=POST path=/auth/ensure-sub-partner-id
+func EnsureSubPartnerID(ctx context.Context, p *EnsureSubPartnerIDParams) (*SubPartnerIDResponse, error) {
+	subID, err := ensureSubPartnerID(ctx, p.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return &SubPartnerIDResponse{SubPartnerID: subID}, nil
+}
+
+type SetUserTierParams struct {
+	UserID string `json:"user_id"`
+	Tier   string `json:"tier"`
+}
+
+//encore:api private method=POST path=/auth/set-user-tier
+func SetUserTier(ctx context.Context, p *SetUserTierParams) error {
+	_, err := db.Exec(ctx, `UPDATE users SET tier = $1 WHERE id = $2`, p.Tier, p.UserID)
+	return err
 }
 
 //encore:api auth method=POST path=/auth/resend-verification

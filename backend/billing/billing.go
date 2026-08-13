@@ -15,6 +15,8 @@ import (
 	"time"
 
 	myauth "comics-galore/backend/auth"
+	"comics-galore/backend/nowpayments"
+	"comics-galore/backend/tiers"
 
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
@@ -33,25 +35,15 @@ var secrets struct {
 	NgrokURL            string
 }
 
-var provider PaymentsProvider
+var provider nowpayments.PaymentsProvider
 
 func init() {
-	provider = NewNowPaymentsProvider(secrets.NowPaymentsAPIKey, secrets.NowPaymentsIPNKey,
+	provider = nowpayments.NewProvider(secrets.NowPaymentsAPIKey, secrets.NowPaymentsIPNKey,
 		secrets.NowPaymentsEmail, secrets.NowPaymentsPassword)
 }
 
 func buildCallbackURL(host, path string) string {
-	if (strings.Contains(host, "localhost") || strings.Contains(host, "127.0.0.1")) && secrets.NgrokURL != "" {
-		return strings.TrimRight(secrets.NgrokURL, "/") + path
-	}
-	scheme := "https"
-	if host == "" || strings.Contains(host, "localhost") || strings.Contains(host, ":4000") {
-		scheme = "http"
-	}
-	if host == "" {
-		host = "localhost:4000"
-	}
-	return scheme + "://" + host + path
+	return nowpayments.BuildCallbackURL(host, secrets.NgrokURL, path)
 }
 
 // ----- Estimate Price -----
@@ -62,15 +54,14 @@ type EstimatePriceParams struct {
 }
 
 //encore:api auth method=POST path=/billing/estimate-price
-func EstimatePrice(ctx context.Context, p *EstimatePriceParams) (*EstimateResponse, error) {
-	var priceCents int
-	err := db.QueryRow(ctx, `SELECT price_usd_cents FROM plans WHERE id = $1`, p.PlanID).Scan(&priceCents)
+func EstimatePrice(ctx context.Context, p *EstimatePriceParams) (*nowpayments.EstimateResponse, error) {
+	plan, err := tiers.GetPlan(ctx, p.PlanID)
 	if err != nil {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found"}
 	}
 
 	return provider.EstimatePrice(ctx, EstimateRequest{
-		Amount:   float64(priceCents) / 100,
+		Amount:   float64(plan.PriceUsdCents) / 100,
 		Currency: "usd",
 		Crypto:   p.Crypto,
 	})
@@ -86,13 +77,15 @@ type CheckBalanceResponse struct {
 func CheckBalance(ctx context.Context) (*CheckBalanceResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
-	var subID string
-	err := db.QueryRow(ctx, `SELECT COALESCE(sub_partner_id, '') FROM users WHERE id = $1`, ad.UserID).Scan(&subID)
-	if err != nil || subID == "" {
+	subResp, err := myauth.EnsureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
+	if err != nil {
+		return nil, err
+	}
+	if subResp.SubPartnerID == "" {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "no sub_partner_id configured"}
 	}
 
-	balances, err := provider.CheckBalance(ctx, subID)
+	balances, err := provider.CheckBalance(ctx, subResp.SubPartnerID)
 	if err != nil {
 		return nil, err
 	}
@@ -115,15 +108,21 @@ type CreateSubResponse struct {
 func CreateSubscription(ctx context.Context, p *CreateSubParams) (*CreateSubResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
-	var subPartnerID, providerPlanID, interval, tierName string
-	var priceCents int
-	err := db.QueryRow(ctx, `
-		SELECT COALESCE(u.sub_partner_id,''), COALESCE(p.provider_plan_id,''), p.interval, t.name, p.price_usd_cents
-		FROM plans p JOIN tiers t ON t.id = p.tier_id
-		CROSS JOIN (SELECT sub_partner_id FROM users WHERE id = $1) u
-		WHERE p.id = $2
-	`, ad.UserID, p.PlanID).Scan(&subPartnerID, &providerPlanID, &interval, &tierName, &priceCents)
-	if err != nil || subPartnerID == "" {
+	subResp, err := myauth.EnsureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
+	if err != nil {
+		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
+	}
+	subPartnerID := subResp.SubPartnerID
+
+	plan, err := tiers.GetPlan(ctx, p.PlanID)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
+	}
+	providerPlanID := plan.ProviderPlanID
+	interval := plan.Interval
+	tierName := plan.TierName
+
+	if subPartnerID == "" {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
 	}
 	if providerPlanID == "" {
@@ -195,14 +194,19 @@ type CreateDepositResponse struct {
 func CreateDeposit(ctx context.Context, p *CreateDepositParams) (*CreateDepositResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
-	var subPartnerID string
-	var priceCents int
-	err := db.QueryRow(ctx, `
-		SELECT COALESCE(u.sub_partner_id,''), p.price_usd_cents
-		FROM users u, plans p
-		WHERE u.id = $1 AND p.id = $2
-	`, ad.UserID, p.PlanID).Scan(&subPartnerID, &priceCents)
-	if err != nil || subPartnerID == "" {
+	subResp, err := myauth.EnsureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
+	if err != nil {
+		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
+	}
+	subPartnerID := subResp.SubPartnerID
+
+	plan, err := tiers.GetPlan(ctx, p.PlanID)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
+	}
+	priceCents := plan.PriceUsdCents
+
+	if subPartnerID == "" {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
 	}
 
@@ -315,24 +319,26 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 	}
 	json.Unmarshal(body, &event)
 
-	// Look up subscription, plan, and user info
+	// Look up subscription info (billing-local); plan details come from tiers
 	var sub struct {
-		SubID      string
-		UserID     string
-		Tier       string
-		PlanID     string
-		Interval   string
-		PriceCents int
+		SubID  string
+		UserID string
+		Tier   string
+		PlanID string
 	}
 	err = db.QueryRow(ctx, `
-		SELECT s.id, s.user_id, s.tier, s.plan_id,
-			COALESCE(p.interval, 'monthly'),
-			COALESCE(p.price_usd_cents, 0)
+		SELECT s.id, s.user_id, s.tier, s.plan_id
 		FROM subscriptions s
-		LEFT JOIN plans p ON p.id = s.plan_id
 		WHERE s.provider_subscription_id = $1
 		ORDER BY s.created_at DESC LIMIT 1
-	`, event.ID.String()).Scan(&sub.SubID, &sub.UserID, &sub.Tier, &sub.PlanID, &sub.Interval, &sub.PriceCents)
+	`, event.ID.String()).Scan(&sub.SubID, &sub.UserID, &sub.Tier, &sub.PlanID)
+
+	interval := "monthly"
+	priceCents := 0
+	if plan, perr := tiers.GetPlan(ctx, sub.PlanID); perr == nil {
+		interval = plan.Interval
+		priceCents = plan.PriceUsdCents
+	}
 
 	status := strings.ToLower(event.PaymentStatus)
 	amtCrypto, _ := event.Amount.Float64()
@@ -341,7 +347,7 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 	// Calculate amount_usd_cents from price_amount in payload or from plan
 	usdCents := int(amtUSD * 100)
 	if usdCents == 0 {
-		usdCents = sub.PriceCents
+		usdCents = priceCents
 	}
 
 		if err == nil && event.ID.String() != "" {
@@ -361,14 +367,14 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 				raw_payload = EXCLUDED.raw_payload,
 				updated_at = now()
 		`, event.ID.String(), sub.UserID, sub.SubID, sub.PlanID,
-			sub.Tier, sub.Interval, amtCrypto, event.Currency, usdCents,
+			sub.Tier, interval, amtCrypto, event.Currency, usdCents,
 			status, string(body))
 	}
 
 	if status == "finished" {
 		if err == nil {
 			db.Exec(ctx, `UPDATE subscriptions SET active = true, status = 'active' WHERE provider_subscription_id = $1`, event.ID.String())
-			db.Exec(ctx, `UPDATE users SET tier = $1 WHERE id = $2`, sub.Tier, sub.UserID)
+			myauth.SetUserTier(ctx, &myauth.SetUserTierParams{UserID: sub.UserID, Tier: sub.Tier})
 		}
 	}
 
@@ -816,9 +822,4 @@ func sortObject(obj map[string]interface{}) map[string]interface{} {
 
 func fmtNum(n float64) string {
 	return strconv.FormatFloat(n, 'f', -1, 64)
-}
-
-func CreatePlan(ctx context.Context, req CreatePlanRequest, host string) (*CreatePlanResponse, error) {
-	req.IPNCallbackURL = buildCallbackURL(host, "/webhooks/nowpayments/subscription")
-	return provider.CreatePlan(ctx, req)
 }

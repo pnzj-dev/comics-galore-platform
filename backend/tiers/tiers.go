@@ -5,9 +5,10 @@ import (
 	"strings"
 	"time"
 
+	"comics-galore/backend/nowpayments"
+
 	"encore.dev/beta/auth"
 	myauth "comics-galore/backend/auth"
-	billing "comics-galore/backend/billing"
 	"encore.dev/beta/errs"
 	"encore.dev/storage/sqldb"
 )
@@ -15,6 +16,21 @@ import (
 var db = sqldb.NewDatabase("tiersdb", sqldb.DatabaseConfig{
 	Migrations: "./migrations",
 })
+
+var secrets struct {
+	NowPaymentsAPIKey   string
+	NowPaymentsIPNKey   string
+	NowPaymentsEmail    string
+	NowPaymentsPassword string
+	NgrokURL            string
+}
+
+var npProvider *nowpayments.Provider
+
+func init() {
+	npProvider = nowpayments.NewProvider(secrets.NowPaymentsAPIKey, secrets.NowPaymentsIPNKey,
+		secrets.NowPaymentsEmail, secrets.NowPaymentsPassword)
+}
 
 type Tier struct {
 	ID          string    `json:"id"`
@@ -125,6 +141,33 @@ type ListPlansResponse struct {
 	Plans []Plan `json:"plans"`
 }
 
+// PlanDetail is the billing-facing view of a plan, returned to the billing
+// service so it never reads the tiers database directly.
+type PlanDetail struct {
+	ID             string `json:"id"`
+	TierName       string `json:"tier_name"`
+	Interval       string `json:"interval"`
+	PriceUsdCents  int    `json:"price_usd_cents"`
+	ProviderPlanID string `json:"provider_plan_id"`
+}
+
+//encore:api private method=GET path=/internal/plans/:id
+func GetPlan(ctx context.Context, id string) (*PlanDetail, error) {
+	var d PlanDetail
+	err := db.QueryRow(ctx, `
+		SELECT plans.id, t.name, plans.interval, plans.price_usd_cents, COALESCE(plans.provider_plan_id, '')
+		FROM plans LEFT JOIN tiers t ON t.id = plans.tier_id
+		WHERE plans.id = $1
+	`, id).Scan(&d.ID, &d.TierName, &d.Interval, &d.PriceUsdCents, &d.ProviderPlanID)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found"}
+		}
+		return nil, err
+	}
+	return &d, nil
+}
+
 type MatrixStatus struct {
 	Complete bool `json:"complete"`
 }
@@ -223,11 +266,12 @@ func AutoLinkPlan(ctx context.Context, id string, p *AutoLinkPlanParams) (*AutoL
 	}
 	displayName += " - " + plan.Interval
 
-	resp, err := billing.CreatePlan(ctx, billing.CreatePlanRequest{
-		Name:        displayName,
-		PriceAmount: float64(plan.PriceUsdCents) / 100.0,
-		Period:      period,
-	}, p.Host)
+	resp, err := npProvider.CreatePlan(ctx, nowpayments.CreatePlanRequest{
+		Name:           displayName,
+		PriceAmount:    float64(plan.PriceUsdCents) / 100.0,
+		Period:         period,
+		IPNCallbackURL: nowpayments.BuildCallbackURL(p.Host, secrets.NgrokURL, "/webhooks/nowpayments/subscription"),
+	})
 	if err != nil {
 		return nil, &errs.Error{Code: errs.Internal, Message: "nowpayments plan creation failed: " + err.Error()}
 	}

@@ -1,9 +1,9 @@
-// Package billing implements the PaymentsProvider interface using the
-// NowPayments REST API.
+// Package nowpayments implements the NowPayments REST API client shared by
+// the auth, billing and tiers services.
 //
 // Full API reference: backend/billing/nowpayments-openapi.yaml
 // Base URL: https://api.nowpayments.io
-package billing
+package nowpayments
 
 import (
 	"bytes"
@@ -13,13 +13,14 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 const npBaseURL = "https://api.nowpayments.io/v1"
 
-type NowPaymentsProvider struct {
+type Provider struct {
 	apiKey   string
 	ipnKey   string
 	email    string
@@ -32,8 +33,8 @@ type NowPaymentsProvider struct {
 	http *http.Client
 }
 
-func NewNowPaymentsProvider(apiKey, ipnKey, email, password string) *NowPaymentsProvider {
-	return &NowPaymentsProvider{
+func NewProvider(apiKey, ipnKey, email, password string) *Provider {
+	return &Provider{
 		apiKey:   apiKey,
 		ipnKey:   ipnKey,
 		email:    email,
@@ -42,9 +43,25 @@ func NewNowPaymentsProvider(apiKey, ipnKey, email, password string) *NowPayments
 	}
 }
 
+// BuildCallbackURL builds a webhook callback URL. When running locally it
+// prefers the ngrok tunnel URL, otherwise it derives the scheme from the host.
+func BuildCallbackURL(host, ngrokURL, path string) string {
+	if (strings.Contains(host, "localhost") || strings.Contains(host, "127.0.0.1")) && ngrokURL != "" {
+		return strings.TrimRight(ngrokURL, "/") + path
+	}
+	scheme := "https"
+	if host == "" || strings.Contains(host, "localhost") || strings.Contains(host, ":4000") {
+		scheme = "http"
+	}
+	if host == "" {
+		host = "localhost:4000"
+	}
+	return scheme + "://" + host + path
+}
+
 // getAuthToken returns a cached JWT token, refreshing if expired.
 // Tokens from NowPayments expire in 5 minutes; we cache for 4 minutes.
-func (p *NowPaymentsProvider) getAuthToken(ctx context.Context) (string, error) {
+func (p *Provider) getAuthToken(ctx context.Context) (string, error) {
 	p.jwtMutex.Lock()
 	defer p.jwtMutex.Unlock()
 
@@ -85,7 +102,7 @@ func (p *NowPaymentsProvider) getAuthToken(ctx context.Context) (string, error) 
 }
 
 // doJWTRequest sends a request authenticated with both JWT (Bearer) and API key.
-func (p *NowPaymentsProvider) doJWTRequest(ctx context.Context, method, url string, body interface{}) ([]byte, error) {
+func (p *Provider) doJWTRequest(ctx context.Context, method, url string, body interface{}) ([]byte, error) {
 	token, err := p.getAuthToken(ctx)
 	if err != nil {
 		return nil, err
@@ -93,11 +110,11 @@ func (p *NowPaymentsProvider) doJWTRequest(ctx context.Context, method, url stri
 	return p.doRequestWithAuth(ctx, method, url, body, token)
 }
 
-func (p *NowPaymentsProvider) doRequest(ctx context.Context, method, url string, body interface{}) ([]byte, error) {
+func (p *Provider) doRequest(ctx context.Context, method, url string, body interface{}) ([]byte, error) {
 	return p.doRequestWithAuth(ctx, method, url, body, "")
 }
 
-func (p *NowPaymentsProvider) doRequestWithAuth(ctx context.Context, method, url string, body interface{}, jwtToken string) ([]byte, error) {
+func (p *Provider) doRequestWithAuth(ctx context.Context, method, url string, body interface{}, jwtToken string) ([]byte, error) {
 	var reqBody io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -140,7 +157,7 @@ func (p *NowPaymentsProvider) doRequestWithAuth(ctx context.Context, method, url
 
 // ----- EstimatePrice (API key only) -----
 
-func (p *NowPaymentsProvider) EstimatePrice(ctx context.Context, req EstimateRequest) (*EstimateResponse, error) {
+func (p *Provider) EstimatePrice(ctx context.Context, req EstimateRequest) (*EstimateResponse, error) {
 	url := fmt.Sprintf("%s/estimate?amount=%.2f&currency_from=%s&currency_to=%s",
 		npBaseURL, req.Amount, req.Currency, req.Crypto)
 
@@ -168,7 +185,7 @@ func (p *NowPaymentsProvider) EstimatePrice(ctx context.Context, req EstimateReq
 
 // ----- CheckBalance (API key only) -----
 
-func (p *NowPaymentsProvider) CheckBalance(ctx context.Context, subPartnerID string) (map[string]BalanceEntry, error) {
+func (p *Provider) CheckBalance(ctx context.Context, subPartnerID string) (map[string]BalanceEntry, error) {
 	url := fmt.Sprintf("%s/sub-partner/balance/%s", npBaseURL, subPartnerID)
 
 	resp, err := p.doRequest(ctx, "GET", url, nil)
@@ -195,7 +212,7 @@ func (p *NowPaymentsProvider) CheckBalance(ctx context.Context, subPartnerID str
 
 // ----- CreateCustomer (JWT + API key) -----
 
-func (p *NowPaymentsProvider) CreateCustomer(ctx context.Context, name string) (string, error) {
+func (p *Provider) CreateCustomer(ctx context.Context, name string) (string, error) {
 	body := map[string]interface{}{
 		"name": name,
 	}
@@ -217,7 +234,7 @@ func (p *NowPaymentsProvider) CreateCustomer(ctx context.Context, name string) (
 
 // ----- CreateSubscription (JWT + API key) -----
 
-func (p *NowPaymentsProvider) CreateSubscription(ctx context.Context, req SubscriptionRequest) (*SubscriptionResponse, error) {
+func (p *Provider) CreateSubscription(ctx context.Context, req SubscriptionRequest) (*SubscriptionResponse, error) {
 	planID, _ := strconv.Atoi(req.SubscriptionPlanID)
 	subPartnerID, _ := strconv.Atoi(req.SubPartnerID)
 	body := map[string]interface{}{
@@ -246,7 +263,7 @@ func (p *NowPaymentsProvider) CreateSubscription(ctx context.Context, req Subscr
 
 // ----- CreateDeposit (JWT + API key) -----
 
-func (p *NowPaymentsProvider) CreateDeposit(ctx context.Context, req DepositRequest) (*DepositResponse, error) {
+func (p *Provider) CreateDeposit(ctx context.Context, req DepositRequest) (*DepositResponse, error) {
 	subPartnerID, _ := strconv.Atoi(req.SubPartnerID)
 	body := map[string]interface{}{
 		"currency":            req.Crypto,
@@ -274,9 +291,9 @@ func (p *NowPaymentsProvider) CreateDeposit(ctx context.Context, req DepositRequ
 
 	payAmt, _ := result.PayAmount.Float64()
 	return &DepositResponse{
-		PaymentID:  result.PaymentID.String(),
-		PayAddress: result.PayAddress,
-		PayAmount:  payAmt,
+		PaymentID:   result.PaymentID.String(),
+		PayAddress:  result.PayAddress,
+		PayAmount:   payAmt,
 		PayCurrency: result.PayCurrency,
 	}, nil
 }
@@ -302,7 +319,7 @@ func periodToDays(period string) int {
 	}
 }
 
-func (p *NowPaymentsProvider) CreatePlan(ctx context.Context, req CreatePlanRequest) (*CreatePlanResponse, error) {
+func (p *Provider) CreatePlan(ctx context.Context, req CreatePlanRequest) (*CreatePlanResponse, error) {
 	body := map[string]interface{}{
 		"title":            req.Name,
 		"amount":           req.PriceAmount,
