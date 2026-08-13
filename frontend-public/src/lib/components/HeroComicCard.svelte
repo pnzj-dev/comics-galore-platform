@@ -55,7 +55,9 @@
 	const authed = $derived(!!user);
 	const pageCount = $derived(page_keys?.length || 0);
 
+	// svelte-ignore state_referenced_locally
 	let favorited = $state(is_favorited);
+	// svelte-ignore state_referenced_locally
 	let favCount = $state(fav_count);
 	let liking = $state(false);
 	let favHovered = $state(false);
