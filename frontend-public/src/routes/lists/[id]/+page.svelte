@@ -1,7 +1,18 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import ComicCard from '$lib/components/ComicCard.svelte';
+	import Pagination from '$lib/components/Pagination.svelte';
 
 	let { data } = $props();
+
+	const totalPages = $derived(Math.max(1, Math.ceil(data.total / data.limit)));
+
+	function goPage(p: number) {
+		const url = new URL(page.url);
+		url.searchParams.set('page', String(p));
+		goto(url.pathname + url.search, { keepFocus: true });
+	}
 </script>
 
 <svelte:head><title>{data.list?.name || 'Reading List'} - Comics Galore</title></svelte:head>
@@ -17,6 +28,7 @@
 					<ComicCard {...comic} />
 				{/each}
 			</div>
+			<Pagination page={data.page} {totalPages} onPage={goPage} />
 		{/if}
 	{:else}
 		<p class="text-destructive text-center py-20">List not found.</p>

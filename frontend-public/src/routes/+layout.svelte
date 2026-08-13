@@ -44,6 +44,7 @@
 			{#if authed && user}
 				<a href="/messages" class="text-sm text-muted-foreground hover:text-foreground">Messages</a>
 				<a href="/lists" class="text-sm text-muted-foreground hover:text-foreground">Lists</a>
+				<a href="/favorites" class="text-sm text-muted-foreground hover:text-foreground">Favorites</a>
 				{#if user.role === 'uploader' || user.role === 'admin'}
 					<a href="/upload" class="text-sm text-muted-foreground hover:text-foreground">{t('nav.upload')}</a>
 				{/if}

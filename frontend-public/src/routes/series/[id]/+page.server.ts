@@ -1,12 +1,14 @@
 import { getEncoreClient } from '$lib/server/encore';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ params, cookies }) => {
+export const load: PageServerLoad = async ({ params, cookies, url }) => {
 	const token = cookies.get('token');
 	const client = getEncoreClient(token);
+	const page = parseInt(url.searchParams.get('page') || '1');
+	const limit = 20;
 	const [s, c] = await Promise.all([
 		client.comics.GetSeries(params.id),
-		client.comics.SeriesComics(params.id),
+		client.comics.SeriesComics(params.id, { Page: page, Limit: limit }),
 	]);
 	const comics = c.comics || [];
 
@@ -25,5 +27,5 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 
 	const readCount = comics.filter((x) => progress[x.id]?.completed).length;
 
-	return { series: s, comics, progress, readCount };
+	return { series: s, comics, total: c.total || 0, page, limit, progress, readCount };
 };

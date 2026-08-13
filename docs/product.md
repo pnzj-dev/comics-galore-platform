@@ -92,6 +92,7 @@ When the user has the `uploader` role, a dedicated **New Comic** area is availab
 
 ### Social & library
 - Like, favorite, rate, comments, follow uploaders + series
+- Dedicated **Favorites** page (authenticated) listing all favorited comics with inline unfavorite
 - Shareable public reading lists / shelves
 - Flagging / report flow
 

@@ -1002,6 +1002,11 @@ export namespace comics {
         "created_at": string
     }
 
+    export interface GetReadingListParams {
+        Page: number
+        Limit: number
+    }
+
     export interface LanguageFacet {
         language: string
         count: number
@@ -1034,6 +1039,11 @@ export namespace comics {
 
     export interface ListCommentsResponse {
         comments: CommentData[]
+    }
+
+    export interface ListFavoritesParams {
+        Page: number
+        Limit: number
     }
 
     export interface ListFlaggedCommentsParams {
@@ -1086,6 +1096,7 @@ export namespace comics {
     export interface PublicReadingListResponse {
         list: ReadingList
         comics: Comic[]
+        total: number
     }
 
     export interface ReadingList {
@@ -1154,6 +1165,11 @@ export namespace comics {
         description: string
         "uploader_id": string
         "created_at": string
+    }
+
+    export interface SeriesComicsParams {
+        Page: number
+        Limit: number
     }
 
     export interface StaffPick {
@@ -1228,6 +1244,7 @@ export namespace comics {
             this.LanguageFacets = this.LanguageFacets.bind(this)
             this.ListComics = this.ListComics.bind(this)
             this.ListComments = this.ListComments.bind(this)
+            this.ListFavorites = this.ListFavorites.bind(this)
             this.ListFlaggedComments = this.ListFlaggedComments.bind(this)
             this.ListReadingLists = this.ListReadingLists.bind(this)
             this.ListSavedViews = this.ListSavedViews.bind(this)
@@ -1397,9 +1414,15 @@ export namespace comics {
             return await resp.json() as LikeStatus
         }
 
-        public async GetReadingList(id: string): Promise<PublicReadingListResponse> {
+        public async GetReadingList(id: string, params: GetReadingListParams): Promise<PublicReadingListResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                limit: String(params.Limit),
+                page:  String(params.Page),
+            })
+
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/reading-lists/${encodeURIComponent(id)}`)
+            const resp = await this.baseClient.callTypedAPI("GET", `/reading-lists/${encodeURIComponent(id)}`, undefined, {query})
             return await resp.json() as PublicReadingListResponse
         }
 
@@ -1442,6 +1465,18 @@ export namespace comics {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/comics/${encodeURIComponent(id)}/comments`)
             return await resp.json() as ListCommentsResponse
+        }
+
+        public async ListFavorites(params: ListFavoritesParams): Promise<ListComicsResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                limit: String(params.Limit),
+                page:  String(params.Page),
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/favorites`, undefined, {query})
+            return await resp.json() as ListComicsResponse
         }
 
         public async ListFlaggedComments(params: ListFlaggedCommentsParams): Promise<ListFlaggedCommentsResponse> {
@@ -1559,9 +1594,15 @@ export namespace comics {
             return await resp.json() as SavedView
         }
 
-        public async SeriesComics(id: string): Promise<ListComicsResponse> {
+        public async SeriesComics(id: string, params: SeriesComicsParams): Promise<ListComicsResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                limit: String(params.Limit),
+                page:  String(params.Page),
+            })
+
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/series/${encodeURIComponent(id)}/comics`)
+            const resp = await this.baseClient.callTypedAPI("GET", `/series/${encodeURIComponent(id)}/comics`, undefined, {query})
             return await resp.json() as ListComicsResponse
         }
 

@@ -411,6 +411,57 @@ func BatchGetComics(ctx context.Context, p *BatchComicsParams) (*ListComicsRespo
 	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
 }
 
+// ----- Favorites -----
+
+type ListFavoritesParams struct {
+	Page  int `query:"page"`
+	Limit int `query:"limit"`
+}
+
+//encore:api auth method=GET path=/favorites
+func ListFavorites(ctx context.Context, p *ListFavoritesParams) (*ListComicsResponse, error) {
+	ad := auth.Data().(*myauth.AuthData)
+
+	page := defaultValue(p.Page, 1)
+	limit := defaultValue(p.Limit, 20)
+	if limit > 50 {
+		limit = 50
+	}
+	offset := (page - 1) * limit
+
+	var total int
+	db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM favorites f
+		JOIN comics c ON c.id = f.comic_id
+		WHERE f.user_id = $1 AND c.status = 'published'
+	`, ad.UserID).Scan(&total)
+
+	rows, err := db.Query(ctx, `
+		SELECT c.id, c.uploader_id, c.title, c.author, c.slug, c.description, c.content_language, c.status,
+			c.cover_key, c.file_key, c.page_keys, c.file_size_bytes, c.min_tier_id, c.age_rating, c.is_premium,
+			c.tags, c.rejection_reason, c.published_at, c.view_count, c.download_count, c.like_count, c.fav_count, c.dislike_count,
+			c.created_at, c.updated_at
+		FROM favorites f
+		JOIN comics c ON c.id = f.comic_id
+		WHERE f.user_id = $1 AND c.status = 'published'
+		ORDER BY f.created_at DESC
+		LIMIT $2 OFFSET $3
+	`, ad.UserID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	comics, err := scanComics(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	enrichReactions(ctx, comics, string(ad.UserID))
+
+	return &ListComicsResponse{Comics: comics, Total: total}, nil
+}
+
 //encore:api auth method=GET path=/uploader/comics
 func MyComics(ctx context.Context) (*ListComicsResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
@@ -1243,8 +1294,23 @@ func GetSeries(ctx context.Context, id string) (*Series, error) {
 	return &s, nil
 }
 
+type SeriesComicsParams struct {
+	Page  int `query:"page"`
+	Limit int `query:"limit"`
+}
+
 //encore:api public method=GET path=/series/:id/comics
-func SeriesComics(ctx context.Context, id string) (*ListComicsResponse, error) {
+func SeriesComics(ctx context.Context, id string, p *SeriesComicsParams) (*ListComicsResponse, error) {
+	page := defaultValue(p.Page, 1)
+	limit := defaultValue(p.Limit, 20)
+	if limit > 50 {
+		limit = 50
+	}
+	offset := (page - 1) * limit
+
+	var total int
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics WHERE series_id = $1 AND status = 'published'`, id).Scan(&total)
+
 	rows, err := db.Query(ctx, `
 		SELECT id, uploader_id, title, author, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
@@ -1252,7 +1318,8 @@ func SeriesComics(ctx context.Context, id string) (*ListComicsResponse, error) {
 			COALESCE(series_order, 1), created_at, updated_at
 		FROM comics WHERE series_id = $1 AND status = 'published'
 		ORDER BY series_order ASC, published_at ASC
-	`, id)
+		LIMIT $2 OFFSET $3
+	`, id, limit, offset)
 	if err != nil { return nil, err }
 	defer rows.Close()
 
@@ -1280,7 +1347,7 @@ func SeriesComics(ctx context.Context, id string) (*ListComicsResponse, error) {
 	if comics == nil {
 		comics = []Comic{}
 	}
-	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
+	return &ListComicsResponse{Comics: comics, Total: total}, nil
 }
 
 //encore:api auth method=POST path=/series/:id/follow

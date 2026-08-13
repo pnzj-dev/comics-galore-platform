@@ -219,5 +219,6 @@ When all boxes are checked, v1 is done—then execute SOON.
 - [x] Uploader follow + notification emails on publish
 - [x] Additional UI locales (ja/es/ko/fr/pt-BR/zh-CN/de/it/id) + locale switcher
 - [x] Language facet counts on browse
+- [x] Favorites page + pagination on all comic grids (`/favorites`, browse, tags, series, lists)
 
 v1.1.1 (SOON) complete. Next up: LATER items (AI moderation, messaging/support, full admin suite, Wails desktop).

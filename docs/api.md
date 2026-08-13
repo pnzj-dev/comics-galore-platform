@@ -61,6 +61,9 @@
 | POST | `/moderation/flags/:id/resolve` | Resolve a comment flag | Moderator/Admin |
 | GET (SSE) | `/comments-stream/:id` | SSE stream of new comments for a comic | No |
 | GET | `/comics-language-facets` | Language facet counts for published comics | No |
+| GET | `/favorites` | Paginated list of the current user's favorited comics | Yes |
+
+> **Pagination convention** — every list endpoint that returns a grid uses `page` + `limit` query params and returns a `total` count. `limit` defaults to 20 and is capped at 50. Public grids (`/comics`, `/series/:id/comics`, `/tags/:tag`, `/reading-lists/:id`) and authenticated grids (`/favorites`) all follow this convention. The frontend renders them via the shared `Pagination.svelte` component.
 
 ## Tiers & Plans
 

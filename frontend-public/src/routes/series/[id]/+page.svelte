@@ -1,6 +1,9 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { encore } from '$lib/api/encore';
 	import ComicCard from '$lib/components/ComicCard.svelte';
+	import Pagination from '$lib/components/Pagination.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { currentUser } from '$lib/stores/auth';
 
@@ -11,6 +14,7 @@
 	let following = $state(false);
 
 	const user = $derived($currentUser);
+	const totalPages = $derived(Math.max(1, Math.ceil(data.total / data.limit)));
 
 	// Missing-issue gaps: expected contiguous series_order 1..max, flag absent ones.
 	const maxOrder = $derived(comics.reduce((m, c) => Math.max(m, c.series_order || 1), 0));
@@ -32,6 +36,12 @@
 			await encore.comics.FollowSeries(data.series.id);
 			following = true;
 		}
+	}
+
+	function goPage(p: number) {
+		const url = new URL(page.url);
+		url.searchParams.set('page', String(p));
+		goto(url.pathname + url.search, { keepFocus: true });
 	}
 </script>
 
@@ -67,7 +77,7 @@
 			{/if}
 		</div>
 
-		<h2 class="text-xl font-semibold mb-4">{comics.length} Issues</h2>
+		<h2 class="text-xl font-semibold mb-4">{data.total} Issues</h2>
 		{#if comics.length > 0}
 			<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6">
 				{#each comics as comic}
@@ -82,6 +92,7 @@
 					</div>
 				{/each}
 			</div>
+			<Pagination page={data.page} {totalPages} onPage={goPage} />
 		{:else}
 			<p class="text-muted-foreground text-center py-8">No comics in this series yet.</p>
 		{/if}

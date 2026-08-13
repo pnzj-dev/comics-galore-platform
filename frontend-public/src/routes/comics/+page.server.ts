@@ -2,9 +2,11 @@ import { getEncoreClient } from '$lib/server/encore';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ url }) => {
-	const client = getEncoreClient();
+	const client = getEncoreClient(undefined);
 	const lang = url.searchParams.get('language');
-	const params: any = { Page: 1, Limit: 20 };
+	const page = parseInt(url.searchParams.get('page') || '1');
+	const limit = 20;
+	const params: any = { Page: page, Limit: limit, Language: '', Search: '', Tag: '', Sort: '', ExcludeMature: '' };
 	if (lang) params.Language = lang;
 
 	const [res, facets] = await Promise.all([
@@ -12,5 +14,5 @@ export const load: PageServerLoad = async ({ url }) => {
 		client.comics.LanguageFacets().catch(() => ({ facets: [] })),
 	]);
 
-	return { comics: res.comics || [], facets: facets.facets || [] };
+	return { comics: res.comics || [], total: res.total || 0, page, limit, facets: facets.facets || [], lang: lang || '' };
 };

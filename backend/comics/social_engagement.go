@@ -78,10 +78,23 @@ func ListReadingLists(ctx context.Context) (*ListReadingListsResponse, error) {
 type PublicReadingListResponse struct {
 	List   ReadingList `json:"list"`
 	Comics []Comic     `json:"comics"`
+	Total  int         `json:"total"`
+}
+
+type GetReadingListParams struct {
+	Page  int `query:"page"`
+	Limit int `query:"limit"`
 }
 
 //encore:api public method=GET path=/reading-lists/:id
-func GetReadingList(ctx context.Context, id string) (*PublicReadingListResponse, error) {
+func GetReadingList(ctx context.Context, id string, p *GetReadingListParams) (*PublicReadingListResponse, error) {
+	page := defaultValue(p.Page, 1)
+	limit := defaultValue(p.Limit, 20)
+	if limit > 50 {
+		limit = 50
+	}
+	offset := (page - 1) * limit
+
 	var l ReadingList
 	err := db.QueryRow(ctx, `SELECT id, user_id, name, is_public, created_at FROM reading_lists WHERE id = $1 AND is_public = true`, id).Scan(&l.ID, &l.UserID, &l.Name, &l.IsPublic, &l.CreatedAt)
 	if err != nil {
@@ -90,6 +103,13 @@ func GetReadingList(ctx context.Context, id string) (*PublicReadingListResponse,
 		}
 		return nil, err
 	}
+
+	var total int
+	db.QueryRow(ctx, `
+		SELECT COUNT(*) FROM reading_list_items rli
+		JOIN comics c ON c.id = rli.comic_id
+		WHERE rli.list_id = $1 AND c.status = 'published'
+	`, id).Scan(&total)
 
 	rows, err := db.Query(ctx, `
 		SELECT c.id, c.uploader_id, c.title, c.author, c.slug, c.description, c.content_language, c.status,
@@ -100,7 +120,8 @@ func GetReadingList(ctx context.Context, id string) (*PublicReadingListResponse,
 		JOIN comics c ON c.id = rli.comic_id
 		WHERE rli.list_id = $1 AND c.status = 'published'
 		ORDER BY rli.position ASC
-	`, id)
+		LIMIT $2 OFFSET $3
+	`, id, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +150,7 @@ func GetReadingList(ctx context.Context, id string) (*PublicReadingListResponse,
 	if comics == nil {
 		comics = []Comic{}
 	}
-	return &PublicReadingListResponse{List: l, Comics: comics}, rows.Err()
+	return &PublicReadingListResponse{List: l, Comics: comics, Total: total}, rows.Err()
 }
 
 //encore:api auth method=POST path=/reading-lists/:id/items

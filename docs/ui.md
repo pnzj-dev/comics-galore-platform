@@ -125,9 +125,17 @@
 ## Other Screens (summary)
 
 **Public**: Home, Comic Detail, Series, Reader (keyboard + swipe), Search, Profiles, Pricing, RSS.  
-**Authenticated**: Library, Messaging, Support, Account.  
+**Authenticated**: Library, Favorites, Messaging, Support, Account.  
 **Moderator**: Moderation queue + pending comic reviews.  
 **Admin**: Full control panel with red banner, datalists, settings, plan matrix, charts, etc.
+
+### Favorites
+
+**Route: `/favorites`** (authenticated, `(app)` group). Shows the user's favorited comics as a `ComicCard` grid, newest favorite first. Each card shows the inline ★ toggle (already active), so unfavoriting refreshes the list. Empty state: "No favorites yet — tap the ★ on any comic to save it here."
+
+### Pagination
+
+All comic grids use the shared **`Pagination.svelte`** component (`Prev`, numbered pages with ellipsis, `Next`), driven by `page` + `limit` query params and a `total` count from the backend. Applied uniformly to: `/comics` (browse), `/tags/[tag]`, `/series/[id]`, `/lists/[id]`, and `/favorites`. `limit` defaults to 20 and is capped at 50 server-side. Page changes navigate via `goto(url.pathname + url.search)` with `keepFocus: true`.
 
 ### Pricing & Checkout Flow
 

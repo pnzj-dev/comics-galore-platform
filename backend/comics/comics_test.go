@@ -1191,7 +1191,7 @@ func TestReadingLists_CRUD(t *testing.T) {
 	}
 
 	// Public fetch includes the comic.
-	pub, err := GetReadingList(context.Background(), list.ID)
+	pub, err := GetReadingList(context.Background(), list.ID, &GetReadingListParams{Page: 1, Limit: 20})
 	if err != nil {
 		t.Fatalf("get public list error: %v", err)
 	}
@@ -1202,7 +1202,7 @@ func TestReadingLists_CRUD(t *testing.T) {
 	if err := RemoveFromReadingList(userCtx2, list.ID, comic.ID); err != nil {
 		t.Fatalf("remove from list error: %v", err)
 	}
-	pub2, _ := GetReadingList(context.Background(), list.ID)
+	pub2, _ := GetReadingList(context.Background(), list.ID, &GetReadingListParams{Page: 1, Limit: 20})
 	if len(pub2.Comics) != 0 {
 		t.Errorf("expected 0 comics after remove, got %d", len(pub2.Comics))
 	}
@@ -1217,5 +1217,45 @@ func TestRelatedComics_ReturnsPublished(t *testing.T) {
 	}
 	if resp.Comics == nil {
 		t.Error("expected non-nil comics slice")
+	}
+}
+
+func TestListFavorites_Paginated(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	user := fixtures.TierGatedCtx("550e8400-e29b-41d4-a716-4466554400f2", "user", "free")
+
+	// Create + approve 2 comics, favorite both.
+	for i := 0; i < 2; i++ {
+		c, err := CreateComic(uploaderCtx, &CreateComicParams{
+			Title:    "Fav Comic",
+			CoverKey: "covers/fav.jpg",
+			FileKey:  "files/fav.cbz",
+		})
+		if err != nil {
+			t.Fatalf("create error: %v", err)
+		}
+		_ = ApproveComic(moderatorCtx, c.ID)
+		if _, err := ToggleFavorite(user, c.ID); err != nil {
+			t.Fatalf("favorite error: %v", err)
+		}
+	}
+
+	resp, err := ListFavorites(user, &ListFavoritesParams{Page: 1, Limit: 10})
+	if err != nil {
+		t.Fatalf("list favorites error: %v", err)
+	}
+	if resp.Total != 2 {
+		t.Errorf("expected total 2, got %d", resp.Total)
+	}
+	if len(resp.Comics) != 2 {
+		t.Errorf("expected 2 comics, got %d", len(resp.Comics))
+	}
+
+	// Page 2 should be empty (limit 1 → 2 pages).
+	page1, _ := ListFavorites(user, &ListFavoritesParams{Page: 1, Limit: 1})
+	page2, _ := ListFavorites(user, &ListFavoritesParams{Page: 2, Limit: 1})
+	if len(page1.Comics) != 1 || len(page2.Comics) != 1 {
+		t.Errorf("expected 1 per page, got %d and %d", len(page1.Comics), len(page2.Comics))
 	}
 }
