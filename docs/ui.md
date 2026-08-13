@@ -137,6 +137,13 @@
 
 All comic grids use the shared **`Pagination.svelte`** component (`Prev`, numbered pages with ellipsis, `Next`), driven by `page` + `limit` query params and a `total` count from the backend. Applied uniformly to: `/comics` (browse), `/tags/[tag]`, `/series/[id]`, `/lists/[id]`, and `/favorites`. `limit` defaults to 20 and is capped at 50 server-side. Page changes navigate via `goto(url.pathname + url.search)` with `keepFocus: true`.
 
+### Search & tag filters (browse)
+
+The `/comics` browse page has a **full-width search + filter bar**:
+- Search input (icon + placeholder) with a **field dropdown** (`All Fields` / `Title` / `Description` / `Author`).
+- A **Popular Tags** pill grid below it (tag + count, toggleable, active pill highlighted), sourced from `GET /tags`.
+- Search, field, tag, and language are all `goto(...)` query params (debounced for search), preserving pagination.
+
 ### Pricing & Checkout Flow
 
 **Route: `/pricing`** — informational only, shows all plans inline with interval selector and feature diffs. No selection buttons in page mode. Authenticated users see a "Subscribe" button that opens the checkout modal.

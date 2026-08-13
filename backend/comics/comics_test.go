@@ -1259,3 +1259,67 @@ func TestListFavorites_Paginated(t *testing.T) {
 		t.Errorf("expected 1 per page, got %d and %d", len(page1.Comics), len(page2.Comics))
 	}
 }
+
+func TestListComics_SearchFilters(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	mk := func(title, author string) string {
+		c, err := CreateComic(uploaderCtx, &CreateComicParams{
+			Title:    title,
+			Author:   author,
+			CoverKey: "covers/search.jpg",
+			FileKey:  "files/search.cbz",
+		})
+		if err != nil {
+			t.Fatalf("create error: %v", err)
+		}
+		_ = ApproveComic(moderatorCtx, c.ID)
+		return c.ID
+	}
+
+	mk("Cosmic Odyssey", "Jane Doe")
+	mk("Detective Noir", "John Smith")
+
+	// Search by title
+	byTitle, _ := ListComics(context.Background(), &ListComicsParams{Search: "Cosmic", SearchField: "title"})
+	if byTitle.Total < 1 {
+		t.Errorf("expected >=1 title match, got %d", byTitle.Total)
+	}
+	// Search by author
+	byAuthor, _ := ListComics(context.Background(), &ListComicsParams{Search: "Smith", SearchField: "author"})
+	if byAuthor.Total < 1 {
+		t.Errorf("expected >=1 author match, got %d", byAuthor.Total)
+	}
+	// Search all fields
+	allFields, _ := ListComics(context.Background(), &ListComicsParams{Search: "Cosmic"})
+	if allFields.Total < 1 {
+		t.Errorf("expected >=1 all-fields match, got %d", allFields.Total)
+	}
+}
+
+func TestPopularTags_Counts(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	c, err := CreateComic(uploaderCtx, &CreateComicParams{
+		Title:    "Tagged Comic",
+		CoverKey: "covers/tagged.jpg",
+		FileKey:  "files/tagged.cbz",
+		Tags:     []string{"sci-fi", "action"},
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	_ = ApproveComic(moderatorCtx, c.ID)
+
+	resp, err := PopularTags(context.Background())
+	if err != nil {
+		t.Fatalf("popular tags error: %v", err)
+	}
+	counts := map[string]int{}
+	for _, t := range resp.Tags {
+		counts[t.Tag] = t.Count
+	}
+	if counts["sci-fi"] < 1 || counts["action"] < 1 {
+		t.Errorf("expected sci-fi and action tags present, got %v", counts)
+	}
+}

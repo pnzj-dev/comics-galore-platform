@@ -1027,6 +1027,7 @@ export namespace comics {
         Limit: number
         Language: string
         Search: string
+        SearchField: string
         Tag: string
         Sort: string
         ExcludeMature: string
@@ -1180,6 +1181,15 @@ export namespace comics {
         position: number
     }
 
+    export interface TagCount {
+        tag: string
+        count: number
+    }
+
+    export interface TagCountsResponse {
+        tags: TagCount[]
+    }
+
     export interface ToggleDislikeResponse {
         disliked: boolean
         "dislike_count": number
@@ -1252,6 +1262,7 @@ export namespace comics {
             this.ListStaffPicks = this.ListStaffPicks.bind(this)
             this.MyComics = this.MyComics.bind(this)
             this.PendingComics = this.PendingComics.bind(this)
+            this.PopularTags = this.PopularTags.bind(this)
             this.RSSFeed = this.RSSFeed.bind(this)
             this.RecycleBin = this.RecycleBin.bind(this)
             this.RejectComic = this.RejectComic.bind(this)
@@ -1452,6 +1463,7 @@ export namespace comics {
                 limit:            String(params.Limit),
                 page:             String(params.Page),
                 search:           params.Search,
+                "search_field":   params.SearchField,
                 sort:             params.Sort,
                 tag:              params.Tag,
             })
@@ -1534,6 +1546,12 @@ export namespace comics {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/moderation/comics`, undefined, {query})
             return await resp.json() as ListPendingResponse
+        }
+
+        public async PopularTags(): Promise<TagCountsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/tags`)
+            return await resp.json() as TagCountsResponse
         }
 
         public async RSSFeed(method: "GET", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {

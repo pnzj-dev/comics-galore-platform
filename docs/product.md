@@ -76,6 +76,7 @@ When the user has the `uploader` role, a dedicated **New Comic** area is availab
 - Staff Picks, Comic of the Day / Random (displayed with `HeroComicCard` — landscape layout, cover + info side by side)
 - “New this week” / “Popular this month” rails
 - Faceted search; **tag pages** as first-class public URLs
+- Browse page search bar (title/author/description) + popular tag pills
 - “People also liked” related comics
 
 ### Series

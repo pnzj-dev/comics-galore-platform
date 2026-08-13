@@ -10,8 +10,13 @@
 	const comics = $derived(data.comics);
 	const totalPages = $derived(Math.max(1, Math.ceil(data.total / data.limit)));
 	const langFilter = $derived(data.lang || '');
+	const search = $derived(data.search);
+	const searchField = $derived(data.searchField);
+	const activeTag = $derived(data.tag);
 
 	const facets = $derived(data.facets || []);
+	const popularTags = $derived(data.popularTags || []);
+
 	const languages = $derived.by(() => {
 		const codes = new Set(['']);
 		for (const f of facets) codes.add(f.language);
@@ -29,13 +34,33 @@
 		return code + (facetCount[code] ? ` (${facetCount[code]})` : '');
 	}
 
-	function changeLang(e: Event) {
-		const value = (e.target as HTMLSelectElement).value;
+	function updateParams(updates: Record<string, string | undefined>) {
 		const url = new URL(page.url);
-		if (value) url.searchParams.set('language', value);
-		else url.searchParams.delete('language');
+		for (const [k, v] of Object.entries(updates)) {
+			if (v) url.searchParams.set(k, v);
+			else url.searchParams.delete(k);
+		}
 		url.searchParams.delete('page');
 		goto(url.pathname + url.search, { keepFocus: true });
+	}
+
+	function changeLang(e: Event) {
+		const value = (e.target as HTMLSelectElement).value;
+		updateParams({ language: value || undefined });
+	}
+
+	function onSearch(e: Event) {
+		const value = (e.target as HTMLInputElement).value;
+		updateParams({ search: value || undefined });
+	}
+
+	function changeField(e: Event) {
+		const value = (e.target as HTMLSelectElement).value;
+		updateParams({ search_field: value || undefined });
+	}
+
+	function toggleTag(tag: string) {
+		updateParams({ tag: activeTag === tag ? undefined : tag });
 	}
 
 	function goPage(p: number) {
@@ -50,16 +75,60 @@
 </svelte:head>
 
 <section class="py-8">
-	<div class="flex items-center justify-between mb-6">
-		<h1 class="text-3xl font-bold">Browse Comics</h1>
-		<div class="flex items-center gap-2">
-			<Label for="lang-filter" class="text-sm text-muted-foreground">Language:</Label>
-			<select id="lang-filter" value={langFilter} onchange={changeLang} class="rounded-md border border-input bg-background px-3 py-1.5 text-sm">
-				{#each languages as lang}
-					<option value={lang}>{langLabel(lang)}</option>
-				{/each}
+	<h1 class="text-3xl font-bold mb-6">Browse Comics</h1>
+
+	<!-- Full-width search + filters -->
+	<div class="rounded-xl border border-border bg-muted/30 p-4 mb-6 space-y-4">
+		<div class="flex flex-col sm:flex-row gap-3">
+			<div class="relative flex-1">
+				<div class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+					<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="size-4"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+				</div>
+				<input
+					type="text"
+					value={search}
+					oninput={onSearch}
+					placeholder="Search by title, author, or description..."
+					class="w-full pl-10 pr-4 py-2.5 bg-background border border-input rounded-lg text-sm placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+				/>
+			</div>
+			<select
+				value={searchField}
+				onchange={changeField}
+				class="px-3 py-2.5 bg-background border border-input rounded-lg text-sm text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary flex-shrink-0"
+			>
+				<option value="">All Fields</option>
+				<option value="title">Title</option>
+				<option value="description">Description</option>
+				<option value="author">Author</option>
 			</select>
+			<div class="flex items-center gap-2 flex-shrink-0">
+				<Label for="lang-filter" class="text-sm text-muted-foreground">Language:</Label>
+				<select id="lang-filter" value={langFilter} onchange={changeLang} class="rounded-md border border-input bg-background px-3 py-1.5 text-sm">
+					{#each languages as lang}
+						<option value={lang}>{langLabel(lang)}</option>
+					{/each}
+				</select>
+			</div>
 		</div>
+
+		{#if popularTags.length > 0}
+			<div class="rounded-xl border border-border bg-background p-4">
+				<h3 class="font-medium text-sm mb-3">Popular Tags</h3>
+				<div class="flex flex-wrap gap-2">
+					{#each popularTags as t}
+						<button
+							onclick={() => toggleTag(t.tag)}
+							class="text-xs px-2.5 py-1 rounded-full border transition-colors {activeTag === t.tag
+								? 'bg-primary text-primary-foreground border-primary'
+								: 'bg-muted text-muted-foreground border-border hover:bg-primary/10 hover:text-primary'}"
+						>
+							{t.tag} <span class="opacity-70 ml-1">{t.count}</span>
+						</button>
+					{/each}
+				</div>
+			</div>
+		{/if}
 	</div>
 
 	{#if comics.length === 0}

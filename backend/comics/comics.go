@@ -204,6 +204,7 @@ type ListComicsParams struct {
 	Limit         int    `query:"limit"`
 	Language      string `query:"language"`
 	Search        string `query:"search"`
+	SearchField   string `query:"search_field"`
 	Tag           string `query:"tag"`
 	Sort          string `query:"sort"`
 	ExcludeMature string `query:"exclude_mature"`
@@ -235,6 +236,24 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 		args = append(args, p.Language)
 	} else {
 		where = "WHERE status = $1"
+	}
+
+	if p.Search != "" {
+		pattern := "%" + p.Search + "%"
+		switch p.SearchField {
+		case "title":
+			where += " AND title ILIKE $" + nextIdx(len(args)+1)
+			args = append(args, pattern)
+		case "description":
+			where += " AND description ILIKE $" + nextIdx(len(args)+1)
+			args = append(args, pattern)
+		case "author":
+			where += " AND author ILIKE $" + nextIdx(len(args)+1)
+			args = append(args, pattern)
+		default:
+			where += " AND (title ILIKE $" + nextIdx(len(args)+1) + " OR author ILIKE $" + nextIdx(len(args)+2) + " OR description ILIKE $" + nextIdx(len(args)+3) + ")"
+			args = append(args, pattern, pattern, pattern)
+		}
 	}
 
 	if p.Tag != "" {
@@ -329,6 +348,46 @@ func LanguageFacets(ctx context.Context) (*LanguageFacetsResponse, error) {
 		facets = []LanguageFacet{}
 	}
 	return &LanguageFacetsResponse{Facets: facets}, rows.Err()
+}
+
+// ----- Popular tags -----
+
+type TagCount struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}
+
+type TagCountsResponse struct {
+	Tags []TagCount `json:"tags"`
+}
+
+//encore:api public method=GET path=/tags
+func PopularTags(ctx context.Context) (*TagCountsResponse, error) {
+	rows, err := db.Query(ctx, `
+		SELECT tag, COUNT(*) AS count
+		FROM comics, jsonb_array_elements_text(COALESCE(tags, '[]'::jsonb)) AS tag
+		WHERE status = 'published'
+		GROUP BY tag
+		ORDER BY count DESC, tag ASC
+		LIMIT 20
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tags []TagCount
+	for rows.Next() {
+		var t TagCount
+		if err := rows.Scan(&t.Tag, &t.Count); err != nil {
+			return nil, err
+		}
+		tags = append(tags, t)
+	}
+	if tags == nil {
+		tags = []TagCount{}
+	}
+	return &TagCountsResponse{Tags: tags}, rows.Err()
 }
 
 //encore:api public method=GET path=/comics/:slug
