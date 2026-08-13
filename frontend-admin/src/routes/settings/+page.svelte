@@ -3,10 +3,11 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card/index.js';
 	import { AlertCircle, CheckCircle, AlertTriangle } from 'lucide-svelte';
+	import type { auth } from '$lib/api/encore-client';
 
 	let { data } = $props();
 
-	let settings = $state({
+	let settings = $state<auth.AppSettings>({
 		default_language: 'en', default_content_language: 'en',
 		items_per_page: 12, popular_tags_limit: 20, site_name: 'Comics Galore',
 		maintenance_mode: false, registrations_open: true, max_upload_size_mb: 50,
@@ -20,8 +21,14 @@
 		contact_email: '', hide_mature_default: false, enable_comments: true,
 		forbid_mature_for_free: false,
 		default_meta_description: '',
+		ai_moderation_enabled: false,
+		ai_model: 'gpt-4o-mini',
+		ai_endpoint: 'https://api.openai.com/v1/chat/completions',
+		ai_prompt: 'You moderate user-generated content on a comics platform. Reply with only JSON: {"decision":"approved|rejected|uncertain","confidence":0.0,"reason":"..."}.',
+		ai_auto_approve_threshold: 0.85,
+		ai_auto_reject_threshold: 0.15,
 		// svelte-ignore state_referenced_locally
-		...data.settings
+		...(data.settings ?? {}),
 	});
 
 	let mode = $state<'form' | 'json'>('form');
