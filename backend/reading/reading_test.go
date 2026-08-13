@@ -115,7 +115,7 @@ func TestRecordDownload_IncrementsCounter(t *testing.T) {
 		t.Fatalf("download error: %v", err)
 	}
 
-	fetched, err := comics.GetComic(context.Background(), comic.ID)
+	fetched, err := comics.GetComic(fixtures.UploaderCtx(), comic.Slug)
 	if err != nil {
 		t.Fatalf("get comic error: %v", err)
 	}

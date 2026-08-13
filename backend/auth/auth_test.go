@@ -11,6 +11,10 @@ import (
 	"encore.dev/et"
 )
 
+// testAdminID is a fixed, distinct admin user id used in tests so that admin
+// actions never target the admin itself (ban/suspend guard against self-target).
+const testAdminID = "550e8400-e29b-41d4-a716-446655449999"
+
 func TestRegister_Valid(t *testing.T) {
 	ctx := context.Background()
 	_, _ = et.NewTestDatabase(ctx, "authdb")
@@ -270,11 +274,11 @@ func TestAdminBanUser(t *testing.T) {
 		t.Fatalf("register error: %v", err)
 	}
 
-	adminCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
-		UserID: resp.User.ID,
-		Email:  resp.User.Email,
+	adminCtx := auth.WithContext(ctx, auth.UID(testAdminID), &AuthData{
+		UserID: testAdminID,
+		Email:  "admin@example.com",
 		Role:   "admin",
-		Tier:   resp.User.Tier,
+		Tier:   "platinum",
 	})
 
 	err = AdminBanUser(adminCtx, resp.User.ID, &BanUserParams{Reason: "spam"})
@@ -304,11 +308,11 @@ func TestAdminUnbanUser(t *testing.T) {
 		t.Fatalf("register error: %v", err)
 	}
 
-	adminCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
-		UserID: resp.User.ID,
-		Email:  resp.User.Email,
+	adminCtx := auth.WithContext(ctx, auth.UID(testAdminID), &AuthData{
+		UserID: testAdminID,
+		Email:  "admin@example.com",
 		Role:   "admin",
-		Tier:   resp.User.Tier,
+		Tier:   "platinum",
 	})
 
 	err = AdminBanUser(adminCtx, resp.User.ID, &BanUserParams{Reason: "spam"})
@@ -375,11 +379,11 @@ func TestAdminSuspendUser(t *testing.T) {
 		t.Fatalf("register error: %v", err)
 	}
 
-	adminCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
-		UserID: resp.User.ID,
-		Email:  resp.User.Email,
+	adminCtx := auth.WithContext(ctx, auth.UID(testAdminID), &AuthData{
+		UserID: testAdminID,
+		Email:  "admin@example.com",
 		Role:   "admin",
-		Tier:   resp.User.Tier,
+		Tier:   "platinum",
 	})
 
 	err = AdminSuspendUser(adminCtx, resp.User.ID, &BanUserParams{Reason: "violation"})
@@ -448,11 +452,11 @@ func TestBannedUser_CannotLogin(t *testing.T) {
 		t.Fatalf("register error: %v", err)
 	}
 
-	adminCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
-		UserID: resp.User.ID,
-		Email:  resp.User.Email,
+	adminCtx := auth.WithContext(ctx, auth.UID(testAdminID), &AuthData{
+		UserID: testAdminID,
+		Email:  "admin@example.com",
 		Role:   "admin",
-		Tier:   resp.User.Tier,
+		Tier:   "platinum",
 	})
 
 	err = AdminBanUser(adminCtx, resp.User.ID, &BanUserParams{Reason: "spam"})
@@ -488,11 +492,11 @@ func TestSuspendedUser_CannotLogin(t *testing.T) {
 		t.Fatalf("register error: %v", err)
 	}
 
-	adminCtx := auth.WithContext(ctx, auth.UID(resp.User.ID), &AuthData{
-		UserID: resp.User.ID,
-		Email:  resp.User.Email,
+	adminCtx := auth.WithContext(ctx, auth.UID(testAdminID), &AuthData{
+		UserID: testAdminID,
+		Email:  "admin@example.com",
 		Role:   "admin",
-		Tier:   resp.User.Tier,
+		Tier:   "platinum",
 	})
 
 	err = AdminSuspendUser(adminCtx, resp.User.ID, &BanUserParams{Reason: "violation"})

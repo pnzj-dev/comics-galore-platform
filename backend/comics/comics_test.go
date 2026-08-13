@@ -200,12 +200,12 @@ func TestGetComic_IncrementsViewCount(t *testing.T) {
 	}
 
 	pubCtx := context.Background()
-	fetched, err := GetComic(pubCtx, comic.ID)
+	fetched, err := GetComic(pubCtx, comic.Slug)
 	if err != nil {
 		t.Fatalf("get error: %v", err)
 	}
 
-	fetchedView, err := GetComic(pubCtx, comic.ID)
+	fetchedView, err := GetComic(pubCtx, comic.Slug)
 	if err != nil {
 		t.Fatalf("get again error: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestGetComic_IncrementsViewCount(t *testing.T) {
 	}
 	_ = fetched
 
-	fetched2, err := GetComic(pubCtx, comic.ID)
+	fetched2, err := GetComic(pubCtx, comic.Slug)
 	if err != nil {
 		t.Fatalf("second get error: %v", err)
 	}
@@ -446,7 +446,7 @@ func TestApproveComic_ChangesStatusToPublished(t *testing.T) {
 	}
 
 	pubCtx := context.Background()
-	fetched, err := GetComic(pubCtx, comic.ID)
+	fetched, err := GetComic(pubCtx, comic.Slug)
 	if err != nil {
 		t.Fatalf("get error: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestRejectComic_ChangesStatusToRejected(t *testing.T) {
 		t.Fatalf("reject error: %v", err)
 	}
 
-	fetched, err := GetComic(uploaderCtx, comic.ID)
+	fetched, err := GetComic(uploaderCtx, comic.Slug)
 	if err != nil {
 		t.Fatalf("get error: %v", err)
 	}

@@ -253,19 +253,15 @@ type PollSubResponse struct {
 
 //encore:api auth method=GET path=/billing/subscription/:id/poll
 func PollSubscription(ctx context.Context, id string) (*PollSubResponse, error) {
-	var finished bool
-	err := db.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM payments WHERE subscription_id = $1 AND status = 'finished'
-		)
-	`, id).Scan(&finished)
+	var active bool
+	err := db.QueryRow(ctx, `SELECT active FROM subscriptions WHERE id = $1`, id).Scan(&active)
 	if err != nil {
 		if isNoRows(err) {
 			return nil, &errs.Error{Code: errs.NotFound, Message: "subscription not found"}
 		}
 		return nil, err
 	}
-	return &PollSubResponse{Active: finished}, nil
+	return &PollSubResponse{Active: active}, nil
 }
 
 // ----- Poll Deposit -----

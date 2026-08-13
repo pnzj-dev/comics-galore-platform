@@ -1375,9 +1375,9 @@ func RecycleBin(ctx context.Context, p *RecycleBinParams) (*ListComicsResponse, 
 	}
 
 	query := fmt.Sprintf(`
-		SELECT c.id, c.uploader_id, c.title, c.slug, c.description, c.content_language, c.status,
-			c.cover_key, c.file_key, c.page_keys, c.file_size_bytes, c.min_tier_id, c.age_rating,
-			c.tags, c.rejection_reason, c.published_at, c.view_count, c.download_count, c.like_count, c.fav_count,
+		SELECT c.id, c.uploader_id, c.title, c.author, c.slug, c.description, c.content_language, c.status,
+			c.cover_key, c.file_key, c.page_keys, c.file_size_bytes, c.min_tier_id, c.age_rating, c.is_premium,
+			c.tags, c.rejection_reason, c.published_at, c.view_count, c.download_count, c.like_count, c.fav_count, c.dislike_count,
 			c.created_at, c.updated_at
 		FROM comics c %s ORDER BY %s %s LIMIT $%d OFFSET $%d
 	`, where, sortCol, sortDir, argIdx, argIdx+1)
