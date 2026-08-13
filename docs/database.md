@@ -253,3 +253,43 @@ Global application settings stored as a JSON blob in `app_settings` (key `'defau
 - `default_content_language` (default `en`)
 
 Archive metadata JSON (`comic.json`) should allow a `language` / `content_language` field mapped on ingest.
+
+## Planned LATER tables (not yet implemented)
+
+Summarised from ADRs 0017–0021. All new tables follow the one-database-per-service rule (ADR 0016).
+
+### `social` service (new — `socialdb`)
+```sql
+conversations     id, participant_a UUID, participant_b UUID, created_at, last_message_at
+                  UNIQUE(participant_a, participant_b)  -- normalised ordering
+messages          id, conversation_id FK, sender_id UUID, body TEXT, read_at, created_at
+support_tickets   id, user_id UUID, subject, status (pending|open|resolved|closed),
+                  priority, assigned_to UUID, created_at, resolved_at
+support_messages  id, ticket_id FK, sender_id UUID, is_staff bool, body, created_at
+broadcasts        id, title, body, target (all|tier), tier, sent_at, created_at
+```
+
+### `comics` service (extensions)
+```sql
+ai_decisions      id, target_type (comic|comment), target_id, decision (approved|rejected|uncertain),
+                  confidence numeric, reason, model, created_at
+ai_review_queue   id, target_type, target_id, status (pending|resolved), created_at, resolved_by, resolved_at
+staff_picks       comic_id PK, position int, created_at
+reading_lists     id, user_id UUID, name, is_public bool, created_at
+reading_list_items list_id FK, comic_id FK, position int
+saved_views       id, admin_id UUID, resource, name, filters JSONB, created_at
+job_runs          id, name, status (pending|running|done|failed), attempts, error, payload JSONB,
+                  next_retry_at, created_at
+```
+
+### `billing` service (extensions)
+```sql
+coupons           id, code UNIQUE, percent_off, tier, max_uses, used, expires_at, created_at
+```
+
+### `auth` service (extensions)
+```sql
+-- AI moderation configuration is stored in the AppSettings JSON blob
+-- (ai_moderation_enabled, ai_model, ai_endpoint, ai_api_key secret, ai_prompt, thresholds).
+```
+

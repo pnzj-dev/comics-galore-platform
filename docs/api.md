@@ -166,3 +166,60 @@ Admin settings include `image_serving_mode` and proxy base URL.
 - Public `GET /comics` supports filter `language=` (and facets).
 - `PATCH /users/me` may update `ui_locale`.
 - Admin settings expose `default_ui_locale`, `enabled_ui_locales`, `default_content_language`.
+
+## Planned LATER endpoints (not yet implemented)
+
+Summarised from ADRs 0017–0021. All auth-required unless noted.
+
+### Messaging & Support (`social`) — ADR 0017
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/messages/conversations` | List my conversations | Yes |
+| POST | `/messages/:userId` | Get-or-create conversation | Yes |
+| GET | `/messages/conversation/:id` | List messages (marks read) | Yes |
+| POST | `/messages/conversation/:id` | Send message | Yes |
+| POST | `/messages/conversation/:id/read` | Mark read | Yes |
+| GET (SSE) | `/messages-stream/:userId` | Live new-message stream | Yes |
+| POST | `/support/tickets` | Create ticket | Yes |
+| GET | `/support/tickets` | My tickets | Yes |
+| GET | `/support/tickets/:id` | Ticket thread | Yes |
+| POST | `/support/tickets/:id/reply` | Reply (user) | Yes |
+| GET | `/admin/support/tickets` | All tickets | Moderator/Admin |
+| POST | `/admin/support/tickets/:id/reply` | Staff reply | Moderator/Admin |
+| POST | `/admin/support/tickets/:id/assign` | Assign | Admin |
+| POST | `/admin/support/tickets/:id/resolve` | Resolve | Moderator/Admin |
+| POST | `/admin/broadcasts` | Send announcement | Admin |
+
+### AI Moderation — ADR 0018
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/admin/ai/queue` | Uncertain AI decisions | Moderator/Admin |
+| POST | `/admin/ai/queue/:id/resolve` | Resolve queued item | Moderator/Admin |
+| GET | `/admin/ai/decisions` | AI decision log | Admin |
+
+### Admin Power Tools — ADR 0019
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST | `/admin/users/:id/impersonate` | Start audited impersonation | Admin |
+| GET/POST/DELETE | `/admin/views` | Saved datalist views | Admin |
+| GET | `/admin/export/:resource` | CSV export (users/comics/payments) | Admin |
+| GET | `/admin/jobs` | Background job status | Admin |
+| POST | `/admin/jobs/:id/retry` | Retry failed job | Admin |
+
+### Billing Growth — ADR 0020
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET/POST | `/admin/coupons` | Coupon CRUD | Admin |
+| POST | `/admin/subscriptions/:id/grant` | Manual grant/extend | Admin |
+| POST | `/admin/subscriptions/:id/revoke` | Revoke subscription | Admin |
+| GET | `/admin/payments/past-due` | Failed/past-due list | Admin |
+| POST | `/admin/subscriptions/:id/sync` | Force NowPayments sync | Admin |
+
+### Social Engagement — ADR 0021
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST/GET | `/reading-lists` | Create/list shelves | Yes |
+| GET | `/reading-lists/:id` | Public shelf (if `is_public`) | Opt |
+| POST | `/reading-lists/:id/items` | Add comic to shelf | Yes |
+| DELETE | `/reading-lists/:id/items/:comicId` | Remove from shelf | Yes |
+| GET | `/comics/:id/related` | "People also liked" | No |

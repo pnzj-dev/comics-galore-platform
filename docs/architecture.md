@@ -45,13 +45,15 @@ Comics-Galore/
 │   ├── nowpayments/             # Shared non-service Go package:
 │   │                            #   NowPayments client, types,
 │   │                            #   PaymentsProvider interface, BuildCallbackURL
-│   ├── auth/                    # users, roles, sub_partner_id, sessions
-│   ├── billing/                 # subscriptions, deposits, webhooks
+│   ├── auth/                    # users, roles, sub_partner_id, sessions, email
+│   ├── billing/                 # subscriptions, deposits, webhooks, coupons
 │   ├── tiers/                   # tiers × plans matrix, plan auto-link
-│   ├── comics/                  # comics, moderation, social
+│   ├── comics/                  # comics, moderation, social, AI decisions
 │   ├── reading/                 # progress, downloads
 │   ├── upload/                  # presigned uploads, media
-│   └── fixtures/                # test fixtures
+│   ├── fixtures/                # test fixtures
+│   └── (planned) social/        # messaging, support tickets, broadcasts
+│       (planned) aiprovider/    # shared OpenAI-compatible client package
 ├── frontend-public/             # SvelteKit web app — comics-galore.com
 ├── frontend-admin/              # SvelteKit web app — admin.comics-galore.com
 ├── desktop/                     # Wails v2 application
@@ -182,6 +184,29 @@ Shared Go libraries that are not services (e.g. `backend/nowpayments/`) may be i
 - Provisioned **eagerly** on email verification (`VerifyEmail` → `ensureSubPartnerID`, synchronous, non-fatal on failure).
 - Provisioned **lazily** via `auth.EnsureSubPartnerID` (called by `billing`) at subscription/deposit/balance-check time for users who never verified email.
 - Saved atomically (`UPDATE ... WHERE sub_partner_id IS NULL`) and enforced unique via a partial index.
+
+## Planned LATER architecture (not yet implemented)
+
+The full vision adds these domains. Detailed specs are in the ADRs; this section summarises the service/table/endpoint shape so implementation can start from here.
+
+### Messaging & Support (`social` service) — ADR 0017
+- New `socialdb`. Tables: `conversations`, `messages`, `support_tickets`, `support_messages`, `broadcasts`.
+- Endpoints: messaging (`/messages/*` + SSE), support (`/support/*`, admin `/admin/support/*`), broadcasts (`/admin/broadcasts`).
+- Email fan-out via `auth.NotifySupportReply` / `auth.NotifyBroadcast` (private), honouring preferences.
+
+### AI Moderation (shared `aiprovider` package) — ADR 0018
+- OpenAI-compatible client package; config in `AppSettings` (`ai_moderation_enabled`, `ai_model`, `ai_endpoint`, `ai_api_key`, `ai_prompt`, thresholds).
+- Encore workers subscribe to `comic-created` / `comment-created` Pub/Sub topics, write `ai_decisions` and `ai_review_queue` (comics service), auto-approve/reject by threshold, else queue for a human.
+
+### Admin Power Tools — ADR 0019
+- Audited impersonation via a scoped `impersonated_as` JWT claim (no session table).
+- `saved_views`, `job_runs`, `staff_picks` tables; CSV export; extended storage stats. All in existing services.
+
+### Billing Growth — ADR 0020
+- `coupons` table + admin CRUD; manual grant/revoke; past-due list; force-sync; `revenue_by_tier_interval` in billing stats. Second provider = new adapter behind `PaymentsProvider`.
+
+### Social Engagement — ADR 0021
+- `reading_lists` / `reading_list_items` (public shelves) in comics; `GET /comics/:id/related` (co-occurrence, no new table).
 
 ## Upload & Creation Flow (identical on web and desktop)
 
