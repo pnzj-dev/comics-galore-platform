@@ -279,6 +279,16 @@ Admin setting `image_serving_mode` (default: `direct`):
 - Backend stores `comics.content_language` and `users.ui_locale`; list endpoints support language filters.
 - Enabled locales are configurable in admin settings.
 
+### v1.1 i18n foundation
+
+Located in `frontend-public/src/lib/i18n/`:
+- `locales.ts` (registry: `Locale`, `ENABLED_LOCALES`, `PRIORITY_LOCALES`, `LOCALE_META`)
+- `messages/en.ts` (English catalog — source of truth for `MessageKey`)
+- `detect.ts` (pure `detectLocale()`: user → Accept-Language → `en`)
+- `index.svelte.ts` (runes store: `state.locale`, `t(key, params)`, `initializeLocale`, `setLocale`)
+
+Locale is resolved server-side in `+layout.server.ts` (cookie / Accept-Language), passed through `data.locale`, and applied via `<html lang>` + `initializeLocale()`. Components translate with `{t('key')}`. English ships in v1.1; new locale packs add a `messages/<code>.ts` catalog + `registerCatalog()`.
+
 ## Payments: NowPayments (v1)
 
 ### Payment Flow (all screens render in a modal, closable via X button or Esc only)

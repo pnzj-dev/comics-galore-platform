@@ -30,6 +30,28 @@ Public home/detail/reader, uploader manual create, admin pending queue and basic
 - Respect `users.ui_locale` and enabled locales from settings.
 - Comic forms require content language.
 
+### i18n foundation (Svelte 5 runes)
+
+Location: `frontend-public/src/lib/i18n/` (foundation shipped in v1.1; English only until new packs land).
+
+- `locales.ts` — locale registry: `Locale` type, `DEFAULT_LOCALE`, `ENABLED_LOCALES` (v1.1 = `['en']`), `PRIORITY_LOCALES`, `LOCALE_META`.
+- `messages/en.ts` — English catalog. This file is the source of truth for keys (`MessageKey` is derived from it).
+- `detect.ts` — pure `detectLocale(acceptLanguage, userLocale)` → resolves user → Accept-Language → `en`. Server-safe (no runes).
+- `index.svelte.ts` — reactive store: `state.locale` is a runes `$state`; `t(key, params?)` interpolates `{param}` and falls back to English then the raw key. `initializeLocale()`/`setLocale()` for wiring.
+- `index.ts` — barrel re-export so `$lib/i18n` resolves.
+
+**Wiring (required for every new surface):**
+1. `+layout.server.ts` detects locale from cookie/Accept-Language and returns it as `locale` in `data`.
+2. `+layout.svelte` calls `initializeLocale(data.locale)` (initial-value-only — suppress `state_referenced_locally`) and sets `<svelte:head><html lang={data.locale}></html></svelte:head>`.
+3. Components import `{ t }` from `$lib/i18n` and use `{t('key')}` instead of hard-coded English (except bootstrap).
+
+**Adding a new locale pack:** add the locale to `ENABLED_LOCALES`, create `messages/<code>.ts` mirroring `en` keys, and `registerCatalog('<code>', messages)`. `t()` picks it up automatically via the fallback chain.
+
+**Rules:**
+- Never hard-code user-facing English in components; add a catalog key.
+- UI locale (`ui_locale`) is distinct from comic `content_language` (ADR 0015).
+- `t()` is reactive — components re-render on `setLocale()` without manual store subscriptions.
+
 ## Patterns
 
 - Resolve image URLs via media helper (mode `direct` in v1).

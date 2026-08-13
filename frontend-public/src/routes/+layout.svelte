@@ -7,12 +7,17 @@
 	import UserProfileModal from '$lib/components/UserProfileModal.svelte';
 	import AppSettingsModal from '$lib/components/AppSettingsModal.svelte';
 	import LogoutConfirmationModal from '$lib/components/LogoutConfirmationModal.svelte';
+	import { initializeLocale, t } from '$lib/i18n';
 	import { Settings, LogOut } from 'lucide-svelte';
 
 	let { data, children } = $props();
 	let profileOpen = $state(false);
 	let settingsOpen = $state(false);
 	let logoutOpen = $state(false);
+
+	// Intentionally initial-value only — locale is resolved once server-side.
+	// svelte-ignore state_referenced_locally
+	initializeLocale(data.locale);
 
 	onMount(() => {
 		if (data.user) {
@@ -25,21 +30,25 @@
 	const authed = $derived(!!(data.user) || $isAuthenticated);
 </script>
 
+<svelte:head>
+	<html lang={data.locale}></html>
+</svelte:head>
+
 <nav class="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
 	<div class="flex h-14 items-center justify-between px-4 max-w-7xl mx-auto">
 		<div class="flex items-center gap-4">
 			<a href="/" class="font-semibold text-lg">Comics Galore</a>
-			<a href="/comics" class="text-sm text-muted-foreground hover:text-foreground">Browse</a>
-			<a href="/pricing" class="text-sm text-muted-foreground hover:text-foreground">Pricing</a>
+			<a href="/comics" class="text-sm text-muted-foreground hover:text-foreground">{t('nav.browse')}</a>
+			<a href="/pricing" class="text-sm text-muted-foreground hover:text-foreground">{t('nav.pricing')}</a>
 			{#if authed && user}
 				{#if user.role === 'uploader' || user.role === 'admin'}
-					<a href="/upload" class="text-sm text-muted-foreground hover:text-foreground">Upload</a>
+					<a href="/upload" class="text-sm text-muted-foreground hover:text-foreground">{t('nav.upload')}</a>
 				{/if}
 			{/if}
 		</div>
 		<div class="flex items-center gap-1">
 			{#if authed && user}
-				<button onclick={() => settingsOpen = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Settings">
+				<button onclick={() => settingsOpen = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label={t('nav.settings')}>
 					<Settings class="size-4" />
 				</button>
 			{/if}
@@ -52,12 +61,12 @@
 					<span class="text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 capitalize">{user.tier}</span>
 				{/if}
 				<span class="text-xs rounded-full bg-primary/10 text-primary px-2 py-0.5">{user.role}</span>
-				<button onclick={() => logoutOpen = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label="Logout">
+				<button onclick={() => logoutOpen = true} class="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" aria-label={t('nav.logout')}>
 					<LogOut class="size-4" />
 				</button>
 			{:else}
-				<Button variant="ghost" size="sm" href="/login">Login</Button>
-				<Button size="sm" href="/register">Register</Button>
+				<Button variant="ghost" size="sm" href="/login">{t('nav.login')}</Button>
+				<Button size="sm" href="/register">{t('nav.register')}</Button>
 			{/if}
 		</div>
 	</div>
@@ -68,9 +77,9 @@
 </main>
 
 <footer class="border-t py-4 text-center text-xs text-muted-foreground">
-	<a href="/legal/terms" class="hover:underline mx-2">Terms</a>
-	<a href="/legal/privacy" class="hover:underline mx-2">Privacy</a>
-	<a href="/legal/dmca" class="hover:underline mx-2">DMCA</a>
+	<a href="/legal/terms" class="hover:underline mx-2">{t('footer.terms')}</a>
+	<a href="/legal/privacy" class="hover:underline mx-2">{t('footer.privacy')}</a>
+	<a href="/legal/dmca" class="hover:underline mx-2">{t('footer.dmca')}</a>
 </footer>
 
 <UserProfileModal open={profileOpen} onClose={() => profileOpen = false} />
