@@ -18,9 +18,11 @@
 				return { icon: Circle, cls: 'bg-slate-200/60 text-slate-500 dark:text-slate-400', label: 'Free' };
 		}
 	});
+
+	const Icon = $derived(config.icon);
 </script>
 
 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium {config.cls}">
-	<svelte:component this={config.icon} class="size-3" />
+	<Icon class="size-3" />
 	{config.label}
 </span>

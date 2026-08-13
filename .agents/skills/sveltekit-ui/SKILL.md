@@ -51,6 +51,29 @@ When initializing mutable state from a prop, the value is captured once. If the 
 </script>
 ```
 
+**`<svelte:component>` is deprecated in runes mode**
+Components are dynamic by default in Svelte 5. Bind the component to a capitalized variable and render it directly.
+```svelte
+<script>
+  const config = $derived.by(() => ({ icon: Shield })); // component reference
+  const Icon = $derived(config.icon);                    // capitalize for JSX-style rendering
+</script>
+
+✗  <svelte:component this={config.icon} class="size-3" />
+✓  <Icon class="size-3" />
+```
+
+**Lowercase tags are HTML elements, not components**
+A lowercase `<icon>` is parsed as an HTML element (triggering the self-closing warning) — it never renders a component prop. Capitalize the variable (rename in destructuring) so Svelte treats it as a component.
+```svelte
+<script>
+  let { icon: Icon }: { icon?: Component } = $props();   // rename to capitalized
+</script>
+
+✗  <icon class="size-4" />          // parsed as <icon> HTML element
+✓  {#if Icon}<Icon class="size-4" />{/if}
+```
+
 **`<svelte:window>` cannot be inside `{#if}` blocks**
 Move the window listener outside the conditional and check the flag in the handler:
 ```svelte

@@ -4,7 +4,7 @@
 	let {
 		title,
 		value,
-		icon,
+		icon: Icon,
 		hint,
 		accent = false,
 	}: {
@@ -19,8 +19,8 @@
 <div class="rounded-xl border border-border bg-background p-4 flex flex-col gap-1 {accent ? 'border-primary/30 bg-primary/5' : ''}">
 	<div class="flex items-center justify-between">
 		<span class="text-xs font-medium text-muted-foreground">{title}</span>
-		{#if icon}
-			<icon class="size-4 text-muted-foreground" />
+		{#if Icon}
+			<Icon class="size-4 text-muted-foreground" />
 		{/if}
 	</div>
 	<span class="text-2xl font-bold">{value}</span>
