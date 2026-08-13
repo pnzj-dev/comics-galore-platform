@@ -144,6 +144,10 @@ The `/comics` browse page has a **full-width search + filter bar**:
 - A **Popular Tags** pill grid below it (tag + count, toggleable, active pill highlighted), sourced from `GET /tags`.
 - Search, field, tag, and language are all `goto(...)` query params (debounced for search), preserving pagination.
 
+### Age gate (mature content)
+
+Mature / explicit comics show an **age-gate modal** (`AgeGate.svelte`) the first time the user tries to **Start Reading** or **Download**. Confirmation is persisted per-comic in `sessionStorage` (`age_gate_{comicId}`, via `$lib/ageGate.ts`), so it does not reappear for either action during the same session. "Go back" cancels the action and stays on the comic page.
+
 ### Pricing & Checkout Flow
 
 **Route: `/pricing`** — informational only, shows all plans inline with interval selector and feature diffs. No selection buttons in page mode. Authenticated users see a "Subscribe" button that opens the checkout modal.

@@ -1,43 +1,22 @@
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import AgeGate from '$lib/components/AgeGate.svelte';
 
-function mockSessionStorage() {
-	const store: Record<string, string> = {};
-	return {
-		getItem: vi.fn((key: string) => store[key] ?? null),
-		setItem: vi.fn((key: string, value: string) => {
-			store[key] = value;
-		}),
-		removeItem: vi.fn((key: string) => {
-			delete store[key];
-		}),
-	};
-}
-
-const mockGoto = vi.fn();
-
-vi.mock('$app/navigation', () => ({
-	goto: (url: string) => mockGoto(url),
-}));
-
-const defaultProps = {
-	comicId: 'comic-1',
+const baseProps = {
+	open: true,
 	title: 'Mature Comic',
 	author: 'Test Author',
 	ageRating: 'mature',
+	onConfirm: vi.fn(),
+	onClose: vi.fn(),
 };
-
-let sessionStorageMock: ReturnType<typeof mockSessionStorage>;
 
 beforeEach(() => {
 	vi.clearAllMocks();
-	sessionStorageMock = mockSessionStorage();
-	vi.stubGlobal('sessionStorage', sessionStorageMock);
 });
 
 describe('AgeGate', () => {
-	it('renders modal when no session storage key exists', () => {
-		render(AgeGate, defaultProps);
+	it('renders modal when open is true', () => {
+		render(AgeGate, baseProps);
 
 		expect(screen.getByText('Age-Restricted Content')).toBeVisible();
 		expect(screen.getByText('Mature Comic')).toBeVisible();
@@ -45,30 +24,25 @@ describe('AgeGate', () => {
 		expect(screen.getByText('mature')).toBeVisible();
 	});
 
-	it('hides modal when session storage key is already present', () => {
-		sessionStorageMock.getItem.mockReturnValueOnce('1');
-		sessionStorageMock.getItem.mockReturnValueOnce('1');
-
-		render(AgeGate, defaultProps);
+	it('does not render when open is false', () => {
+		render(AgeGate, { ...baseProps, open: false });
 
 		expect(screen.queryByText('Age-Restricted Content')).not.toBeInTheDocument();
 	});
 
-	it('confirm button sets session storage and hides the gate', async () => {
-		render(AgeGate, defaultProps);
-
-		expect(screen.getByText('Age-Restricted Content')).toBeVisible();
+	it('calls onConfirm when Continue is clicked', async () => {
+		render(AgeGate, baseProps);
 
 		await fireEvent.click(screen.getByText("I'm 18+ years old, Continue"));
 
-		expect(sessionStorageMock.setItem).toHaveBeenCalledWith('age_gate_comic-1', '1');
+		expect(baseProps.onConfirm).toHaveBeenCalledTimes(1);
 	});
 
-	it('Go back button navigates to home page', async () => {
-		render(AgeGate, defaultProps);
+	it('calls onClose when Go back is clicked', async () => {
+		render(AgeGate, baseProps);
 
 		await fireEvent.click(screen.getByText('Go back'));
 
-		expect(mockGoto).toHaveBeenCalledWith('/');
+		expect(baseProps.onClose).toHaveBeenCalledTimes(1);
 	});
 });

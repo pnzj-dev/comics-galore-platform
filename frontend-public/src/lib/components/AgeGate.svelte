@@ -1,26 +1,19 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
-	import { goto } from '$app/navigation';
 
-	let { comicId, title, author, ageRating }: { comicId: string; title: string; author: string; ageRating: string } = $props();
-
-	let confirmed = $state(false);
-
-	let sessionKey = $derived(`age_gate_${comicId}`);
-
-	function handleContinue() {
-		sessionStorage.setItem(sessionKey, '1');
-		confirmed = true;
+	interface Props {
+		open: boolean;
+		title: string;
+		author: string;
+		ageRating: string;
+		onConfirm: () => void;
+		onClose: () => void;
 	}
 
-	function handleGoBack() {
-		goto('/');
-	}
-
-	let visible = $derived(sessionStorage.getItem(sessionKey) !== '1' && !confirmed);
+	let { open, title, author, ageRating, onConfirm, onClose }: Props = $props();
 </script>
 
-{#if visible}
+{#if open}
 	<div class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
 		<div class="bg-background rounded-2xl shadow-xl w-full max-w-md p-6 text-center space-y-5">
 			<div class="space-y-2">
@@ -39,10 +32,10 @@
 			</div>
 
 			<div class="space-y-2">
-				<Button class="w-full" onclick={handleContinue}>
+				<Button class="w-full" onclick={onConfirm}>
 					I'm 18+ years old, Continue
 				</Button>
-				<Button variant="outline" class="w-full" onclick={handleGoBack}>
+				<Button variant="outline" class="w-full" onclick={onClose}>
 					Go back
 				</Button>
 			</div>

@@ -14,6 +14,7 @@
 	import CommentForm from '$lib/components/CommentForm.svelte';
 	import { currentUser } from '$lib/stores/auth';
 	import { createCommentStream } from '$lib/stores/live-comments';
+	import { isAgeConfirmed, confirmAge } from '$lib/ageGate';
 	import { Eye, Download, BookOpen, Globe, Clock, ThumbsDown, BookOpenCheck, Bell, BellOff } from 'lucide-svelte';
 
 	let { data } = $props();
@@ -55,7 +56,7 @@
 	const lightboxImages = $derived(coverSrc ? [coverSrc, ...pageImages] : pageImages);
 	const previewSlots = $derived(pageImages.slice(0, 4));
 	const hasMorePreviews = $derived(pageImages.length > 4);
-	const showAgeGate = $derived(comic?.age_rating === 'mature' || comic?.age_rating === 'explicit');
+	const isMature = $derived(comic?.age_rating === 'mature' || comic?.age_rating === 'explicit');
 	const authorName = $derived(comic?.author || 'Unknown');
 
 	function compactNum(n: number): string {
@@ -134,7 +135,7 @@
 		if (p === 1) relatedLoading = true;
 		const timeout = setTimeout(() => { relatedLoading = false; }, 5000);
 		try {
-			const relRes = await encore.comics.ListComics({ Limit: 4, Page: p, Language: '', Search: '', Tag: '', ExcludeMature: '', Sort: '' });
+			const relRes = await encore.comics.ListComics({ Limit: 4, Page: p, Language: '', Search: '', SearchField: '', Tag: '', ExcludeMature: '', Sort: '' });
 			clearTimeout(timeout);
 			const filtered = relRes.comics.filter((c) => c.id !== comic.id);
 			if (p === 1) {
@@ -217,6 +218,41 @@
 			}
 		} catch {}
 	}
+
+	let ageGateOpen = $state(false);
+	let agePendingAction = $state<'read' | 'download' | null>(null);
+
+	function startReading() {
+		if (isMature && !isAgeConfirmed(comic.id)) {
+			agePendingAction = 'read';
+			ageGateOpen = true;
+		} else {
+			reading = true;
+		}
+	}
+
+	function startDownload() {
+		if (isMature && !isAgeConfirmed(comic.id)) {
+			agePendingAction = 'download';
+			ageGateOpen = true;
+		} else {
+			handleDownload();
+		}
+	}
+
+	function onAgeConfirm() {
+		confirmAge(comic.id);
+		ageGateOpen = false;
+		const action = agePendingAction;
+		agePendingAction = null;
+		if (action === 'read') reading = true;
+		else if (action === 'download') handleDownload();
+	}
+
+	function onAgeClose() {
+		ageGateOpen = false;
+		agePendingAction = null;
+	}
 </script>
 
 <svelte:head>
@@ -233,8 +269,15 @@
 
 <Lightbox images={lightboxImages} open={lightboxOpen} startIndex={lightboxIndex} onClose={() => lightboxOpen = false} />
 
-{#if comic && showAgeGate}
-	<AgeGate comicId={comic.id} title={comic.title} author={authorName} ageRating={comic.age_rating} />
+{#if comic}
+	<AgeGate
+		open={ageGateOpen}
+		title={comic.title}
+		author={authorName}
+		ageRating={comic.age_rating}
+		onConfirm={onAgeConfirm}
+		onClose={onAgeClose}
+	/>
 {/if}
 
 {#if loading}
@@ -376,10 +419,10 @@
 
 				<div class="flex flex-col gap-2 mt-4">
 					{#if comic.status === 'published'}
-						<Button size="lg" class="w-full bg-emerald-600 hover:bg-emerald-700" onclick={() => reading = true}>Start Reading</Button>
+						<Button size="lg" class="w-full bg-emerald-600 hover:bg-emerald-700" onclick={startReading}>Start Reading</Button>
 					{/if}
 					{#if user}
-						<Button size="lg" variant="outline" class="w-full" onclick={handleDownload}>Download</Button>
+						<Button size="lg" variant="outline" class="w-full" onclick={startDownload}>Download</Button>
 					{:else}
 						<Button size="lg" variant="outline" class="w-full" href="/login">Sign in</Button>
 					{/if}
