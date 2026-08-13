@@ -64,6 +64,8 @@
 | GET | `/tags` | Popular tag counts for published comics (limit 20) | No |
 | GET | `/favorites` | Paginated list of the current user's favorited comics | Yes |
 
+> **Mature content policy** — when the admin setting `forbid_mature_for_free` is enabled, free-tier and anonymous callers never see mature/explicit comics: all list endpoints filter them out, `GetComic` returns `mature_locked=true` with `page_urls` withheld (cover kept for a blurred teaser), and `RecordDownload` rejects the download. Staff (admin/moderator) and paid tiers are exempt. The policy is exposed to other services via the private `GET /auth/content-policy` endpoint.
+
 > **Search & filter** — `GET /comics` accepts `search` + `search_field` (`title` | `description` | `author`, empty = all fields) for full-text filtering, and `tag` for exact tag match. Combined with `language`, `sort`, `exclude_mature`, `page`, `limit`.
 
 > **Pagination convention** — every list endpoint that returns a grid uses `page` + `limit` query params and returns a `total` count. `limit` defaults to 20 and is capped at 50. Public grids (`/comics`, `/series/:id/comics`, `/tags/:tag`, `/reading-lists/:id`) and authenticated grids (`/favorites`) all follow this convention. The frontend renders them via the shared `Pagination.svelte` component.

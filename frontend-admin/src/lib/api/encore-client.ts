@@ -151,6 +151,7 @@ export namespace auth {
         "boost_3_price": number
         "contact_email": string
         "hide_mature_default": boolean
+        "forbid_mature_for_free": boolean
         "enable_comments": boolean
         "default_meta_description": string
         /**
@@ -934,6 +935,12 @@ export namespace comics {
         "cover_url": string
 
         "page_urls": string[]
+        /**
+         * MatureLocked marks a comic whose pages are withheld from the caller
+         * (free users when `forbid_mature_for_free` is enabled). The cover stays
+         * present so the frontend can render a blurred teaser.
+         */
+        "mature_locked": boolean
     }
 
     export interface ComicsStats {

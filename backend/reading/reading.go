@@ -170,6 +170,23 @@ type DownloadResponse struct {
 func RecordDownload(ctx context.Context, comicId string) (*DownloadResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
+	// Mature content is inaccessible to free/anonymous users when the policy
+	// forbids it (staff and paid tiers are exempt).
+	if (ad.Tier == "" || ad.Tier == "free") && ad.Role != "admin" && ad.Role != "moderator" {
+		mat, err := comics.GetComicMaturity(ctx, comicId)
+		if err == nil && (mat.AgeRating == "mature" || mat.AgeRating == "explicit") {
+			policy, perr := myauth.GetContentPolicy(ctx)
+			if perr == nil && policy.ForbidMatureForFree {
+				return &DownloadResponse{
+					Allowed: false,
+					Used:    0,
+					Limit:   0,
+					Message: "mature content requires a paid subscription",
+				}, nil
+			}
+		}
+	}
+
 	limit := quotaLimit(ad.Tier)
 	used, err := countDownloadsThisMonth(ctx, ad.UserID)
 	if err != nil {

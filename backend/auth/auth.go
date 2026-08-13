@@ -520,6 +520,26 @@ func GetAIModerationConfig(ctx context.Context) (*AIModerationConfig, error) {
 	return cfg, nil
 }
 
+// ContentPolicy exposes the global content-access policy to other services
+// (which may not read the auth database directly — ADR 0016).
+type ContentPolicy struct {
+	ForbidMatureForFree bool `json:"forbid_mature_for_free"`
+}
+
+//encore:api private method=GET path=/auth/content-policy
+func GetContentPolicy(ctx context.Context) (*ContentPolicy, error) {
+	var raw []byte
+	err := db.QueryRow(ctx, `SELECT value FROM app_settings WHERE key = 'defaults'`).Scan(&raw)
+	if err != nil || len(raw) == 0 {
+		return &ContentPolicy{}, nil
+	}
+	var settings AppSettings
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		return &ContentPolicy{}, nil
+	}
+	return &ContentPolicy{ForbidMatureForFree: settings.ForbidMatureForFree}, nil
+}
+
 //encore:api auth method=POST path=/auth/resend-verification
 func ResendVerification(ctx context.Context) error {
 	data := auth.Data().(*AuthData)

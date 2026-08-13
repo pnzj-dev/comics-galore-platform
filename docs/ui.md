@@ -148,6 +148,10 @@ The `/comics` browse page has a **full-width search + filter bar**:
 
 Mature / explicit comics show an **age-gate modal** (`AgeGate.svelte`) the first time the user tries to **Start Reading** or **Download**. Confirmation is persisted per-comic in `sessionStorage` (`age_gate_{comicId}`, via `$lib/ageGate.ts`), so it does not reappear for either action during the same session. "Go back" cancels the action and stays on the comic page.
 
+### Forbid mature for free users (admin setting)
+
+When the admin setting `forbid_mature_for_free` is enabled, free-tier and anonymous users cannot access mature/explicit comics at all — the backend filters them from every list (`ListComics`, `SeriesComics`, `RelatedComics`, `GetReadingList`, `ListFavorites`, `BatchGetComics`, `ListStaffPicks`) and withholds `page_urls` on `GetComic` (setting `mature_locked=true`). The detail page renders a **blurred cover** with a "mature content" notice and an upgrade CTA; Start Reading / Download and the age gate are suppressed for these users. Paid tiers and staff are unaffected.
+
 ### Pricing & Checkout Flow
 
 **Route: `/pricing`** — informational only, shows all plans inline with interval selector and feature diffs. No selection buttons in page mode. Authenticated users see a "Subscribe" button that opens the checkout modal.

@@ -519,3 +519,39 @@ func TestSuspendedUser_CannotLogin(t *testing.T) {
 		t.Errorf("expected PermissionDenied, got %v", e.Code)
 	}
 }
+
+func TestGetContentPolicy_ForbidMatureForFree(t *testing.T) {
+	ctx := context.Background()
+	_, _ = et.NewTestDatabase(ctx, "authdb")
+
+	adminCtx := auth.WithContext(ctx, auth.UID(testAdminID), &AuthData{
+		UserID: testAdminID, Email: "admin@example.com", Role: "admin", Tier: "platinum",
+	})
+
+	// Default policy: not forbidden.
+	p, err := GetContentPolicy(ctx)
+	if err != nil {
+		t.Fatalf("policy error: %v", err)
+	}
+	if p.ForbidMatureForFree {
+		t.Error("expected forbid_mature_for_free=false by default")
+	}
+
+	// Enable it.
+	settings, err := GetAdminSettings(adminCtx)
+	if err != nil {
+		t.Fatalf("get settings error: %v", err)
+	}
+	settings.ForbidMatureForFree = true
+	if _, err := SaveAdminSettings(adminCtx, settings); err != nil {
+		t.Fatalf("save settings error: %v", err)
+	}
+
+	p2, err := GetContentPolicy(ctx)
+	if err != nil {
+		t.Fatalf("policy error: %v", err)
+	}
+	if !p2.ForbidMatureForFree {
+		t.Error("expected forbid_mature_for_free=true after save")
+	}
+}

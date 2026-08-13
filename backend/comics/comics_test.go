@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	myauth "comics-galore/backend/auth"
 	"comics-galore/backend/fixtures"
 
 	"encore.dev/beta/errs"
@@ -1321,5 +1322,95 @@ func TestPopularTags_Counts(t *testing.T) {
 	}
 	if counts["sci-fi"] < 1 || counts["action"] < 1 {
 		t.Errorf("expected sci-fi and action tags present, got %v", counts)
+	}
+}
+
+func TestGetComic_MatureLockedForFree(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	// Enable forbid-mature-for-free globally via the auth service.
+	admSettings, err := myauth.GetAdminSettings(adminCtx)
+	if err != nil {
+		t.Fatalf("get settings error: %v", err)
+	}
+	admSettings.ForbidMatureForFree = true
+	if _, err := myauth.SaveAdminSettings(adminCtx, admSettings); err != nil {
+		t.Fatalf("save settings error: %v", err)
+	}
+
+	comic, err := CreateComic(uploaderCtx, &CreateComicParams{
+		Title:     "Mature Locked",
+		CoverKey:  "covers/mature.jpg",
+		FileKey:   "files/mature.cbz",
+		AgeRating: "mature",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	_ = ApproveComic(moderatorCtx, comic.ID)
+
+	// Anonymous (free-equivalent) fetch → locked, pages withheld, cover kept.
+	fetched, err := GetComic(context.Background(), comic.Slug)
+	if err != nil {
+		t.Fatalf("get error: %v", err)
+	}
+	if !fetched.MatureLocked {
+		t.Error("expected mature_locked=true for anonymous")
+	}
+	if len(fetched.PageURLs) != 0 {
+		t.Errorf("expected no page_urls, got %d", len(fetched.PageURLs))
+	}
+	if fetched.CoverURL == "" {
+		t.Error("expected cover_url retained for blurred teaser")
+	}
+
+	// Staff still sees pages.
+	staff, err := GetComic(moderatorCtx, comic.Slug)
+	if err != nil {
+		t.Fatalf("staff get error: %v", err)
+	}
+	if staff.MatureLocked {
+		t.Error("expected staff not locked")
+	}
+
+	// Anonymous list excludes the mature comic.
+	list, _ := ListComics(context.Background(), &ListComicsParams{Limit: 50})
+	for _, c := range list.Comics {
+		if c.ID == comic.ID {
+			t.Error("expected mature comic excluded from anonymous list")
+		}
+	}
+}
+
+func TestGetComic_MatureNotLockedWhenPolicyOff(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	// Ensure the policy is off (authdb state may persist across tests).
+	admSettings, err := myauth.GetAdminSettings(adminCtx)
+	if err != nil {
+		t.Fatalf("get settings error: %v", err)
+	}
+	admSettings.ForbidMatureForFree = false
+	if _, err := myauth.SaveAdminSettings(adminCtx, admSettings); err != nil {
+		t.Fatalf("save settings error: %v", err)
+	}
+
+	comic, err := CreateComic(uploaderCtx, &CreateComicParams{
+		Title:     "Mature Allowed",
+		CoverKey:  "covers/allowed.jpg",
+		FileKey:   "files/allowed.cbz",
+		AgeRating: "mature",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	_ = ApproveComic(moderatorCtx, comic.ID)
+
+	fetched, err := GetComic(context.Background(), comic.Slug)
+	if err != nil {
+		t.Fatalf("get error: %v", err)
+	}
+	if fetched.MatureLocked {
+		t.Error("expected mature_locked=false when policy off")
 	}
 }

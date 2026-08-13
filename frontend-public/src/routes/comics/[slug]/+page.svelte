@@ -57,6 +57,7 @@
 	const previewSlots = $derived(pageImages.slice(0, 4));
 	const hasMorePreviews = $derived(pageImages.length > 4);
 	const isMature = $derived(comic?.age_rating === 'mature' || comic?.age_rating === 'explicit');
+	const matureLocked = $derived(!!comic?.mature_locked);
 	const authorName = $derived(comic?.author || 'Unknown');
 
 	function compactNum(n: number): string {
@@ -223,6 +224,7 @@
 	let agePendingAction = $state<'read' | 'download' | null>(null);
 
 	function startReading() {
+		if (matureLocked) return;
 		if (isMature && !isAgeConfirmed(comic.id)) {
 			agePendingAction = 'read';
 			ageGateOpen = true;
@@ -232,6 +234,7 @@
 	}
 
 	function startDownload() {
+		if (matureLocked) return;
 		if (isMature && !isAgeConfirmed(comic.id)) {
 			agePendingAction = 'download';
 			ageGateOpen = true;
@@ -309,15 +312,22 @@
 			<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 			<div class="space-y-3" onkeydown={coverKeydown} tabindex="0" role="region" aria-label="Image carousel">
 				<div class="aspect-3/4 rounded-xl bg-muted overflow-hidden relative group/cover">
-					<button onclick={() => openLightbox(coverIndex)} class="w-full h-full p-0 border-0 bg-transparent cursor-zoom-in" aria-label="Open current image in lightbox">
+					<button onclick={() => !matureLocked && openLightbox(coverIndex)} class="w-full h-full p-0 border-0 bg-transparent {matureLocked ? 'cursor-default' : 'cursor-zoom-in'}" aria-label="Open current image in lightbox">
 						<img
 							src={lightboxImages[coverIndex]}
 							alt={coverIndex === 0 ? comic.title : `Page ${coverIndex}`}
-							class="w-full h-full object-cover"
+							class="w-full h-full object-cover {matureLocked ? 'blur-xl scale-110' : ''}"
 							loading="eager"
-							onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (document.querySelector('.cover-fallback') as HTMLElement).style.display = 'flex'; }}
+							onerror={(e) => { (e.target as HTMLInputElement).style.display = 'none'; (document.querySelector('.cover-fallback') as HTMLElement).style.display = 'flex'; }}
 						/>
 					</button>
+					{#if matureLocked}
+						<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 text-white p-4 text-center">
+							<span class="text-xs font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-red-600">{comic.age_rating?.replace('_', ' ')}</span>
+							<span class="text-sm font-semibold">Mature content</span>
+							<span class="text-xs text-white/80">Upgrade to a paid tier to read this comic.</span>
+						</div>
+					{/if}
 					<div class="cover-fallback w-full h-full items-center justify-center text-muted-foreground hidden absolute inset-0">
 						<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>
 					</div>
@@ -418,13 +428,17 @@
 				</div>
 
 				<div class="flex flex-col gap-2 mt-4">
-					{#if comic.status === 'published'}
-						<Button size="lg" class="w-full bg-emerald-600 hover:bg-emerald-700" onclick={startReading}>Start Reading</Button>
-					{/if}
-					{#if user}
-						<Button size="lg" variant="outline" class="w-full" onclick={startDownload}>Download</Button>
+					{#if matureLocked}
+						<Button size="lg" class="w-full" href="/pricing">Upgrade to read mature content</Button>
 					{:else}
-						<Button size="lg" variant="outline" class="w-full" href="/login">Sign in</Button>
+						{#if comic.status === 'published'}
+							<Button size="lg" class="w-full bg-emerald-600 hover:bg-emerald-700" onclick={startReading}>Start Reading</Button>
+						{/if}
+						{#if user}
+							<Button size="lg" variant="outline" class="w-full" onclick={startDownload}>Download</Button>
+						{:else}
+							<Button size="lg" variant="outline" class="w-full" href="/login">Sign in</Button>
+						{/if}
 					{/if}
 				</div>
 

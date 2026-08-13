@@ -18,6 +18,7 @@
 		boost_2_gb: 10, boost_2_price: 8,
 		boost_3_gb: 20, boost_3_price: 12,
 		contact_email: '', hide_mature_default: false, enable_comments: true,
+		forbid_mature_for_free: false,
 		default_meta_description: '',
 		// svelte-ignore state_referenced_locally
 		...data.settings
@@ -200,6 +201,7 @@
 						</div>
 						<div class="flex gap-4">
 							<label class="flex items-center gap-1.5 text-xs"><input type="checkbox" bind:checked={settings.hide_mature_default} class="rounded" /> Hide Mature</label>
+							<label class="flex items-center gap-1.5 text-xs"><input type="checkbox" bind:checked={settings.forbid_mature_for_free} class="rounded" /> Forbid mature for free users</label>
 							<label class="flex items-center gap-1.5 text-xs"><input type="checkbox" bind:checked={settings.enable_comments} class="rounded" /> Comments</label>
 						</div>
 					</CardContent>

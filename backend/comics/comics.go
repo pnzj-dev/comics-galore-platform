@@ -96,6 +96,11 @@ type Comic struct {
 	// Resolved URLs (populated server-side, not from DB)
 	CoverURL  string   `json:"cover_url,omitempty"`
 	PageURLs  []string `json:"page_urls,omitempty"`
+
+	// MatureLocked marks a comic whose pages are withheld from the caller
+	// (free users when `forbid_mature_for_free` is enabled). The cover stays
+	// present so the frontend can render a blurred teaser.
+	MatureLocked bool `json:"mature_locked,omitempty"`
 }
 
 type CreateComicParams struct {
@@ -266,6 +271,9 @@ func ListComics(ctx context.Context, p *ListComicsParams) (*ListComicsResponse, 
 		args = append(args, "mature", "explicit")
 	}
 
+	// Free/anonymous users never see mature content when the policy forbids it.
+	where += matureWhereClause(ctx)
+
 	var total int
 	err := db.QueryRow(ctx, `SELECT COUNT(*) FROM comics `+where, args...).Scan(&total)
 	if err != nil {
@@ -429,7 +437,33 @@ func GetComic(ctx context.Context, slug string) (*Comic, error) {
 	}
 
 	resolveComicURLs(&comic)
+
+	// Free/anonymous users: withhold pages when the policy forbids mature
+	// content, and flag the comic so the frontend shows a blurred teaser.
+	if isMatureRating(comic.AgeRating) && matureBlocked(ctx) {
+		comic.MatureLocked = true
+		comic.PageURLs = nil
+	}
+
 	return &comic, nil
+}
+
+// ComicMaturity is the minimal view the reading service needs to gate downloads.
+type ComicMaturity struct {
+	AgeRating string `json:"age_rating"`
+}
+
+//encore:api private method=GET path=/comics-maturity/:id
+func GetComicMaturity(ctx context.Context, id string) (*ComicMaturity, error) {
+	var m ComicMaturity
+	err := db.QueryRow(ctx, `SELECT age_rating FROM comics WHERE id = $1`, id).Scan(&m.AgeRating)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, &errs.Error{Code: errs.NotFound, Message: "comic not found"}
+		}
+		return nil, err
+	}
+	return &m, nil
 }
 
 type BatchComicsParams struct {
@@ -450,7 +484,7 @@ func BatchGetComics(ctx context.Context, p *BatchComicsParams) (*ListComicsRespo
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
 			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
 			created_at, updated_at
-		FROM comics WHERE id = ANY($1) AND status = 'published'
+		FROM comics WHERE id = ANY($1) AND status = 'published'`+matureWhereClause(ctx)+`
 		ORDER BY created_at DESC
 	`, p.IDs)
 	if err != nil {
@@ -492,7 +526,7 @@ func ListFavorites(ctx context.Context, p *ListFavoritesParams) (*ListComicsResp
 	db.QueryRow(ctx, `
 		SELECT COUNT(*) FROM favorites f
 		JOIN comics c ON c.id = f.comic_id
-		WHERE f.user_id = $1 AND c.status = 'published'
+		WHERE f.user_id = $1 AND c.status = 'published'`+matureWhereClause(ctx)+`
 	`, ad.UserID).Scan(&total)
 
 	rows, err := db.Query(ctx, `
@@ -502,7 +536,7 @@ func ListFavorites(ctx context.Context, p *ListFavoritesParams) (*ListComicsResp
 			c.created_at, c.updated_at
 		FROM favorites f
 		JOIN comics c ON c.id = f.comic_id
-		WHERE f.user_id = $1 AND c.status = 'published'
+		WHERE f.user_id = $1 AND c.status = 'published'`+matureWhereClause(ctx)+`
 		ORDER BY f.created_at DESC
 		LIMIT $2 OFFSET $3
 	`, ad.UserID, limit, offset)
@@ -667,6 +701,42 @@ func enrichReactions(ctx context.Context, comics []Comic, userID string) {
 func getAuthData(ctx context.Context) (*myauth.AuthData, bool) {
 	data, ok := auth.Data().(*myauth.AuthData)
 	return data, ok
+}
+
+// isMatureRating reports whether an age rating is mature/explicit.
+func isMatureRating(rating string) bool {
+	return rating == "mature" || rating == "explicit"
+}
+
+// matureBlocked reports whether the current caller is a free (or anonymous)
+// user while the global setting forbids mature content for free users.
+// Staff (admin/moderator) and paid tiers are never blocked.
+func matureBlocked(ctx context.Context) bool {
+	ad, ok := getAuthData(ctx)
+	if ok {
+		if ad.Role == "admin" || ad.Role == "moderator" {
+			return false
+		}
+		if ad.Tier != "" && ad.Tier != "free" {
+			return false
+		}
+	}
+	// Anonymous or free tier → consult the global policy.
+	policy, err := myauth.GetContentPolicy(ctx)
+	if err != nil {
+		return false
+	}
+	return policy.ForbidMatureForFree
+}
+
+// matureWhereClause returns a SQL fragment that excludes mature content, to be
+// appended to a WHERE clause. The values are hardcoded enum literals (no user
+// input), so they are safe to inline without placeholders.
+func matureWhereClause(ctx context.Context) string {
+	if !matureBlocked(ctx) {
+		return ""
+	}
+	return " AND age_rating NOT IN ('mature', 'explicit')"
 }
 
 // ----- Moderation endpoints -----
@@ -1368,14 +1438,14 @@ func SeriesComics(ctx context.Context, id string, p *SeriesComicsParams) (*ListC
 	offset := (page - 1) * limit
 
 	var total int
-	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics WHERE series_id = $1 AND status = 'published'`, id).Scan(&total)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM comics WHERE series_id = $1 AND status = 'published'`+matureWhereClause(ctx), id).Scan(&total)
 
 	rows, err := db.Query(ctx, `
 		SELECT id, uploader_id, title, author, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
 			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
 			COALESCE(series_order, 1), created_at, updated_at
-		FROM comics WHERE series_id = $1 AND status = 'published'
+		FROM comics WHERE series_id = $1 AND status = 'published'`+matureWhereClause(ctx)+`
 		ORDER BY series_order ASC, published_at ASC
 		LIMIT $2 OFFSET $3
 	`, id, limit, offset)

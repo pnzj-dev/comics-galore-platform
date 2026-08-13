@@ -26,7 +26,7 @@ func ListStaffPicks(ctx context.Context) (*ListStaffPicksResponse, error) {
 		SELECT sp.comic_id, c.title, c.slug, c.cover_key, sp.position
 		FROM staff_picks sp
 		JOIN comics c ON c.id = sp.comic_id
-		WHERE c.status = 'published'
+		WHERE c.status = 'published'`+matureWhereClause(ctx)+`
 		ORDER BY sp.position ASC
 	`)
 	if err != nil {

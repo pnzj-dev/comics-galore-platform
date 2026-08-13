@@ -233,6 +233,7 @@ Global application settings stored as a JSON blob in `app_settings` (key `'defau
 - `cloudflare_images_account` / delivery base (secrets via env, non-secret config in settings)
 - `require_email_verify` — boolean, email verification gate
 - `hide_mature_default` — boolean, default for anonymous users
+- `forbid_mature_for_free` — boolean, forbids mature/explicit content to free-tier and anonymous users entirely (lists, detail, reader, download)
 - `enable_comments` — boolean, global comment kill switch
 - `default_meta_description` — SEO fallback for public pages
 - Rate limit, presigned TTLs, per-tier quotas, boost prices (see `AppSettings` struct)

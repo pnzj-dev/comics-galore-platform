@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"comics-galore/backend/fixtures"
+	myauth "comics-galore/backend/auth"
 	comics "comics-galore/backend/comics"
 
 	"encore.dev/beta/errs"
@@ -195,5 +196,52 @@ func TestSeriesProgress_Empty(t *testing.T) {
 	}
 	if len(resp.Items) != 0 {
 		t.Errorf("expected 0 items, got %d", len(resp.Items))
+	}
+}
+
+func TestRecordDownload_MatureBlockedForFree(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "readingdb")
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	// Enable forbid-mature-for-free via auth.
+	admSettings, err := myauth.GetAdminSettings(fixtures.AdminCtx())
+	if err != nil {
+		t.Fatalf("get settings error: %v", err)
+	}
+	admSettings.ForbidMatureForFree = true
+	if _, err := myauth.SaveAdminSettings(fixtures.AdminCtx(), admSettings); err != nil {
+		t.Fatalf("save settings error: %v", err)
+	}
+
+	// Create + approve a mature comic.
+	comic, err := comics.CreateComic(fixtures.UploaderCtx(), &comics.CreateComicParams{
+		Title:     "Mature Download",
+		CoverKey:  "covers/md.jpg",
+		FileKey:   "files/md.cbz",
+		AgeRating: "mature",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	_ = comics.ApproveComic(fixtures.ModeratorCtx(), comic.ID)
+
+	// Free user blocked.
+	freeCtx := fixtures.TierGatedCtx("550e8400-e29b-41d4-a716-4466554400f3", "user", "free")
+	resp, err := RecordDownload(freeCtx, comic.ID)
+	if err != nil {
+		t.Fatalf("download error: %v", err)
+	}
+	if resp.Allowed {
+		t.Error("expected download blocked for free user")
+	}
+
+	// Gold user allowed.
+	goldCtx := fixtures.TierGatedCtx("550e8400-e29b-41d4-a716-4466554400f4", "user", "gold")
+	goldResp, err := RecordDownload(goldCtx, comic.ID)
+	if err != nil {
+		t.Fatalf("gold download error: %v", err)
+	}
+	if !goldResp.Allowed {
+		t.Error("expected download allowed for gold user")
 	}
 }

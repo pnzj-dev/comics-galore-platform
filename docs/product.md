@@ -100,6 +100,7 @@ When the user has the `uploader` role, a dedicated **New Comic** area is availab
 ### Trust & compliance
 - **Content rating / age rating** on comics (e.g. all-ages, teen, mature)
 - **Age gate** when mature content is present (or site-wide policy)
+- **Forbid mature for free users** (admin setting) — when enabled, free-tier and anonymous users cannot access mature/explicit comics at all (lists, detail, reader, download). Detail shows a blurred cover + upgrade CTA; paid tiers and staff are unaffected, and the age gate is skipped for blocked users.
 - Static pages: **Terms**, **Privacy**, **DMCA / copyright** complaint
 - Cookie / consent banner if non-essential analytics are used
 

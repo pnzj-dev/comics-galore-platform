@@ -108,7 +108,7 @@ func GetReadingList(ctx context.Context, id string, p *GetReadingListParams) (*P
 	db.QueryRow(ctx, `
 		SELECT COUNT(*) FROM reading_list_items rli
 		JOIN comics c ON c.id = rli.comic_id
-		WHERE rli.list_id = $1 AND c.status = 'published'
+		WHERE rli.list_id = $1 AND c.status = 'published'`+matureWhereClause(ctx)+`
 	`, id).Scan(&total)
 
 	rows, err := db.Query(ctx, `
@@ -118,7 +118,7 @@ func GetReadingList(ctx context.Context, id string, p *GetReadingListParams) (*P
 			COALESCE(c.series_order, 1), c.created_at, c.updated_at
 		FROM reading_list_items rli
 		JOIN comics c ON c.id = rli.comic_id
-		WHERE rli.list_id = $1 AND c.status = 'published'
+		WHERE rli.list_id = $1 AND c.status = 'published'`+matureWhereClause(ctx)+`
 		ORDER BY rli.position ASC
 		LIMIT $2 OFFSET $3
 	`, id, limit, offset)
@@ -201,7 +201,7 @@ func RelatedComics(ctx context.Context, id string) (*ListComicsResponse, error) 
 			c.tags, c.rejection_reason, c.published_at, c.view_count, c.download_count, c.like_count, c.fav_count, c.dislike_count,
 			created_at, updated_at
 		FROM comics c
-		WHERE c.id != $1 AND c.status = 'published'
+		WHERE c.id != $1 AND c.status = 'published'`+matureWhereClause(ctx)+`
 		  AND c.id IN (
 			SELECT l2.comic_id FROM likes l2
 			WHERE l2.user_id IN (SELECT user_id FROM likes WHERE comic_id = $1)

@@ -47,6 +47,7 @@ type AppSettings struct {
 	Boost3Price          float64 `json:"boost_3_price"`
 	ContactEmail         string `json:"contact_email"`
 	HideMatureDefault    bool   `json:"hide_mature_default"`
+	ForbidMatureForFree  bool   `json:"forbid_mature_for_free"`
 	EnableComments       bool   `json:"enable_comments"`
 	DefaultMetaDescription string `json:"default_meta_description"`
 
@@ -216,6 +217,7 @@ func defaultAppSettings() *AppSettings {
 		Boost3Price:          12,
 		ContactEmail:         "",
 		HideMatureDefault:    false,
+		ForbidMatureForFree:  false,
 		EnableComments:       true,
 		DefaultMetaDescription: "",
 
