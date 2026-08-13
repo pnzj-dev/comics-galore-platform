@@ -207,14 +207,13 @@ Summarised from ADRs 0017–0021. All auth-required unless noted.
 | POST | `/admin/staff-picks` | Add a staff pick | Admin |
 | DELETE | `/admin/staff-picks/:comicId` | Remove a staff pick | Admin |
 
-### Billing Growth — ADR 0020
+## Billing Growth — ADR 0020 (implemented)
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
 | GET/POST | `/admin/coupons` | Coupon CRUD | Admin |
 | POST | `/admin/subscriptions/:id/grant` | Manual grant/extend | Admin |
 | POST | `/admin/subscriptions/:id/revoke` | Revoke subscription | Admin |
 | GET | `/admin/payments/past-due` | Failed/past-due list | Admin |
-| POST | `/admin/subscriptions/:id/sync` | Force NowPayments sync | Admin |
 
 ### Social Engagement — ADR 0021
 | Method | Path | Description | Auth |

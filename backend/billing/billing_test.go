@@ -356,3 +356,48 @@ func TestPollDeposit_NotFound(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 }
+
+func TestAdminCreateCoupon_AndList(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "billingdb")
+
+	adminCtx := authCtx("550e8400-e29b-41d4-a716-446655440002")
+	adminCtx = auth.WithContext(adminCtx, auth.UID("550e8400-e29b-41d4-a716-446655440002"), &myauth.AuthData{
+		UserID: "550e8400-e29b-41d4-a716-446655440002", Email: "admin@example.com", Role: "admin", Tier: "free",
+	})
+	c, err := AdminCreateCoupon(adminCtx, &CreateCouponParams{Code: "TEST20", PercentOff: 20})
+	if err != nil {
+		t.Fatalf("create coupon error: %v", err)
+	}
+	if c.Code != "TEST20" {
+		t.Errorf("expected code TEST20, got %s", c.Code)
+	}
+
+	list, err := AdminListCoupons(adminCtx)
+	if err != nil {
+		t.Fatalf("list coupons error: %v", err)
+	}
+	found := false
+	for _, x := range list.Coupons {
+		if x.Code == "TEST20" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected TEST20 coupon in list")
+	}
+}
+
+func TestAdminPastDuePayments(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "billingdb")
+
+	adminCtx := auth.WithContext(context.Background(), auth.UID("550e8400-e29b-41d4-a716-446655440002"), &myauth.AuthData{
+		UserID: "550e8400-e29b-41d4-a716-446655440002", Email: "admin@example.com", Role: "admin", Tier: "free",
+	})
+	resp, err := AdminPastDuePayments(adminCtx)
+	if err != nil {
+		t.Fatalf("past due error: %v", err)
+	}
+	if resp.Payments == nil {
+		t.Error("expected non-nil payments slice")
+	}
+}

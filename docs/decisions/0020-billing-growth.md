@@ -1,7 +1,7 @@
 # ADR 0020 – Billing Growth (Coupons, Manual Grants, Reconciliation)
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 v1 billing covers the NowPayments checkout path, webhooks, deposits, subscriptions, and a red banner for an incomplete plan matrix. Growth requires coupons, manual comp/revoke, past-due tracking, and richer revenue breakdown — all behind the existing `PaymentsProvider` abstraction (ADR 0013).

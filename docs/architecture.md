@@ -202,7 +202,7 @@ The full vision adds these domains. Detailed specs are in the ADRs; this section
 - **Implemented (partial).** Audited impersonation (scoped `impersonated_by` JWT claim), `saved_views`, `staff_picks`, CSV export (`/admin/export/users`). `job_runs` dead-letter dashboard deferred (needs worker instrumentation).
 
 ### Billing Growth — ADR 0020
-- `coupons` table + admin CRUD; manual grant/revoke; past-due list; force-sync; `revenue_by_tier_interval` in billing stats. Second provider = new adapter behind `PaymentsProvider`.
+- **Implemented.** `coupons` table + admin CRUD; manual grant/revoke; past-due list. Force-sync and `revenue_by_tier_interval` deferred; second provider = new adapter behind `PaymentsProvider` (interface already in place).
 
 ### Social Engagement — ADR 0021
 - `reading_lists` / `reading_list_items` (public shelves) in comics; `GET /comics/:id/related` (co-occurrence, no new table).

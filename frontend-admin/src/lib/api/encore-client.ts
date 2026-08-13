@@ -561,6 +561,24 @@ export namespace billing {
         balances: { [key: string]: BalanceEntry }
     }
 
+    export interface Coupon {
+        id: string
+        code: string
+        "percent_off": number
+        tier: string
+        "max_uses": number
+        used: number
+        "expires_at": string
+        "created_at": string
+    }
+
+    export interface CreateCouponParams {
+        code: string
+        "percent_off": number
+        tier: string
+        "max_uses": number
+    }
+
     export interface CreateDepositParams {
         "plan_id": string
         crypto: string
@@ -587,6 +605,30 @@ export namespace billing {
     export interface EstimatePriceParams {
         "plan_id": string
         crypto: string
+    }
+
+    export interface GrantSubscriptionParams {
+        "user_id": string
+        tier: string
+        "duration_days": number
+    }
+
+    export interface ListCouponsResponse {
+        coupons: Coupon[]
+    }
+
+    export interface ListPastDueResponse {
+        payments: PastDuePayment[]
+    }
+
+    export interface PastDuePayment {
+        id: string
+        "user_id": string
+        "subscription_id": string
+        tier: string
+        "amount_usd_cents": number
+        status: string
+        "created_at": string
     }
 
     export interface PollDepositResponse {
@@ -617,9 +659,14 @@ export namespace billing {
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
+            this.AdminCreateCoupon = this.AdminCreateCoupon.bind(this)
+            this.AdminGrantSubscription = this.AdminGrantSubscription.bind(this)
+            this.AdminListCoupons = this.AdminListCoupons.bind(this)
             this.AdminListDeposits = this.AdminListDeposits.bind(this)
             this.AdminListPayments = this.AdminListPayments.bind(this)
             this.AdminListSubscriptions = this.AdminListSubscriptions.bind(this)
+            this.AdminPastDuePayments = this.AdminPastDuePayments.bind(this)
+            this.AdminRevokeSubscription = this.AdminRevokeSubscription.bind(this)
             this.CheckBalance = this.CheckBalance.bind(this)
             this.CreateDeposit = this.CreateDeposit.bind(this)
             this.CreateSubscription = this.CreateSubscription.bind(this)
@@ -630,6 +677,22 @@ export namespace billing {
             this.PollDeposit = this.PollDeposit.bind(this)
             this.PollSubscription = this.PollSubscription.bind(this)
             this.SubscriptionWebhook = this.SubscriptionWebhook.bind(this)
+        }
+
+        public async AdminCreateCoupon(params: CreateCouponParams): Promise<Coupon> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/coupons`, JSON.stringify(params))
+            return await resp.json() as Coupon
+        }
+
+        public async AdminGrantSubscription(id: string, params: GrantSubscriptionParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/admin/subscriptions/${encodeURIComponent(id)}/grant`, JSON.stringify(params))
+        }
+
+        public async AdminListCoupons(): Promise<ListCouponsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/coupons`)
+            return await resp.json() as ListCouponsResponse
         }
 
         public async AdminListDeposits(params: AdminListDepositsParams): Promise<AdminDepositList> {
@@ -681,6 +744,16 @@ export namespace billing {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/admin/subscriptions`, undefined, {query})
             return await resp.json() as AdminSubList
+        }
+
+        public async AdminPastDuePayments(): Promise<ListPastDueResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/payments/past-due`)
+            return await resp.json() as ListPastDueResponse
+        }
+
+        public async AdminRevokeSubscription(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/admin/subscriptions/${encodeURIComponent(id)}/revoke`)
         }
 
         public async CheckBalance(): Promise<CheckBalanceResponse> {
