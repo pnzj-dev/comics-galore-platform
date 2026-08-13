@@ -22,7 +22,13 @@ auth, users, tiers/intervals/plans, comics, upload sessions, social, moderation,
 - Comics created via API start as `pending_review`.
 - Downloads enforce quota server-side.
 - Webhooks verified, idempotent, raw payload stored.
-- Payments go through `PaymentsProvider` (v1 NowPayments only).
+- Payments go through `PaymentsProvider` (v1 NowPayments only) — interface lives in the shared `backend/nowpayments` package.
+
+## Cross-service communication
+
+- Each Encore service owns its own database. **Never** read or write another service's tables directly.
+- Use **typed private API calls** (`//encore:api private`) or **Pub/Sub** instead. See ADR `0016-service-communication.md`.
+- Shared non-service Go packages (e.g. `backend/nowpayments/`) may be imported by multiple services; service packages must not form import cycles.
 
 ## Uploads
 
@@ -39,6 +45,9 @@ auth, users, tiers/intervals/plans, comics, upload sessions, social, moderation,
 
 ### Cross-database foreign keys
 Encore creates a **separate PostgreSQL database per service**. A `REFERENCES` constraint to a table in another service will fail. Use a plain UUID column and validate references at the application level.
+
+### Cross-service table access
+A service must not `SELECT`/`UPDATE` another service's tables. Add a private endpoint on the owning service and call it instead. Example: `billing` fetches plan details via `tiers.GetPlan` (private) and `sub_partner_id` via `auth.EnsureSubPartnerID` (private), never `FROM plans` / `FROM users`.
 
 ### Path parameter case sensitivity
 Function parameter names must match the path parameter **exactly** (case-sensitive).

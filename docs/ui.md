@@ -612,6 +612,10 @@ When loading, show skeleton cards matching the ComicCard layout:
 - Persistent **red banner** when plan matrix is incomplete (above main content, outside sidebar)
 - Dark mode support via theme toggle
 
+**Role-scoped sidebar:**
+- `admin` sees the full navigation.
+- `moderator` logs in but the sidebar is reduced to **Moderation only**; a server-side guard in `+layout.server.ts` redirects any other route to `/moderation`, and the plan-matrix banner/wizard are admin-only. Login redirects moderators straight to `/moderation`.
+
 **Table pattern (all admin pages):**
 ```
 ┌─ Table ────────────────────────────────────────────────────┐

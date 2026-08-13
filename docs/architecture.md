@@ -42,6 +42,16 @@
 ```
 Comics-Galore/
 ├── backend/                     # Encore Go API (single source of truth)
+│   ├── nowpayments/             # Shared non-service Go package:
+│   │                            #   NowPayments client, types,
+│   │                            #   PaymentsProvider interface, BuildCallbackURL
+│   ├── auth/                    # users, roles, sub_partner_id, sessions
+│   ├── billing/                 # subscriptions, deposits, webhooks
+│   ├── tiers/                   # tiers × plans matrix, plan auto-link
+│   ├── comics/                  # comics, moderation, social
+│   ├── reading/                 # progress, downloads
+│   ├── upload/                  # presigned uploads, media
+│   └── fixtures/                # test fixtures
 ├── frontend-public/             # SvelteKit web app — comics-galore.com
 ├── frontend-admin/              # SvelteKit web app — admin.comics-galore.com
 ├── desktop/                     # Wails v2 application
@@ -129,8 +139,9 @@ export const load: PageServerLoad = async ({ cookies }) => {
 - Login required (no register — admins are created by the system).
 - Uses `packages/ui` for shared components.
 - Handles dashboard, moderation (pending comics queue), user management, subscriptions, comics management, recycle bin, settings.
+- **Role-scoped access**: `admin` sees the full sidebar; `moderator` logs in but is restricted to the `/moderation` page only (server-side guard in `+layout.server.ts` redirects any other route back to `/moderation`).
 - Settings page has Form/JSON toggle for raw editing of the `app_settings` JSON blob.
-- Shows red plan matrix banner when incomplete (NowPayments link wizard resolves this).
+- Shows red plan matrix banner when incomplete (NowPayments link wizard resolves this) — banner/wizard are admin-only.
 
 ## Desktop Client (Wails)
 
@@ -155,6 +166,22 @@ export const load: PageServerLoad = async ({ cookies }) => {
 - Tiers, intervals, plan matrix, NowPayments (wallets, deposits, subscriptions, webhooks)
 - Social, messaging, support, settings, admin KPIs
 - All business rules stay on the server
+
+### Service communication rules
+
+Each Encore service owns its own PostgreSQL database. Services **never** read or write another service's tables directly. Cross-service communication happens only through:
+
+- **Typed private API calls** (`//encore:api private`) — e.g. `auth.EnsureSubPartnerID`, `auth.SetUserTier`, `tiers.GetPlan`.
+- **Pub/Sub events** for asynchronous work.
+
+Shared Go libraries that are not services (e.g. `backend/nowpayments/`) may be imported freely by multiple services. See ADR `0016-service-communication.md`.
+
+### `sub_partner_id` lifecycle
+
+- Stored on `users`, **owned by the `auth` service**.
+- Provisioned **eagerly** on email verification (`VerifyEmail` → `ensureSubPartnerID`, synchronous, non-fatal on failure).
+- Provisioned **lazily** via `auth.EnsureSubPartnerID` (called by `billing`) at subscription/deposit/balance-check time for users who never verified email.
+- Saved atomically (`UPDATE ... WHERE sub_partner_id IS NULL`) and enforced unique via a partial index.
 
 ## Upload & Creation Flow (identical on web and desktop)
 
@@ -297,8 +324,9 @@ Backend checks the user's NowPayments balance using `sub_partner_id` (stored on 
   - Update `deposits` table with status = `completed`.
 
 ### Provider Abstraction
-- `PaymentsProvider` interface with single v1 implementation: `NowPaymentsProvider`.
-- Methods: `EstimatePrice`, `CheckBalance`, `CreateCustomer`, `CreateSubscription`, `CreateDeposit`.
+- `PaymentsProvider` interface lives in the shared `backend/nowpayments` package, with a single v1 implementation: `NowPaymentsProvider`.
+- Methods: `EstimatePrice`, `CheckBalance`, `CreateCustomer`, `CreateSubscription`, `CreateDeposit`, `CreatePlan`.
+- `auth` and `tiers` import the shared package directly (customer creation + plan auto-link); `billing` obtains plan details via `tiers.GetPlan` and `sub_partner_id` via `auth.EnsureSubPartnerID` rather than reading those services' tables.
 - `provider` field on relevant tables (`nowpayments`).
 
 ### JWT Authentication (NowPayments API)

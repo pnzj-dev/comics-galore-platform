@@ -67,12 +67,22 @@
 | GET | `/plans/ready` | Whether all plans have provider plan IDs | No |
 | GET (admin) | `/admin/plans/matrix-status` | Admin check if plan matrix is complete | Admin |
 | PATCH (admin) | `/admin/plans/:id` | Manually set a plan's provider_plan_id (refuses if already linked) | Admin |
-| POST (admin) | `/admin/plans/:id/auto-link` | Auto-create NowPayments plan via API + store the ID | Admin |
+| POST (admin) | `/admin/plans/link/:id` | Auto-create NowPayments plan via API + store the ID | Admin |
 
-The `auto-link` endpoint calls the NowPayments `POST /v1/subscriptions/plans` API to create a remote plan and saves the returned ID as `provider_plan_id`. The `PATCH` endpoint has a lock guard preventing re-linking of already-configured plans.
+The auto-link endpoint (in the `tiers` service) calls the NowPayments `POST /v1/subscriptions/plans` API through the shared `nowpayments` package to create a remote plan and saves the returned ID as `provider_plan_id`. The `PATCH` endpoint has a lock guard preventing re-linking of already-configured plans.
 
 ## Other domains
 Auth, users, tiers, intervals, plans, subscriptions, webhooks, settings, social, comments, messaging, support, admin KPIs & datalists remain as previously specified.
+
+## Internal (service-to-service)
+
+Private endpoints callable only from other Encore services — never exposed publicly. Services communicate via these typed calls rather than reading each other's tables (see ADR `0016-service-communication.md`).
+
+| Method | Path | Description | Caller |
+|--------|------|-------------|--------|
+| POST | `/auth/ensure-sub-partner-id` | Get-or-create the user's NowPayments `sub_partner_id` | billing |
+| POST | `/auth/set-user-tier` | Set a user's tier (after subscription webhook activation) | billing |
+| GET | `/internal/plans/:id` | Plan details (provider plan id, interval, tier name, price) | billing |
 
 ## Notes
 

@@ -23,7 +23,7 @@ Estimate → ensure balance/deposit if required → create subscription at provi
 
 ## CreatePlan (auto-link)
 
-The `NowPaymentsProvider.CreatePlan` method calls `POST /v1/subscriptions/plans`.
+The `nowpayments.Provider.CreatePlan` method (shared package `backend/nowpayments`) calls `POST /v1/subscriptions/plans`.
 **Never hard-code raw `strconv.Atoi` on period strings** — periods like "month" are not numeric.
 
 ### Request body contract
@@ -48,12 +48,14 @@ Use a `periodToDays()` helper to convert period strings to day counts:
 
 ### Auto-link endpoint (backend)
 
-`POST /admin/plans/:id/auto-link` (tiers service, admin-only):
+`POST /admin/plans/link/:id` (tiers service, admin-only):
 1. Fetch plan from DB → get `name`, `price_usd_cents`, `interval`
 2. Map interval string via `intervalToPeriod()` ("monthly"→"month"), then `periodToDays()` ("month"→30)
-3. Call `billing.CreatePlan()` → NowPayments API → get back `provider_plan_id`
+3. Call `nowpayments.Provider.CreatePlan()` directly (shared package) → NowPayments API → get back `provider_plan_id`
 4. Store `provider_plan_id` on the plan in DB
 5. Return `{ provider_plan_id, plan_name }`
+
+The tiers service constructs its own `nowpayments.Provider` from secrets and calls it directly — it does **not** route through the `billing` service (see ADR `0016-service-communication.md`). The callback URL is built with `nowpayments.BuildCallbackURL(host, ngrokURL, path)`.
 
 ### Lock guard
 

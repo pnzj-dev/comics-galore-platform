@@ -156,6 +156,11 @@ tier            TEXT NOT NULL DEFAULT 'free'
                 CHECK (tier IN ('free', 'bronze', 'silver', 'gold', 'platinum'))
 ```
 
+`sub_partner_id` is **owned by the `auth` service** (its table) and provisioned by it, not by `billing`:
+- Set **eagerly** on email verification, **lazily** on demand via `auth.EnsureSubPartnerID` (subscription/deposit/balance-check).
+- Saved atomically (`UPDATE ... WHERE sub_partner_id IS NULL`).
+- Unique via partial index: `CREATE UNIQUE INDEX idx_users_sub_partner_id ON users(sub_partner_id) WHERE sub_partner_id IS NOT NULL`.
+
 ## Status Rules
 
 - New comics from either creation mode are always born as `pending_review`.

@@ -17,7 +17,7 @@ Both clients share the majority of Svelte code via an internal `packages/ui` lib
 |-------------|------------------|
 | `user`      | Browse, read, like, favorite, rate, comment, download (quota), message, open support tickets, flag content |
 | `uploader`  | Everything a user can do + **New Comic** workspace (3 tabs), manage series, analytics, schedule, tier-gate |
-| `moderator` | Everything a user can do + moderate comments, handle flags, review pending comics |
+| `moderator` | Everything a user can do + moderate comments, handle flags, review pending comics (accesses the admin app but is restricted to the Moderation page only) |
 | `admin`     | Full control panel, settings, plan matrix, AI config, users, comics, webhooks, support, etc. |
 
 ## Uploader: “New Comic” Workspace (3 tabs)
