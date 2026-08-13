@@ -111,6 +111,54 @@ func ContinueReading(ctx context.Context) (*ContinueReadingResponse, error) {
 	return &ContinueReadingResponse{Items: items}, rows.Err()
 }
 
+// ----- Series progress -----
+
+type SeriesProgressParams struct {
+	ComicIDs []string `json:"comic_ids"`
+}
+
+type SeriesProgressItem struct {
+	ComicID     string `json:"comic_id"`
+	CurrentPage int    `json:"current_page"`
+	TotalPages  int    `json:"total_pages"`
+	Completed   bool   `json:"completed"`
+}
+
+type SeriesProgressResponse struct {
+	Items []SeriesProgressItem `json:"items"`
+}
+
+//encore:api auth method=POST path=/reading-progress-batch
+func SeriesProgress(ctx context.Context, p *SeriesProgressParams) (*SeriesProgressResponse, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if len(p.ComicIDs) == 0 {
+		return &SeriesProgressResponse{Items: []SeriesProgressItem{}}, nil
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT comic_id, current_page, total_pages, completed
+		FROM reading_progress
+		WHERE user_id = $1 AND comic_id = ANY($2)
+	`, ad.UserID, p.ComicIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []SeriesProgressItem
+	for rows.Next() {
+		var item SeriesProgressItem
+		if err := rows.Scan(&item.ComicID, &item.CurrentPage, &item.TotalPages, &item.Completed); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	if items == nil {
+		items = []SeriesProgressItem{}
+	}
+	return &SeriesProgressResponse{Items: items}, rows.Err()
+}
+
 type DownloadResponse struct {
 	Allowed    bool   `json:"allowed"`
 	Used       int    `json:"used"`

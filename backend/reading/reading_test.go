@@ -155,3 +155,45 @@ func TestContinueReading_ExcludesCompleted(t *testing.T) {
 }
 
 var _ = errs.NotFound
+
+func TestSeriesProgress(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "readingdb")
+	ctx := fixtures.UserCtx()
+
+	SaveProgress(ctx, testComicA, &SaveProgressParams{CurrentPage: 10, TotalPages: 10, Completed: true})
+	SaveProgress(ctx, testComicB, &SaveProgressParams{CurrentPage: 3, TotalPages: 20, Completed: false})
+
+	resp, err := SeriesProgress(ctx, &SeriesProgressParams{
+		ComicIDs: []string{testComicA, testComicB, "550e8400-e29b-41d4-a716-446655440099"},
+	})
+	if err != nil {
+		t.Fatalf("series progress error: %v", err)
+	}
+	if len(resp.Items) != 2 {
+		t.Fatalf("expected 2 progress items, got %d", len(resp.Items))
+	}
+
+	byID := make(map[string]SeriesProgressItem)
+	for _, item := range resp.Items {
+		byID[item.ComicID] = item
+	}
+	if !byID[testComicA].Completed {
+		t.Error("expected comic A completed")
+	}
+	if byID[testComicB].Completed {
+		t.Error("expected comic B not completed")
+	}
+}
+
+func TestSeriesProgress_Empty(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "readingdb")
+	ctx := fixtures.UserCtx()
+
+	resp, err := SeriesProgress(ctx, &SeriesProgressParams{ComicIDs: []string{}})
+	if err != nil {
+		t.Fatalf("empty series progress error: %v", err)
+	}
+	if len(resp.Items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(resp.Items))
+	}
+}

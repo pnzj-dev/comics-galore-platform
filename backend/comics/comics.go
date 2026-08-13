@@ -2,6 +2,7 @@ package comics
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
@@ -88,6 +89,7 @@ type Comic struct {
 	IsLiked         bool      `json:"is_liked"`
 	IsFavorited     bool      `json:"is_favorited"`
 	IsDisliked      bool      `json:"is_disliked"`
+	SeriesOrder     int       `json:"series_order"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 
@@ -1204,14 +1206,37 @@ func SeriesComics(ctx context.Context, id string) (*ListComicsResponse, error) {
 		SELECT id, uploader_id, title, author, slug, description, content_language, status,
 			cover_key, file_key, page_keys, file_size_bytes, min_tier_id, age_rating, is_premium,
 			tags, rejection_reason, published_at, view_count, download_count, like_count, fav_count, dislike_count,
-			created_at, updated_at
+			COALESCE(series_order, 1), created_at, updated_at
 		FROM comics WHERE series_id = $1 AND status = 'published'
 		ORDER BY series_order ASC, published_at ASC
 	`, id)
 	if err != nil { return nil, err }
 	defer rows.Close()
-	comics, err := scanComics(rows)
-	if err != nil { return nil, err }
+
+	var comics []Comic
+	for rows.Next() {
+		var c Comic
+		var pubAt sql.NullTime
+		if err := rows.Scan(
+			&c.ID, &c.UploaderID, &c.Title, &c.Author, &c.Slug, &c.Description,
+			&c.ContentLanguage, &c.Status, &c.CoverKey, &c.FileKey,
+			scanStringSlice(&c.PageKeys), &c.FileSizeBytes, nulString(&c.MinTierID),
+			&c.AgeRating, &c.IsPremium, scanStringSlice(&c.Tags), nulString(&c.RejectionReason),
+			&pubAt, &c.ViewCount, &c.DownloadCount, &c.LikeCount, &c.FavCount, &c.DislikeCount,
+			&c.SeriesOrder, &c.CreatedAt, &c.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if pubAt.Valid {
+			c.PublishedAt = pubAt.Time
+		}
+		resolveComicURLs(&c)
+		comics = append(comics, c)
+	}
+	if err := rows.Err(); err != nil { return nil, err }
+	if comics == nil {
+		comics = []Comic{}
+	}
 	return &ListComicsResponse{Comics: comics, Total: len(comics)}, nil
 }
 

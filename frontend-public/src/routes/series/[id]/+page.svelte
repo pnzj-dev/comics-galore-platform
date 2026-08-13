@@ -12,6 +12,18 @@
 
 	const user = $derived($currentUser);
 
+	// Missing-issue gaps: expected contiguous series_order 1..max, flag absent ones.
+	const maxOrder = $derived(comics.reduce((m, c) => Math.max(m, c.series_order || 1), 0));
+	const missingOrders = $derived.by(() => {
+		const present = new Set(comics.map((c) => c.series_order || 1));
+		const gaps: number[] = [];
+		for (let i = 1; i < maxOrder; i++) {
+			if (!present.has(i)) gaps.push(i);
+		}
+		return gaps;
+	});
+	const progressPct = $derived(comics.length > 0 ? Math.round((data.readCount / comics.length) * 100) : 0);
+
 	async function toggleFollow() {
 		if (following) {
 			await encore.comics.UnfollowSeries(data.series.id);
@@ -31,10 +43,27 @@
 			<a href="/series" class="text-sm text-muted-foreground hover:text-foreground">&larr; All series</a>
 			<h1 class="text-3xl font-bold mt-2">{data.series.title}</h1>
 			<p class="text-muted-foreground mt-1">{data.series.description}</p>
+
 			{#if user}
-				<Button size="sm" variant="outline" class="mt-3" onclick={toggleFollow}>
-					{following ? 'Unfollow' : 'Follow'} Series
-				</Button>
+				<div class="flex items-center gap-3 mt-3">
+					<Button size="sm" variant="outline" onclick={toggleFollow}>
+						{following ? 'Unfollow' : 'Follow'} Series
+					</Button>
+					{#if comics.length > 0}
+						<div class="flex items-center gap-2">
+							<div class="w-32 h-2 rounded-full bg-muted overflow-hidden">
+								<div class="h-full bg-primary transition-all" style="width:{progressPct}%"></div>
+							</div>
+							<span class="text-xs text-muted-foreground">{data.readCount} of {comics.length} read</span>
+						</div>
+					{/if}
+				</div>
+			{/if}
+
+			{#if missingOrders.length > 0}
+				<p class="text-xs text-amber-600 dark:text-amber-400 mt-2">
+					Missing issues: {missingOrders.map((o) => `#${o}`).join(', ')}
+				</p>
 			{/if}
 		</div>
 
@@ -46,6 +75,9 @@
 						<ComicCard {...comic} />
 						{#if comic.series_order}
 							<span class="absolute top-2 left-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded">#{comic.series_order}</span>
+						{/if}
+						{#if data.progress[comic.id]?.completed}
+							<span class="absolute top-2 right-2 bg-green-600 text-white text-[10px] px-1.5 py-0.5 rounded">Read</span>
 						{/if}
 					</div>
 				{/each}

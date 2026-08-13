@@ -125,6 +125,7 @@ Private endpoints callable only from other Encore services — never exposed pub
 | GET | `/tags/:slug` | Tag page (comics) | Opt |
 | POST | `/series/:id/follow` | Follow series | Yes |
 | DELETE | `/series/:id/follow` | Unfollow series | Yes |
+| POST | `/reading-progress-batch` | Batch reading progress for a set of comic IDs | Yes |
 | GET | `/me/notification-preferences` | Get prefs | Yes |
 | PATCH | `/me/notification-preferences` | Update prefs | Yes |
 | POST | `/auth/verify-email` | Confirm email (token) | No |

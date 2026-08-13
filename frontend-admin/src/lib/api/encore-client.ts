@@ -788,6 +788,7 @@ export namespace comics {
         "is_liked": boolean
         "is_favorited": boolean
         "is_disliked": boolean
+        "series_order": number
         "created_at": string
         "updated_at": string
         /**
@@ -1306,6 +1307,21 @@ export namespace reading {
         completed: boolean
     }
 
+    export interface SeriesProgressItem {
+        "comic_id": string
+        "current_page": number
+        "total_pages": number
+        completed: boolean
+    }
+
+    export interface SeriesProgressParams {
+        "comic_ids": string[]
+    }
+
+    export interface SeriesProgressResponse {
+        items: SeriesProgressItem[]
+    }
+
     export class ServiceClient {
         private baseClient: BaseClient
 
@@ -1316,6 +1332,7 @@ export namespace reading {
             this.GetReadingStats = this.GetReadingStats.bind(this)
             this.RecordDownload = this.RecordDownload.bind(this)
             this.SaveProgress = this.SaveProgress.bind(this)
+            this.SeriesProgress = this.SeriesProgress.bind(this)
         }
 
         public async ContinueReading(): Promise<ContinueReadingResponse> {
@@ -1346,6 +1363,12 @@ export namespace reading {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/reading/${encodeURIComponent(comicId)}`, JSON.stringify(params))
             return await resp.json() as Progress
+        }
+
+        public async SeriesProgress(params: SeriesProgressParams): Promise<SeriesProgressResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/reading-progress-batch`, JSON.stringify(params))
+            return await resp.json() as SeriesProgressResponse
         }
     }
 }
