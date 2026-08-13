@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { encore } from '$lib/api/encore';
+	import { extractComicMetadata } from '$lib/archive/metadata';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Input } from '$lib/components/ui/input/index.js';
 	import { Label } from '$lib/components/ui/label/index.js';
@@ -10,6 +11,8 @@
 	let uploadKey = $state('');
 	let uploading = $state(false);
 	let error = $state('');
+	let extracting = $state(false);
+	let metadataFound = $state(false);
 
 	// Metadata form fields
 	let title = $state('');
@@ -17,6 +20,7 @@
 	let contentLanguage = $state('en');
 	let ageRating = $state('all_ages');
 	let tags = $state('');
+	let author = $state('');
 
 	let submitting = $state(false);
 	let step = $state<'upload' | 'metadata'>('upload');
@@ -26,6 +30,30 @@
 		if (bytes > 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
 		if (bytes > 1024) return Math.round(bytes / 1024) + ' KB';
 		return bytes + ' B';
+	}
+
+	// Extract comic.json / metadata.json (best-effort) and prefill the form.
+	async function prefillFromMetadata(file: File) {
+		extracting = true;
+		metadataFound = false;
+		try {
+			const meta = await extractComicMetadata(file);
+			if (meta) {
+				metadataFound = true;
+				if (meta.title) title = meta.title;
+				if (meta.author) author = meta.author;
+				if (meta.description) description = meta.description;
+				if (meta.language || meta.content_language) {
+					contentLanguage = (meta.content_language || meta.language)!;
+				}
+				if (meta.age_rating) ageRating = meta.age_rating;
+				if (meta.tags) tags = meta.tags.join(', ');
+			}
+		} catch {
+			// ignore — manual entry still available
+		} finally {
+			extracting = false;
+		}
 	}
 
 	async function handleFile(file: File) {
@@ -53,7 +81,10 @@
 			await encore.upload.ConfirmPart(session.id, { number: 1, key: presign.key, size: file.size, etag: xhr.getResponseHeader('ETag') || '' });
 			uploadKey = presign.key;
 
-			// Auto-fill title from filename
+			// Prefill metadata from comic.json / metadata.json if present.
+			await prefillFromMetadata(file);
+
+			// Auto-fill title from filename as fallback.
 			if (!title) {
 				title = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 			}
@@ -84,11 +115,13 @@
 		try {
 			const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
 			await encore.comics.CreateComic({
-				title, description, content_language: contentLanguage,
+				title, author, description, content_language: contentLanguage,
 				cover_key: uploadKey, file_key: uploadKey,
 				page_keys: [uploadKey],
 				file_size_bytes: archiveFile?.size || 0,
-				age_rating: ageRating as any, tags: tagList
+				min_tier_id: '',
+				age_rating: ageRating as any, is_premium: false, tags: tagList,
+				upload_session_id: ''
 			});
 			await goto('/upload?tab=list');
 		} catch (err) {
@@ -102,7 +135,8 @@
 		archiveFile = null;
 		uploadKey = '';
 		uploadProgress = 0;
-		title = ''; description = ''; tags = '';
+		title = ''; description = ''; tags = ''; author = '';
+		metadataFound = false;
 		step = 'upload';
 	}
 </script>
@@ -163,9 +197,26 @@
 				<p class="text-xs text-muted-foreground">{formatSize(archiveFile?.size || 0)} — Uploaded successfully</p>
 			</div>
 
+			{#if extracting}
+				<div class="p-3 rounded-lg bg-muted text-sm text-muted-foreground flex items-center gap-2">
+					<div class="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+					Extracting metadata from archive…
+				</div>
+			{:else if metadataFound}
+				<div class="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 text-sm">
+					<p class="font-medium text-blue-700 dark:text-blue-400">Metadata imported from comic.json</p>
+					<p class="text-xs text-muted-foreground mt-0.5">Review and adjust the fields below before publishing.</p>
+				</div>
+			{/if}
+
 			<div class="space-y-1.5">
 				<Label for="title">Title *</Label>
 				<Input id="title" bind:value={title} placeholder="Comic title" required />
+			</div>
+
+			<div class="space-y-1.5">
+				<Label for="author">Author</Label>
+				<Input id="author" bind:value={author} placeholder="Author name" />
 			</div>
 
 			<div class="space-y-1.5">

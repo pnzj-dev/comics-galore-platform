@@ -120,8 +120,11 @@
 				file_key: archiveKeys[0],
 				page_keys: [...previewKeys, ...archiveKeys],
 				file_size_bytes: archiveSlots.reduce((sum, a) => sum + (a.size || 0), 0),
+				min_tier_id: '',
 				age_rating: ageRating as any,
-				tags: tagList
+				is_premium: false,
+				tags: tagList,
+				upload_session_id: ''
 			});
 			await goto('/upload?tab=list');
 		} catch (err) { error = (err as Error).message; }

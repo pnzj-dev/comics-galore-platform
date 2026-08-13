@@ -20,7 +20,7 @@ description: Implement Comics Galore comic creation including presigned uploads,
   Row 2: preview image grid (Cloudflare, 2:3 aspect slots, min 2, max 10, "+ Add" button)
   Row 3: archive file grid (S3 presigned, square slots, min 1, max 10)
   Submit: standardized `submitting ? 'Publishing...' : 'Publish Comic'` button.
-- **SOON** — archive + `comic.json` via libarchive.js in the browser, same payload and API.
+- **DONE (v1.1)** — archive + `comic.json`/`metadata.json` via libarchive.js in the browser. `ArchiveForm` parses the archive client-side (`$lib/archive/metadata.ts`) and prefills title/author/description/language/age/tags; same payload and API. libarchive worker + wasm are served from `static/libarchive/` (copied from `node_modules/libarchive.js/dist`).
 
 ## Upload sessions
 
