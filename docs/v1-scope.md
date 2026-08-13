@@ -85,21 +85,38 @@ A working web app where users can discover and read comics, uploaders can submit
 
 ---
 
-## SOON — V1.1 (immediately after v1)
+## V1.1 scope
 
-- Archive + `comic.json` path (libarchive.js) reusing same `POST /comics`  
-- Upload Session resume for large files (if not fully solid in v1)  
-- Cloudflare Images for cover/preview + admin `image_serving_mode`  
-- Comments + flagging + moderator queue + SSE live comments (`/comments-stream/:id` raw endpoint)  
-- Series entity + series pages + series follow  
-- Notification preferences + a few real emails (Resend)  
-- Admin: bulk actions, recycle bin, user detail drawer  
-- Reader: thumbnails/scrubber + fit modes  
-- Tag pages + “New this week” / “Popular this month” rails
-- Additional UI locales (ja, es, ko, fr, pt-BR, …) as translation packs land
-- Language facet polished on public browse  
-- Soft quota warning at ~80%  
-- ~~Migrate all data-fetching pages from `onMount` + client-side `api.get` to SvelteKit `load` functions~~ **DONE** — Encore client migration complete; all pages use `+page.server.ts` with `getEncoreClient(token)`.
+V1.1 builds on the shipped v1 web spine. The following **IN (v1.1)** items are the next build target; the rest of the original SOON list is already done in v1 (marked below).
+
+### IN — V1.1 (must ship)
+
+- **i18n foundation** — message catalog, default `en`, `ui_locale` wiring, locale detection (user → Accept-Language → `en`), locale switcher (optional if only `en` enabled). First item; foundational for all surfaces.
+- **Comment flagging / report flow** — flags table + endpoints, moderator queue integration.
+- **Real notification emails** (Resend) — a few key events (e.g. new from followed uploader, support replies) beyond verify/reset.
+- **Archive `comic.json` metadata extraction** — libarchive.js client-side parse of `comic.json`/`metadata.json`, auto-building the same `POST /comics` payload.
+- **Cloudflare Images wiring in upload forms** — cover/preview go through CF upload URLs (backend already exists); `image_serving_mode` resolver applied to cover/preview.
+- **Soft quota warning (~80%)**.
+- **Series progress % / missing-issue gaps** on series pages.
+- **Language facet UI** on public browse (`language=` filter is backend-ready).
+
+### SOON — V1.1.1 (next after v1.1)
+
+- Additional UI locales (ja, es, ko, fr, pt-BR, …) as translation packs land.
+- Language facet polish (facets, counts).
+
+---
+
+## Done in v1 (original SOON items already shipped)
+
+- ~~Migrate all data-fetching pages from `onMount` + client-side `api.get` to SvelteKit `load` functions~~ — Encore client migration complete; all pages use `+page.server.ts` with `getEncoreClient(token)`.
+- ~~Comments + SSE live comments~~ — `/comments`, `/comments-stream/:id`, CommentList/CommentForm.
+- ~~Series entity + series pages + series follow~~ — `/series`, `/series/:id`, `/series/:id/follow`.
+- ~~Reader thumbnails/scrubber + fit modes~~ — Reader.svelte has fit modes + thumbnail toggle.
+- ~~Tag pages + home rails~~ — `/tags/[tag]`, "Popular This Month" / latest / random rails.
+- ~~Admin recycle bin + moderation bulk + user detail drawer~~.
+- ~~Notification preferences~~ — `/me/notification-preferences`.
+- ~~Cloudflare Images backend~~ — upload URL + media proxy (frontend wiring deferred to v1.1).
 
 ---
 
@@ -153,10 +170,11 @@ A working web app where users can discover and read comics, uploaders can submit
 
 | Phase focus | Scope label |
 |-------------|-------------|
-| Foundation (auth, scaffold, admin bootstrap) | IN |
-| Core comics + public reader + manual upload + review | IN |
-| Basic tiers + NowPayments path | IN |
-| Archive JSON upload, CF Images, comments, series | SOON |
+| Foundation (auth, scaffold, admin bootstrap) | IN (v1) |
+| Core comics + public reader + manual upload + review | IN (v1) |
+| Basic tiers + NowPayments path | IN (v1) |
+| i18n foundation, flagging, notification emails, archive JSON, CF Images, quota/series polish | IN (v1.1) |
+| Archive JSON upload, CF Images, comments, series | DONE (v1) |
 | Full admin suite, AI, messaging, support | LATER |
 | Wails + offline + native polish | LATER |
 
@@ -164,10 +182,10 @@ A working web app where users can discover and read comics, uploaders can submit
 
 ## Rules for agents & developers
 
-1. Do **not** implement LATER features before the v1 exit criteria work on web.  
+1. Do **not** implement LATER features before the v1.1 exit criteria work on web.  
 2. Prefer **hooks** (kind enum, provider interface, status `pending_review`) over full UI for LATER items.  
 3. If a task is ambiguous, choose the **IN** interpretation.  
-4. When v1 ships, move items from SOON → IN in a new revision of this file—do not silently expand v1 mid-build.  
+4. When v1.1 ships, move items from SOON → IN in a new revision of this file—do not silently expand v1.1 mid-build.  
 5. Full vision docs stay valid as the north star; **this file wins on prioritization conflicts**.
 
 ---

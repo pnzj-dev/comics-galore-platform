@@ -5,7 +5,7 @@
 ## Phase 0 – Architecture Repository (current)
 - [x] Web + Desktop (Wails) architecture
 - [x] Shared Svelte package strategy
-- [ ] Scaffold with official tools
+- [x] Scaffold with official tools
 
 ## Phase 1 – Foundation
 - Encore backend scaffolding
@@ -70,3 +70,15 @@
 ## Phase 10 – Production Hardening
 - CI for web + desktop builds
 - Observability, backups, tests, performance
+
+## Phase 11 – V1.1 (shipped-after-v1 refinements)
+- [ ] i18n foundation (catalog, `en`, `ui_locale`, locale detection) — first
+- [ ] Comment flagging / report flow
+- [ ] Real notification emails (Resend)
+- [ ] Archive `comic.json` metadata extraction (libarchive.js)
+- [ ] Cloudflare Images wiring in upload forms + `image_serving_mode` resolver
+- [ ] Soft quota warning (~80%)
+- [ ] Series progress % / missing-issue gaps
+- [ ] Language facet UI on public browse
+
+See `docs/v1-scope.md` for the authoritative IN (v1.1) list and the original SOON items already shipped in v1.
