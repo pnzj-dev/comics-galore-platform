@@ -13,7 +13,10 @@
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault(); error = ''; loading = true;
-		try { await login(email, password); await goto('/dashboard'); }
+		try {
+			const user = await login(email, password);
+			await goto(user.role === 'moderator' ? '/moderation' : '/dashboard');
+		}
 		catch (err) { error = (err as Error).message; }
 		finally { loading = false; }
 	}

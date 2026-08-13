@@ -35,9 +35,6 @@
 				{#if user.role === 'uploader' || user.role === 'admin'}
 					<a href="/upload" class="text-sm text-muted-foreground hover:text-foreground">Upload</a>
 				{/if}
-				{#if user.role === 'moderator' || user.role === 'admin'}
-					<a href="/moderation" class="text-sm text-muted-foreground hover:text-foreground">Moderation</a>
-				{/if}
 			{/if}
 		</div>
 		<div class="flex items-center gap-1">

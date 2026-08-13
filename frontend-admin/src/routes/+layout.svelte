@@ -24,6 +24,7 @@
 	const user = $derived(data.user || $currentUser);
 	const authed = $derived(!!(data.user));
 	const path = $derived(page.url?.pathname ?? '');
+	const isAdmin = $derived(user?.role === 'admin');
 
 	async function checkPlanMatrix() {
 		try {
@@ -35,19 +36,25 @@
 
 	function onWizardClose() { wizardOpen = false; wizardBlocked = !planMatrixComplete; }
 
-	$effect(() => { if (authed) checkPlanMatrix(); });
+	$effect(() => { if (authed && isAdmin) checkPlanMatrix(); });
 
-	const navItems = $derived([
-		{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-		{ href: '/moderation', label: 'Moderation', icon: Shield },
-		{ href: '/users', label: 'Users', icon: Users },
-		{ href: '/subscriptions', label: 'Subscriptions', icon: CreditCard },
-		{ href: '/deposits', label: 'Deposits', icon: ArrowDownToLine },
-		{ href: '/payments', label: 'Payments', icon: ReceiptText },
-		{ href: '/comics', label: 'Comics', icon: BookOpen },
-		{ href: '/comics/recycle-bin', label: 'Recycle Bin', icon: Trash2 },
-		{ href: '/settings', label: 'Settings', icon: Settings },
-	]);
+	const navItems = $derived(
+		isAdmin
+			? [
+				{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+				{ href: '/moderation', label: 'Moderation', icon: Shield },
+				{ href: '/users', label: 'Users', icon: Users },
+				{ href: '/subscriptions', label: 'Subscriptions', icon: CreditCard },
+				{ href: '/deposits', label: 'Deposits', icon: ArrowDownToLine },
+				{ href: '/payments', label: 'Payments', icon: ReceiptText },
+				{ href: '/comics', label: 'Comics', icon: BookOpen },
+				{ href: '/comics/recycle-bin', label: 'Recycle Bin', icon: Trash2 },
+				{ href: '/settings', label: 'Settings', icon: Settings },
+			]
+			: [
+				{ href: '/moderation', label: 'Moderation', icon: Shield },
+			]
+	);
 
 	function isActive(href: string): boolean {
 		if (href === '/dashboard') return path === '/dashboard' || path === '/';
@@ -55,7 +62,7 @@
 	}
 </script>
 
-{#if authed && user?.role === 'admin' && page.url?.pathname !== '/login'}
+{#if authed && (user?.role === 'admin' || user?.role === 'moderator') && page.url?.pathname !== '/login'}
 	<div class="flex h-screen overflow-hidden">
 		<!-- Sidebar -->
 		<aside class="w-60 flex-shrink-0 bg-slate-900 dark:bg-slate-950 text-white flex flex-col">
