@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/svelte';
-import FavoriteButton from '$lib/components/FavoriteButton.svelte';
+import FavoriteButton from '$lib/components/social/FavoriteButton.svelte';
 
 const { mockedToggle } = vi.hoisted(() => ({
 	mockedToggle: vi.fn(),

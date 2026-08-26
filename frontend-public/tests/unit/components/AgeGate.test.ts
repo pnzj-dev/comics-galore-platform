@@ -1,8 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/svelte';
-import AgeGate from '$lib/components/AgeGate.svelte';
+import AgeGate from '$lib/components/comics/AgeGate.svelte';
+import { modal } from '$lib/stores/modal.svelte';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const baseProps = {
-	open: true,
 	title: 'Mature Comic',
 	author: 'Test Author',
 	ageRating: 'mature',
@@ -12,10 +13,12 @@ const baseProps = {
 
 beforeEach(() => {
 	vi.clearAllMocks();
+	modal.closeAll();
 });
 
 describe('AgeGate', () => {
 	it('renders modal when open is true', () => {
+		modal.open('agegate');
 		render(AgeGate, baseProps);
 
 		expect(screen.getByText('Age-Restricted Content')).toBeVisible();
@@ -25,12 +28,13 @@ describe('AgeGate', () => {
 	});
 
 	it('does not render when open is false', () => {
-		render(AgeGate, { ...baseProps, open: false });
+		render(AgeGate, baseProps);
 
 		expect(screen.queryByText('Age-Restricted Content')).not.toBeInTheDocument();
 	});
 
 	it('calls onConfirm when Continue is clicked', async () => {
+		modal.open('agegate');
 		render(AgeGate, baseProps);
 
 		await fireEvent.click(screen.getByText("I'm 18+ years old, Continue"));
@@ -39,6 +43,7 @@ describe('AgeGate', () => {
 	});
 
 	it('calls onClose when Go back is clicked', async () => {
+		modal.open('agegate');
 		render(AgeGate, baseProps);
 
 		await fireEvent.click(screen.getByText('Go back'));

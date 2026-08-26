@@ -21,6 +21,20 @@ func init() {
 	userCtx = fixtures.UserCtx()
 }
 
+// enableComments flips the global enable_comments setting on so the comment
+// tests can run (commenting is disabled by default until moderation ships).
+func enableComments(t *testing.T) {
+	t.Helper()
+	settings, err := myauth.GetAdminSettings(adminCtx)
+	if err != nil {
+		t.Fatalf("get settings error: %v", err)
+	}
+	settings.EnableComments = true
+	if _, err := myauth.SaveAdminSettings(adminCtx, settings); err != nil {
+		t.Fatalf("save settings error: %v", err)
+	}
+}
+
 func TestCreateComic_Valid(t *testing.T) {
 	ctx := uploaderCtx
 
@@ -53,8 +67,7 @@ func TestCreateComic_Valid(t *testing.T) {
 	}
 }
 
-func TestCreateComic_MissingTitle(t *testing.T) {
-	ctx := uploaderCtx
+func TestCreateComic_MissingTitle(t *testing.T) {	ctx := uploaderCtx
 
 	_, err := CreateComic(ctx, &CreateComicParams{
 		Title:    "",
@@ -928,6 +941,7 @@ func TestAdminAuditLogs_RequiresAdmin(t *testing.T) {
 
 func TestFlagComment_AndList(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+	enableComments(t)
 
 	upCtx := uploaderCtx
 	comic, err := CreateComic(upCtx, &CreateComicParams{
@@ -1003,6 +1017,7 @@ func TestListFlaggedComments_RequiresModerator(t *testing.T) {
 
 func TestResolveFlag_MarksResolved(t *testing.T) {
 	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+	enableComments(t)
 
 	upCtx := uploaderCtx
 	comic, err := CreateComic(upCtx, &CreateComicParams{
@@ -1357,11 +1372,16 @@ func TestGetComic_MatureLockedForFree(t *testing.T) {
 	if !fetched.MatureLocked {
 		t.Error("expected mature_locked=true for anonymous")
 	}
-	if len(fetched.PageURLs) != 0 {
-		t.Errorf("expected no page_urls, got %d", len(fetched.PageURLs))
+	if fetched.PageCount != 0 {
+		t.Errorf("expected page_count=0, got %d", fetched.PageCount)
 	}
 	if fetched.CoverURL == "" {
 		t.Error("expected cover_url retained for blurred teaser")
+	}
+
+	// Anonymous pages endpoint refuses to serve the mature comic.
+	if _, err := GetComicPages(context.Background(), comic.Slug, &GetComicPagesParams{}); err == nil {
+		t.Error("expected pages endpoint to refuse mature comic for anonymous")
 	}
 
 	// Staff still sees pages.
@@ -1412,5 +1432,336 @@ func TestGetComic_MatureNotLockedWhenPolicyOff(t *testing.T) {
 	}
 	if fetched.MatureLocked {
 		t.Error("expected mature_locked=false when policy off")
+	}
+}
+
+func TestCreateComic_ReaderFieldsRoundTrip(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	comic, err := CreateComic(uploaderCtx, &CreateComicParams{
+		Title:            "Reader Fields",
+		CoverKey:         "covers/reader.jpg",
+		FileKey:          "files/reader.cbz",
+		PageKeys:         []string{"pages/1.jpg", "pages/2.jpg", "pages/3.jpg"},
+		PageDimensions:   []PageDimension{{Width: 800, Height: 1200}, {Width: 800, Height: 1200}, {Width: 600, Height: 900}},
+		ReadingDirection: "rtl",
+		ArchiveMimetype:  "application/vnd.comicbook+zip",
+		Isbn:             "978-3-16-148410-0",
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+
+	if comic.PageCount != 3 {
+		t.Errorf("expected page_count 3, got %d", comic.PageCount)
+	}
+	if comic.ReadingDirection != "rtl" {
+		t.Errorf("expected reading_direction rtl, got %s", comic.ReadingDirection)
+	}
+	if comic.ArchiveMimetype != "application/vnd.comicbook+zip" {
+		t.Errorf("expected archive_mimetype, got %q", comic.ArchiveMimetype)
+	}
+	if comic.Isbn != "978-3-16-148410-0" {
+		t.Errorf("expected isbn, got %q", comic.Isbn)
+	}
+	if comic.Upc != "" || comic.Issn != "" {
+		t.Errorf("expected empty upc/issn, got upc=%q issn=%q", comic.Upc, comic.Issn)
+	}
+}
+
+func TestGetComicPages_PaginationAndDimensions(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	comic, err := CreateComic(uploaderCtx, &CreateComicParams{
+		Title:          "Paged",
+		CoverKey:       "covers/paged.jpg",
+		FileKey:        "files/paged.cbz",
+		PageKeys:       []string{"p/1.jpg", "p/2.jpg", "p/3.jpg", "p/4.jpg", "p/5.jpg"},
+		PageDimensions: []PageDimension{{Width: 100, Height: 200}, {Width: 101, Height: 201}, {Width: 102, Height: 202}, {Width: 103, Height: 203}, {Width: 104, Height: 204}},
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	_ = ApproveComic(moderatorCtx, comic.ID)
+
+	// Reader (non-preview) access requires a paid tier; use a gold caller.
+	gold := fixtures.TierGatedCtx("paged-gold", "user", "gold")
+
+	res, err := GetComicPages(gold, comic.Slug, &GetComicPagesParams{Offset: 0, Limit: 2})
+	if err != nil {
+		t.Fatalf("pages error: %v", err)
+	}
+	if res.Total != 5 {
+		t.Errorf("expected total 5, got %d", res.Total)
+	}
+	if len(res.Pages) != 2 {
+		t.Fatalf("expected 2 pages, got %d", len(res.Pages))
+	}
+	if res.Pages[0].Index != 0 || res.Pages[1].Index != 1 {
+		t.Errorf("expected indices 0,1 got %d,%d", res.Pages[0].Index, res.Pages[1].Index)
+	}
+	if res.Pages[0].Width != 100 || res.Pages[0].Height != 200 {
+		t.Errorf("expected page 0 dims 100x200, got %dx%d", res.Pages[0].Width, res.Pages[0].Height)
+	}
+	if res.Pages[0].URL == "" {
+		t.Error("expected resolved page url")
+	}
+
+	// Second chunk.
+	res2, err := GetComicPages(gold, comic.Slug, &GetComicPagesParams{Offset: 2, Limit: 2})
+	if err != nil {
+		t.Fatalf("pages error: %v", err)
+	}
+	if len(res2.Pages) != 2 || res2.Pages[0].Index != 2 {
+		t.Errorf("expected page 2 first in chunk 2, got %v", res2.Pages)
+	}
+
+	// Offset beyond end → empty.
+	res3, err := GetComicPages(gold, comic.Slug, &GetComicPagesParams{Offset: 10, Limit: 20})
+	if err != nil {
+		t.Fatalf("pages error: %v", err)
+	}
+	if len(res3.Pages) != 0 {
+		t.Errorf("expected empty pages, got %d", len(res3.Pages))
+	}
+}
+
+func TestGetComicPages_PreviewGating(t *testing.T) {
+	_, _ = et.NewTestDatabase(context.Background(), "comicsdb")
+
+	comic, err := CreateComic(uploaderCtx, &CreateComicParams{
+		Title:    "PreviewGate",
+		CoverKey: "covers/pg.jpg",
+		FileKey:  "files/pg.cbz",
+		PageKeys: []string{"p/1.jpg", "p/2.jpg", "p/3.jpg", "p/4.jpg", "p/5.jpg"},
+	})
+	if err != nil {
+		t.Fatalf("create error: %v", err)
+	}
+	_ = ApproveComic(moderatorCtx, comic.ID)
+
+	// Anonymous preview → indices 0..2 sharp, 3..4 locked (no URL/key).
+	res, err := GetComicPages(context.Background(), comic.Slug, &GetComicPagesParams{Offset: 0, Limit: 10, Preview: true})
+	if err != nil {
+		t.Fatalf("pages error: %v", err)
+	}
+	if len(res.Pages) != 5 {
+		t.Fatalf("expected 5 pages, got %d", len(res.Pages))
+	}
+	for _, p := range res.Pages {
+		if p.Index >= 3 {
+			if !p.Locked {
+				t.Errorf("page %d should be locked", p.Index)
+			}
+			if p.URL != "" || p.Key != "" {
+				t.Errorf("page %d should not expose url/key", p.Index)
+			}
+		} else {
+			if p.Locked {
+				t.Errorf("page %d should not be locked", p.Index)
+			}
+			if p.URL == "" {
+				t.Errorf("page %d should have a url", p.Index)
+			}
+		}
+	}
+
+	// Paid tier preview → everything sharp.
+	gold := fixtures.TierGatedCtx("preview-gold", "user", "gold")
+	resGold, err := GetComicPages(gold, comic.Slug, &GetComicPagesParams{Offset: 0, Limit: 10, Preview: true})
+	if err != nil {
+		t.Fatalf("gold pages error: %v", err)
+	}
+	for _, p := range resGold.Pages {
+		if p.Locked || p.URL == "" {
+			t.Errorf("gold page %d should be sharp, got locked=%v", p.Index, p.Locked)
+		}
+	}
+
+	// Reader (no Preview flag) is gated for free/anonymous callers.
+	if _, err := GetComicPages(context.Background(), comic.Slug, &GetComicPagesParams{Offset: 0, Limit: 10}); err == nil {
+		t.Error("expected reader access denied for anonymous caller")
+	}
+
+	// Reader is available to paid tiers.
+	resReader, err := GetComicPages(gold, comic.Slug, &GetComicPagesParams{Offset: 0, Limit: 10})
+	if err != nil {
+		t.Fatalf("gold reader pages error: %v", err)
+	}
+	for _, p := range resReader.Pages {
+		if p.Locked {
+			t.Errorf("gold reader page %d should not be locked", p.Index)
+		}
+	}
+}
+
+func TestListTrendingPopular_Ranking(t *testing.T) {
+	ctx := context.Background()
+	_, _ = et.NewTestDatabase(ctx, "comicsdb")
+
+	// Create two series with different engagement sums.
+	mkSeries := func(id, title, genre string) {
+		_, err := db.Exec(ctx, `
+			INSERT INTO series (id, title, slug, description, genre, category, uploader_id)
+			VALUES ($1, $2, $3, '', $4, 'Comic', $5)
+		`, id, title, title, genre, fixtures.TestUploaderID)
+		if err != nil {
+			t.Fatalf("insert series: %v", err)
+		}
+	}
+	mkSeries("30000000-0000-0000-0000-0000000000a1", "Series A", "Action")
+	mkSeries("30000000-0000-0000-0000-0000000000a2", "Series B", "Drama")
+
+	// Series A: 1 published comic with high views, low likes.
+	// Series B: 1 published comic with low views, high likes.
+	insertComic := func(id, slug, seriesID string, views, likes int) {
+		_, err := db.Exec(ctx, `
+			INSERT INTO comics (id, uploader_id, title, author, slug, description, status,
+				cover_key, file_key, series_id, series_order, view_count, like_count)
+			VALUES ($1, $2, $3, '', $4, '', 'published', 'c.jpg', 'f.cbz', $5, 1, $6, $7)
+		`, id, fixtures.TestUploaderID, slug, slug, seriesID, views, likes)
+		if err != nil {
+			t.Fatalf("insert comic: %v", err)
+		}
+	}
+	insertComic("20000000-0000-0000-0000-0000000000b1", "a1", "30000000-0000-0000-0000-0000000000a1", 1000, 5)
+	insertComic("20000000-0000-0000-0000-0000000000b2", "b1", "30000000-0000-0000-0000-0000000000a2", 100, 50)
+
+	res, err := ListTrendingPopular(ctx)
+	if err != nil {
+		t.Fatalf("list trending popular: %v", err)
+	}
+
+	if len(res.Trending) < 2 {
+		t.Fatalf("expected >=2 trending, got %d", len(res.Trending))
+	}
+	if res.Trending[0].Title != "Series A" {
+		t.Errorf("expected Series A top trending (highest views), got %s", res.Trending[0].Title)
+	}
+	if res.Trending[0].Rank != 1 {
+		t.Errorf("expected rank 1, got %d", res.Trending[0].Rank)
+	}
+
+	if len(res.Popular) < 2 {
+		t.Fatalf("expected >=2 popular, got %d", len(res.Popular))
+	}
+	if res.Popular[0].Title != "Series B" {
+		t.Errorf("expected Series B top popular (highest likes), got %s", res.Popular[0].Title)
+	}
+}
+
+func TestGetHome_ReturnsSections(t *testing.T) {
+	ctx := context.Background()
+	_, _ = et.NewTestDatabase(ctx, "comicsdb")
+
+	const aID = "30000000-0000-0000-0000-0000000000e1"
+	const bID = "30000000-0000-0000-0000-0000000000e2"
+	const aTitle = "Home Series Alpha"
+	const bTitle = "Home Series Beta"
+
+	// Two series with different categories, one scheduled.
+	for _, s := range []struct {
+		id, title, slug, category, schedule string
+	}{
+		{aID, aTitle, "home-series-alpha", "Manga", "fri"},
+		{bID, bTitle, "home-series-beta", "Comic", ""},
+	} {
+		_, err := db.Exec(ctx, `
+			INSERT INTO series (id, title, slug, description, genre, category, schedule_day, uploader_id)
+			VALUES ($1, $2, $3, '', 'Action', $4, $5, $6)
+		`, s.id, s.title, s.slug, s.category, nulOrValue(s.schedule), fixtures.TestUploaderID)
+		if err != nil {
+			t.Fatalf("insert series: %v", err)
+		}
+	}
+
+	res, err := GetHome(ctx)
+	if err != nil {
+		t.Fatalf("get home: %v", err)
+	}
+
+	// Categories include ours.
+	hasCategory := func(c string) bool {
+		for _, x := range res.Categories {
+			if x == c {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasCategory("Manga") || !hasCategory("Comic") {
+		t.Errorf("expected categories to include Manga and Comic, got %v", res.Categories)
+	}
+
+	// Daily includes the scheduled series and not the unscheduled one.
+	var dailyHasA, dailyHasB bool
+	for _, s := range res.DailySeries {
+		if s.ID == aID {
+			dailyHasA = true
+		}
+		if s.ID == bID {
+			dailyHasB = true
+		}
+	}
+	if !dailyHasA {
+		t.Error("expected scheduled series (Alpha) in daily")
+	}
+	if dailyHasB {
+		t.Error("unscheduled series (Beta) should not be in daily")
+	}
+
+	// Indie includes our series (by uploader).
+	var indieHasA bool
+	for _, s := range res.IndieSeries {
+		if s.ID == aID {
+			indieHasA = true
+		}
+	}
+	if !indieHasA {
+		t.Error("expected our series in indie list")
+	}
+}
+
+func TestSeriesCounterIncrements(t *testing.T) {
+	ctx := context.Background()
+	_, _ = et.NewTestDatabase(ctx, "comicsdb")
+
+	// Series + comic.
+	_, err := db.Exec(ctx, `
+		INSERT INTO series (id, title, slug, description, uploader_id)
+		VALUES ('30000000-0000-0000-0000-0000000000d1', 'Counter Series', 'counter-series', '', $1)
+	`, fixtures.TestUploaderID)
+	if err != nil {
+		t.Fatalf("insert series: %v", err)
+	}
+	comic, err := CreateComic(uploaderCtx, &CreateComicParams{
+		Title:    "Counter Comic",
+		CoverKey: "covers/counter.jpg",
+		FileKey:  "files/counter.cbz",
+	})
+	if err != nil {
+		t.Fatalf("create comic: %v", err)
+	}
+	_, _ = db.Exec(ctx, `UPDATE comics SET series_id = '30000000-0000-0000-0000-0000000000d1' WHERE id = $1`, comic.ID)
+	_ = ApproveComic(moderatorCtx, comic.ID)
+
+	// Toggle favorite on → hearts_count + 1.
+	userCtx := fixtures.UserCtx()
+	if _, err := ToggleFavorite(userCtx, comic.ID); err != nil {
+		t.Fatalf("favorite: %v", err)
+	}
+	var hearts int64
+	db.QueryRow(ctx, `SELECT hearts_count FROM series WHERE id = '30000000-0000-0000-0000-0000000000d1'`).Scan(&hearts)
+	if hearts != 1 {
+		t.Errorf("expected hearts_count 1 after favorite, got %d", hearts)
+	}
+
+	// Toggle off → back to 0.
+	if _, err := ToggleFavorite(userCtx, comic.ID); err != nil {
+		t.Fatalf("unfavorite: %v", err)
+	}
+	db.QueryRow(ctx, `SELECT hearts_count FROM series WHERE id = '30000000-0000-0000-0000-0000000000d1'`).Scan(&hearts)
+	if hearts != 0 {
+		t.Errorf("expected hearts_count 0 after unfavorite, got %d", hearts)
 	}
 }

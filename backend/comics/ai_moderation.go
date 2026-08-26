@@ -7,12 +7,14 @@ import (
 	"comics-galore/backend/aiprovider"
 	myauth "comics-galore/backend/auth"
 
+	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
+	"encore.dev/cron"
 	"encore.dev/pubsub"
 )
 
 // AIModeratorAPIKey is the app-global secret for the OpenAI-compatible endpoint.
-var aiSecrets struct {
+var secrets struct {
 	AIModeratorAPIKey string
 }
 
@@ -28,15 +30,86 @@ var moderationTopic = pubsub.NewTopic[ModerationEvent]("ai-moderation", pubsub.T
 })
 
 var _ = pubsub.NewSubscription(moderationTopic, "ai-moderate", pubsub.SubscriptionConfig[ModerationEvent]{
-	Handler: handleModerationEvent,
+	Handler:     handleModerationEvent,
+	RetryPolicy: &pubsub.RetryPolicy{MaxRetries: 5},
 })
 
 func handleModerationEvent(ctx context.Context, ev ModerationEvent) error {
-	if ev.TargetType != "comic" && ev.TargetType != "comment" {
+	return runTrackedJob(ctx, "ai-moderation", ev.TargetID, func() error {
+		if ev.TargetType != "comic" && ev.TargetType != "comment" {
+			return nil
+		}
+		return runAIModeration(ctx, ev.TargetType, ev.TargetID)
+	})
+}
+
+// SweepAIModeration is a scheduled reconciliation job (hybrid with the
+// event-driven moderation): it re-moderates any pending comic that was never
+// decided — e.g. the event was lost, or AI moderation was enabled after the
+// upload. Comics that already have an AI decision (approved/rejected/queued)
+// are skipped.
+var _ = cron.NewJob("ai-moderate-comics", cron.JobConfig{
+	Title:    "Moderate pending comics via AI",
+	Every:    15 * cron.Minute,
+	Endpoint: SweepAIModeration,
+})
+
+//encore:api private
+func SweepAIModeration(ctx context.Context) error {
+	return runTrackedJob(ctx, "ai-moderate-comics", "", func() error {
+		return sweepAIModeration(ctx)
+	})
+}
+
+// RunAIModerationSweep lets an admin manually trigger the AI moderation sweep.
+//encore:api auth method=POST path=/admin/jobs/ai-moderate-comics/run
+func RunAIModerationSweep(ctx context.Context) error {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+	return SweepAIModeration(ctx)
+}
+
+func sweepAIModeration(ctx context.Context) error {
+	cfg, err := myauth.GetAIModerationConfig(ctx)
+	if err != nil || !cfg.Enabled {
 		return nil
 	}
-	return runAIModeration(ctx, ev.TargetType, ev.TargetID)
+	if secrets.AIModeratorAPIKey == "" {
+		return nil
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT id FROM comics
+		WHERE status = 'pending_review'
+		  AND id NOT IN (SELECT target_id FROM ai_decisions WHERE target_type = 'comic')
+		ORDER BY created_at ASC
+	`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, id := range ids {
+		// Best-effort per comic: one failure shouldn't abort the whole sweep.
+		_ = runAIModeration(ctx, "comic", id)
+	}
+	return nil
 }
+
 // runAIModeration classifies a comic or comment and applies thresholds:
 // auto-approve/reject, or queue for human review when uncertain. Idempotent-ish
 // (at-least-once delivery may re-run; a repeated decision simply overwrites).
@@ -45,7 +118,7 @@ func runAIModeration(ctx context.Context, targetType, targetID string) error {
 	if err != nil || !cfg.Enabled {
 		return nil // disabled or unavailable → human path
 	}
-	if aiSecrets.AIModeratorAPIKey == "" {
+	if secrets.AIModeratorAPIKey == "" {
 		return nil
 	}
 
@@ -54,7 +127,7 @@ func runAIModeration(ctx context.Context, targetType, targetID string) error {
 		return err
 	}
 
-	client := aiprovider.New(cfg.Endpoint, aiSecrets.AIModeratorAPIKey, cfg.Model)
+	client := aiprovider.New(cfg.Endpoint, secrets.AIModeratorAPIKey, cfg.Model)
 	result, err := client.Classify(ctx, aiprovider.ClassifyRequest{
 		SystemPrompt: cfg.Prompt,
 		Content:      content,

@@ -16,7 +16,7 @@ export const Local: BaseURL = "http://localhost:4000"
  * Environment returns a BaseURL for calling the cloud environment with the given name.
  */
 export function Environment(name: string): BaseURL {
-    return `https://${name}-comics-galore-backend-v5k2.encr.app`
+    return `https://${name}-3cxq6.encr.app`
 }
 
 /**
@@ -29,12 +29,14 @@ export function PreviewEnv(pr: number | string): BaseURL {
 const BROWSER = typeof globalThis === "object" && ("window" in globalThis);
 
 /**
- * Client is an API client for the comics-galore-backend-v5k2 Encore application.
+ * Client is an API client for the 3cxq6 Encore application.
  */
 export default class Client {
     public readonly auth: auth.ServiceClient
     public readonly billing: billing.ServiceClient
     public readonly comics: comics.ServiceClient
+    public readonly dashboard: dashboard.ServiceClient
+    public readonly jobs: jobs.ServiceClient
     public readonly reading: reading.ServiceClient
     public readonly social: social.ServiceClient
     public readonly tiers: tiers.ServiceClient
@@ -56,6 +58,8 @@ export default class Client {
         this.auth = new auth.ServiceClient(base)
         this.billing = new billing.ServiceClient(base)
         this.comics = new comics.ServiceClient(base)
+        this.dashboard = new dashboard.ServiceClient(base)
+        this.jobs = new jobs.ServiceClient(base)
         this.reading = new reading.ServiceClient(base)
         this.social = new social.ServiceClient(base)
         this.tiers = new tiers.ServiceClient(base)
@@ -98,6 +102,20 @@ export interface ClientOptions {
 }
 
 export namespace auth {
+    /**
+     * AccountInfo describes one linked authentication method.
+     */
+    export interface AccountInfo {
+        id: string
+        provider: string
+        email: string
+        "created_at": string
+    }
+
+    export interface AccountsResponse {
+        accounts: AccountInfo[]
+    }
+
     export interface AdminListUsersParams {
         Page: number
         Limit: number
@@ -134,20 +152,19 @@ export namespace auth {
         "registrations_open": boolean
         "max_upload_size_mb": number
         "image_serving_mode": string
+        "imgproxy_base_url": string
+        "imgproxy_key": string
+        "imgproxy_salt": string
+        "upload_mode": string
         "require_email_verify": boolean
         "rate_limit": number
         "s3_presigned_ttl_min": number
         "cf_presigned_ttl_min": number
-        "quota_free_gb": number
-        "quota_bronze_gb": number
-        "quota_silver_gb": number
-        "quota_gold_gb": number
-        "quota_platinum_gb": number
-        "boost_1_gb": number
+        "boost_1_downloads": number
         "boost_1_price": number
-        "boost_2_gb": number
+        "boost_2_downloads": number
         "boost_2_price": number
-        "boost_3_gb": number
+        "boost_3_downloads": number
         "boost_3_price": number
         "contact_email": string
         "hide_mature_default": boolean
@@ -164,6 +181,33 @@ export namespace auth {
         "ai_prompt": string
         "ai_auto_approve_threshold": number
         "ai_auto_reject_threshold": number
+        /**
+         * Billing hygiene: downgrade subscriptions stuck in "waiting for payment".
+         */
+        "waiting_pay_job_enabled": boolean
+
+        "waiting_pay_expiry_hours": number
+        /**
+         * Download delivery: archives above this size are served via a presigned
+         * redirect instead of being streamed through the backend.
+         */
+        "download_stream_threshold_mb": number
+
+        /**
+         * Upload page: above this page count the manual tab switches from image
+         * thumbnails to a compact file list.
+         */
+        "page_preview_threshold": number
+
+        /**
+         * Upload: archives larger than this are split into multiple parts.
+         */
+        "upload_part_size_mb": number
+
+        /**
+         * Upload: number of parts uploaded concurrently when splitting an archive.
+         */
+        "upload_concurrency": number
     }
 
     export interface AuthParams {
@@ -173,15 +217,30 @@ export namespace auth {
     export interface AuthResponse {
         token: string
         user: User
+        "requires_totp": boolean
+        "mfa_token": string
     }
 
     export interface BanUserParams {
         reason: string
     }
 
+    export interface ConfirmTOTPParams {
+        secret: string
+        code: string
+    }
+
+    export interface ConfirmTOTPResponse {
+        enabled: boolean
+    }
+
     export interface DashboardStats {
         "total_users": number
         "new_users_this_month": number
+    }
+
+    export interface DisableTOTPParams {
+        code: string
     }
 
     export interface ImpersonateResponse {
@@ -192,6 +251,15 @@ export namespace auth {
     export interface LoginParams {
         email: string
         password: string
+        "turnstile_token": string
+    }
+
+    /**
+     * LogoutParams carries the session token being terminated. The frontend sends
+     * the same bearer token it uses for API calls.
+     */
+    export interface LogoutParams {
+        token: string
     }
 
     export interface NotificationPrefs {
@@ -201,6 +269,38 @@ export namespace auth {
         "in_app_enabled": boolean
     }
 
+    export interface OAuthExchangeParams {
+        code: string
+    }
+
+    export interface PasskeyInfo {
+        id: string
+        name: string
+        "created_at": string
+        "last_used_at": string
+    }
+
+    export interface PasskeyListResponse {
+        passkeys: PasskeyInfo[]
+    }
+
+    export interface PasskeyLoginVerifyParams {
+        response: JSONValue
+    }
+
+    export interface PasskeyRegisterOptionsParams {
+        name: string
+    }
+
+    export interface PasskeyRegisterOptionsResponse {
+        options: JSONValue
+    }
+
+    export interface PasskeyRegisterVerifyParams {
+        name: string
+        response: JSONValue
+    }
+
     export interface PasswordResetConfirm {
         token: string
         password: string
@@ -208,11 +308,21 @@ export namespace auth {
 
     export interface PasswordResetRequest {
         email: string
+        "turnstile_token": string
     }
 
     export interface RegisterParams {
         email: string
         password: string
+        username: string
+        "turnstile_token": string
+    }
+
+    /**
+     * RevokeSessionParams revokes one session by id (logout of another device).
+     */
+    export interface RevokeSessionParams {
+        "session_id": string
     }
 
     export interface SeedParams {
@@ -223,6 +333,48 @@ export namespace auth {
         created: number
         skipped: number
         message: string
+    }
+
+    export interface SessionInfo {
+        id: string
+        "created_at": string
+        "last_seen_at": string
+        "expires_at": string
+    }
+
+    export interface SessionsResponse {
+        sessions: SessionInfo[]
+    }
+
+    export interface SetupTOTPResponse {
+        secret: string
+        "otpauth_url": string
+        "qr_image": string
+    }
+
+    export interface SignupTrendPoint {
+        day: string
+        count: number
+    }
+
+    /**
+     * SiteConfig is the public, non-sensitive subset of settings used for SEO,
+     * metadata and footer content.
+     */
+    export interface SiteConfig {
+        "site_name": string
+        "contact_email": string
+        "default_meta_description": string
+        "default_language": string
+        "maintenance_mode": boolean
+        "upload_mode": string
+        "page_preview_threshold": number
+        "upload_part_size_mb": number
+        "upload_concurrency": number
+    }
+
+    export interface TOTPStatusResponse {
+        enabled: boolean
     }
 
     export interface UpdateAvatarParams {
@@ -237,11 +389,16 @@ export namespace auth {
         role: string
     }
 
+    export interface UpdateUsernameParams {
+        username: string
+    }
+
     export interface User {
         id: string
         email: string
         role: string
         tier: string
+        username: string
         "avatar_key": string
         "created_at": string
     }
@@ -251,10 +408,6 @@ export namespace auth {
         "content_language": string
         "items_per_page": number
         "popular_tags_limit": number
-        "email_from_following": boolean
-        "email_support_replies": boolean
-        "email_marketing": boolean
-        "in_app_enabled": boolean
         "hide_mature": boolean
     }
 
@@ -263,12 +416,28 @@ export namespace auth {
         email: string
         role: string
         tier: string
+        username: string
         "avatar_key": string
         "created_at": string
     }
 
+    export interface UsernameAvailableParams {
+        Username: string
+    }
+
+    export interface UsernameAvailableResponse {
+        available: boolean
+        valid: boolean
+        message: string
+    }
+
     export interface VerifyEmailParams {
         token: string
+    }
+
+    export interface VerifyTOTPLoginParams {
+        "mfa_token": string
+        code: string
     }
 
     export class ServiceClient {
@@ -277,7 +446,6 @@ export namespace auth {
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
             this.AdminBanUser = this.AdminBanUser.bind(this)
-            this.AdminDashboardStats = this.AdminDashboardStats.bind(this)
             this.AdminImpersonateUser = this.AdminImpersonateUser.bind(this)
             this.AdminListUsers = this.AdminListUsers.bind(this)
             this.AdminSuspendUser = this.AdminSuspendUser.bind(this)
@@ -285,34 +453,51 @@ export namespace auth {
             this.AdminUnsuspendUser = this.AdminUnsuspendUser.bind(this)
             this.AdminUpdateUserRole = this.AdminUpdateUserRole.bind(this)
             this.ConfirmPasswordReset = this.ConfirmPasswordReset.bind(this)
+            this.ConfirmTOTP = this.ConfirmTOTP.bind(this)
+            this.DeletePasskey = this.DeletePasskey.bind(this)
             this.DevSeedUsers = this.DevSeedUsers.bind(this)
+            this.DisableTOTP = this.DisableTOTP.bind(this)
             this.ExportCSV = this.ExportCSV.bind(this)
             this.GetAdminSettings = this.GetAdminSettings.bind(this)
             this.GetAvatar = this.GetAvatar.bind(this)
             this.GetNotificationPrefs = this.GetNotificationPrefs.bind(this)
             this.GetPreferences = this.GetPreferences.bind(this)
             this.GetProfile = this.GetProfile.bind(this)
+            this.GetSiteConfig = this.GetSiteConfig.bind(this)
+            this.ListAccounts = this.ListAccounts.bind(this)
+            this.ListPasskeys = this.ListPasskeys.bind(this)
+            this.ListSessions = this.ListSessions.bind(this)
             this.Login = this.Login.bind(this)
+            this.Logout = this.Logout.bind(this)
+            this.LogoutAll = this.LogoutAll.bind(this)
             this.Me = this.Me.bind(this)
+            this.OAuthCallback = this.OAuthCallback.bind(this)
+            this.OAuthExchange = this.OAuthExchange.bind(this)
+            this.OAuthStart = this.OAuthStart.bind(this)
+            this.PasskeyLoginOptions = this.PasskeyLoginOptions.bind(this)
+            this.PasskeyLoginVerify = this.PasskeyLoginVerify.bind(this)
+            this.PasskeyRegisterOptions = this.PasskeyRegisterOptions.bind(this)
+            this.PasskeyRegisterVerify = this.PasskeyRegisterVerify.bind(this)
             this.Register = this.Register.bind(this)
             this.RenewToken = this.RenewToken.bind(this)
             this.RequestPasswordReset = this.RequestPasswordReset.bind(this)
             this.ResendVerification = this.ResendVerification.bind(this)
+            this.RevokeSession = this.RevokeSession.bind(this)
             this.SaveAdminSettings = this.SaveAdminSettings.bind(this)
             this.SavePreferences = this.SavePreferences.bind(this)
+            this.SetupTOTP = this.SetupTOTP.bind(this)
+            this.TOTPStatus = this.TOTPStatus.bind(this)
+            this.UnlinkAccount = this.UnlinkAccount.bind(this)
             this.UpdateAvatar = this.UpdateAvatar.bind(this)
             this.UpdateNotificationPrefs = this.UpdateNotificationPrefs.bind(this)
+            this.UpdateUsername = this.UpdateUsername.bind(this)
+            this.UsernameAvailable = this.UsernameAvailable.bind(this)
             this.VerifyEmail = this.VerifyEmail.bind(this)
+            this.VerifyTOTPLogin = this.VerifyTOTPLogin.bind(this)
         }
 
         public async AdminBanUser(id: string, params: BanUserParams): Promise<void> {
             await this.baseClient.callTypedAPI("POST", `/admin/users/${encodeURIComponent(id)}/ban`, JSON.stringify(params))
-        }
-
-        public async AdminDashboardStats(): Promise<DashboardStats> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/stats`)
-            return await resp.json() as DashboardStats
         }
 
         public async AdminImpersonateUser(id: string): Promise<ImpersonateResponse> {
@@ -359,10 +544,24 @@ export namespace auth {
             await this.baseClient.callTypedAPI("POST", `/auth/password-reset/confirm`, JSON.stringify(params))
         }
 
+        public async ConfirmTOTP(params: ConfirmTOTPParams): Promise<ConfirmTOTPResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/me/totp/confirm`, JSON.stringify(params))
+            return await resp.json() as ConfirmTOTPResponse
+        }
+
+        public async DeletePasskey(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("DELETE", `/auth/passkeys/${encodeURIComponent(id)}`)
+        }
+
         public async DevSeedUsers(params: SeedParams): Promise<SeedUsersResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/dev/seed-users`, JSON.stringify(params))
             return await resp.json() as SeedUsersResponse
+        }
+
+        public async DisableTOTP(params: DisableTOTPParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/me/totp/disable`, JSON.stringify(params))
         }
 
         public async ExportCSV(method: "GET", resource: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
@@ -399,16 +598,86 @@ export namespace auth {
             return await resp.json() as UserProfile
         }
 
+        public async GetSiteConfig(): Promise<SiteConfig> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/site-config`)
+            return await resp.json() as SiteConfig
+        }
+
+        public async ListAccounts(): Promise<AccountsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/auth/accounts`)
+            return await resp.json() as AccountsResponse
+        }
+
+        public async ListPasskeys(): Promise<PasskeyListResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/auth/passkeys`)
+            return await resp.json() as PasskeyListResponse
+        }
+
+        public async ListSessions(): Promise<SessionsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/auth/sessions`)
+            return await resp.json() as SessionsResponse
+        }
+
         public async Login(params: LoginParams): Promise<AuthResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/auth/login`, JSON.stringify(params))
             return await resp.json() as AuthResponse
         }
 
+        public async Logout(params: LogoutParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/auth/logout`, JSON.stringify(params))
+        }
+
+        public async LogoutAll(): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/auth/logout-all`)
+        }
+
         public async Me(): Promise<User> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/auth/me`)
             return await resp.json() as User
+        }
+
+        public async OAuthCallback(method: "GET", provider: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
+            return this.baseClient.callAPI(method, `/auth/oauth/${encodeURIComponent(provider)}/callback`, body, options)
+        }
+
+        public async OAuthExchange(params: OAuthExchangeParams): Promise<AuthResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/auth/oauth/exchange`, JSON.stringify(params))
+            return await resp.json() as AuthResponse
+        }
+
+        public async OAuthStart(method: "GET", provider: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
+            return this.baseClient.callAPI(method, `/auth/oauth/${encodeURIComponent(provider)}`, body, options)
+        }
+
+        public async PasskeyLoginOptions(): Promise<PasskeyRegisterOptionsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/auth/passkey/login/options`)
+            return await resp.json() as PasskeyRegisterOptionsResponse
+        }
+
+        public async PasskeyLoginVerify(params: PasskeyLoginVerifyParams): Promise<AuthResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/auth/passkey/login/verify`, JSON.stringify(params))
+            return await resp.json() as AuthResponse
+        }
+
+        public async PasskeyRegisterOptions(params: PasskeyRegisterOptionsParams): Promise<PasskeyRegisterOptionsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/auth/passkey/register/options`, JSON.stringify(params))
+            return await resp.json() as PasskeyRegisterOptionsResponse
+        }
+
+        public async PasskeyRegisterVerify(params: PasskeyRegisterVerifyParams): Promise<PasskeyListResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/auth/passkey/register/verify`, JSON.stringify(params))
+            return await resp.json() as PasskeyListResponse
         }
 
         public async Register(params: RegisterParams): Promise<AuthResponse> {
@@ -431,6 +700,10 @@ export namespace auth {
             await this.baseClient.callTypedAPI("POST", `/auth/resend-verification`)
         }
 
+        public async RevokeSession(params: RevokeSessionParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/auth/sessions/revoke`, JSON.stringify(params))
+        }
+
         public async SaveAdminSettings(params: AppSettings): Promise<AppSettings> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("PATCH", `/admin/settings`, JSON.stringify(params))
@@ -441,6 +714,22 @@ export namespace auth {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("PATCH", `/me/preferences`, JSON.stringify(params))
             return await resp.json() as UserPreferences
+        }
+
+        public async SetupTOTP(): Promise<SetupTOTPResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/me/totp/setup`)
+            return await resp.json() as SetupTOTPResponse
+        }
+
+        public async TOTPStatus(): Promise<TOTPStatusResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/me/totp`)
+            return await resp.json() as TOTPStatusResponse
+        }
+
+        public async UnlinkAccount(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("DELETE", `/auth/accounts/${encodeURIComponent(id)}`)
         }
 
         public async UpdateAvatar(params: UpdateAvatarParams): Promise<UpdateAvatarResponse> {
@@ -455,8 +744,31 @@ export namespace auth {
             return await resp.json() as NotificationPrefs
         }
 
+        public async UpdateUsername(params: UpdateUsernameParams): Promise<UserProfile> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/me/username`, JSON.stringify(params))
+            return await resp.json() as UserProfile
+        }
+
+        public async UsernameAvailable(params: UsernameAvailableParams): Promise<UsernameAvailableResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                username: params.Username,
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/auth/username-available`, undefined, {query})
+            return await resp.json() as UsernameAvailableResponse
+        }
+
         public async VerifyEmail(params: VerifyEmailParams): Promise<void> {
             await this.baseClient.callTypedAPI("POST", `/auth/verify-email`, JSON.stringify(params))
+        }
+
+        public async VerifyTOTPLogin(params: VerifyTOTPLoginParams): Promise<AuthResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/auth/login/totp`, JSON.stringify(params))
+            return await resp.json() as AuthResponse
         }
     }
 }
@@ -558,6 +870,15 @@ export namespace billing {
         "revenue_by_tier": RevenueByTier[]
     }
 
+    export interface BoostOption {
+        downloads: number
+        "price_usd": number
+    }
+
+    export interface BoostOptionsResponse {
+        boosts: BoostOption[]
+    }
+
     export interface CheckBalanceResponse {
         balances: { [key: string]: BalanceEntry }
     }
@@ -583,7 +904,6 @@ export namespace billing {
     export interface CreateDepositParams {
         "plan_id": string
         crypto: string
-        Host: string
     }
 
     export interface CreateDepositResponse {
@@ -592,6 +912,18 @@ export namespace billing {
         "pay_amount": number
         "pay_currency": string
         "plan_id": string
+    }
+
+    export interface CreateQuotaBoostParams {
+        downloads: number
+        crypto: string
+    }
+
+    export interface CreateQuotaBoostResponse {
+        "deposit_id": string
+        "pay_address": string
+        "pay_amount": number
+        "pay_currency": string
     }
 
     export interface CreateSubParams {
@@ -618,8 +950,19 @@ export namespace billing {
         coupons: Coupon[]
     }
 
+    export interface ListCurrenciesResponse {
+        currencies: string[]
+    }
+
     export interface ListPastDueResponse {
         payments: PastDuePayment[]
+    }
+
+    export interface MySubscription {
+        id: string
+        tier: string
+        status: string
+        "expires_at": string
     }
 
     export interface PastDuePayment {
@@ -668,15 +1011,20 @@ export namespace billing {
             this.AdminListSubscriptions = this.AdminListSubscriptions.bind(this)
             this.AdminPastDuePayments = this.AdminPastDuePayments.bind(this)
             this.AdminRevokeSubscription = this.AdminRevokeSubscription.bind(this)
+            this.CancelMySubscription = this.CancelMySubscription.bind(this)
             this.CheckBalance = this.CheckBalance.bind(this)
             this.CreateDeposit = this.CreateDeposit.bind(this)
+            this.CreateQuotaBoost = this.CreateQuotaBoost.bind(this)
             this.CreateSubscription = this.CreateSubscription.bind(this)
             this.DepositWebhook = this.DepositWebhook.bind(this)
             this.DevSeedBilling = this.DevSeedBilling.bind(this)
             this.EstimatePrice = this.EstimatePrice.bind(this)
-            this.GetBillingStats = this.GetBillingStats.bind(this)
+            this.GetBoostOptions = this.GetBoostOptions.bind(this)
+            this.GetMySubscription = this.GetMySubscription.bind(this)
+            this.ListCurrencies = this.ListCurrencies.bind(this)
             this.PollDeposit = this.PollDeposit.bind(this)
             this.PollSubscription = this.PollSubscription.bind(this)
+            this.RunWaitingPayExpiry = this.RunWaitingPayExpiry.bind(this)
             this.SubscriptionWebhook = this.SubscriptionWebhook.bind(this)
         }
 
@@ -757,6 +1105,10 @@ export namespace billing {
             await this.baseClient.callTypedAPI("POST", `/admin/subscriptions/${encodeURIComponent(id)}/revoke`)
         }
 
+        public async CancelMySubscription(): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/billing/cancel-subscription`)
+        }
+
         public async CheckBalance(): Promise<CheckBalanceResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/billing/check-balance`)
@@ -764,20 +1116,15 @@ export namespace billing {
         }
 
         public async CreateDeposit(params: CreateDepositParams): Promise<CreateDepositResponse> {
-            // Convert our params into the objects we need for the request
-            const headers = makeRecord<string, string>({
-                host: params.Host,
-            })
-
-            // Construct the body with only the fields which we want encoded within the body (excluding query string or header fields)
-            const body: Record<string, any> = {
-                crypto:    params.crypto,
-                "plan_id": params["plan_id"],
-            }
-
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/billing/create-deposit`, JSON.stringify(body), {headers})
+            const resp = await this.baseClient.callTypedAPI("POST", `/billing/create-deposit`, JSON.stringify(params))
             return await resp.json() as CreateDepositResponse
+        }
+
+        public async CreateQuotaBoost(params: CreateQuotaBoostParams): Promise<CreateQuotaBoostResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/billing/create-quota-boost`, JSON.stringify(params))
+            return await resp.json() as CreateQuotaBoostResponse
         }
 
         public async CreateSubscription(params: CreateSubParams): Promise<CreateSubResponse> {
@@ -802,10 +1149,22 @@ export namespace billing {
             return await resp.json() as nowpayments.EstimateResponse
         }
 
-        public async GetBillingStats(): Promise<BillingStats> {
+        public async GetBoostOptions(): Promise<BoostOptionsResponse> {
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/billing-stats`)
-            return await resp.json() as BillingStats
+            const resp = await this.baseClient.callTypedAPI("GET", `/billing/quota-boosts`)
+            return await resp.json() as BoostOptionsResponse
+        }
+
+        public async GetMySubscription(): Promise<MySubscription> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/billing/my-subscription`)
+            return await resp.json() as MySubscription
+        }
+
+        public async ListCurrencies(): Promise<ListCurrenciesResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/billing/currencies`)
+            return await resp.json() as ListCurrenciesResponse
         }
 
         public async PollDeposit(id: string): Promise<PollDepositResponse> {
@@ -818,6 +1177,13 @@ export namespace billing {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/billing/subscription/${encodeURIComponent(id)}/poll`)
             return await resp.json() as PollSubResponse
+        }
+
+        /**
+         * RunWaitingPayExpiry lets an admin manually trigger the WAITING_PAY sweep.
+         */
+        public async RunWaitingPayExpiry(): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/admin/jobs/waiting-pay-expiry/run`)
         }
 
         public async SubscriptionWebhook(method: "POST", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
@@ -854,6 +1220,17 @@ export namespace comics {
         items: AIReviewItem[]
     }
 
+    /**
+     * AdBanner is a reserved advertising slot. Real ad content is provided by an
+     * ad agency integration; for now it's a placeholder.
+     */
+    export interface AdBanner {
+        title: string
+        subtitle: string
+        "cta_text": string
+        "cta_href": string
+    }
+
     export interface AddStaffPickParams {
         "comic_id": string
     }
@@ -871,6 +1248,16 @@ export namespace comics {
         FilterStatus: string
         FilterAuthor: string
         FilterTitle: string
+    }
+
+    export interface AdminListSeriesParams {
+        Page: number
+        Limit: number
+        Search: string
+        Sort: string
+        SortDir: string
+        FilterGenre: string
+        FilterCategory: string
     }
 
     export interface AuditLogEntry {
@@ -908,9 +1295,10 @@ export namespace comics {
         description: string
         "content_language": string
         status: string
+        category: string
+        genre: string
         "cover_key": string
         "file_key": string
-        "page_keys": string[]
         "file_size_bytes": number
         "min_tier_id": string
         "age_rating": string
@@ -930,32 +1318,83 @@ export namespace comics {
         "created_at": string
         "updated_at": string
         /**
-         * Resolved URLs (populated server-side, not from DB)
+         * Identifiers (single-issue vs graphic-novel vs periodical; at most one set)
+         */
+        isbn: string
+
+        upc: string
+        issn: string
+        /**
+         * Optional volume (collected edition / chapter) and issue number.
+         */
+        volume: string
+
+        "issue_number": string
+        /**
+         * Reader support
+         */
+        "reading_direction": string
+
+        "page_count": number
+        "archive_mimetype": string
+        /**
+         * ExtractionStatus tracks server-side archive extraction (CBR/PDF):
+         * none | processing | done | failed.
+         */
+        "extraction_status": string
+
+        /**
+         * Resolved cover URL (populated server-side, not from DB)
          */
         "cover_url": string
 
-        "page_urls": string[]
         /**
          * MatureLocked marks a comic whose pages are withheld from the caller
          * (free users when `forbid_mature_for_free` is enabled). The cover stays
          * present so the frontend can render a blurred teaser.
          */
         "mature_locked": boolean
+
+        /**
+         * CommentsEnabled reflects the global `enable_comments` setting, so the
+         * frontend can hide the comment form when commenting is disabled.
+         */
+        "comments_enabled": boolean
+    }
+
+    /**
+     * ComicPage is one page of a comic with its resolved URL and dimensions.
+     */
+    export interface ComicPage {
+        index: number
+        key: string
+        url: string
+        width: number
+        height: number
+        /**
+         * Locked marks a page withheld from the caller (free-tier previews past the
+         * preview limit). Locked pages have no URL or key.
+         */
+        locked: boolean
     }
 
     export interface ComicsStats {
         "total_comics": number
         "published_comics": number
         "pending_comics": number
+        "rejected_comics": number
         "total_views": number
         "storage_bytes": number
         "top_liked": TopLikedComic[]
+        "top_viewed": TopViewedComic[]
     }
 
     export interface CommentData {
         id: string
         "comic_id": string
         "user_id": string
+        username: string
+        "avatar_key": string
         "parent_id": string
         "body_text": string
         "created_at": string
@@ -967,6 +1406,8 @@ export namespace comics {
         author: string
         description: string
         "content_language": string
+        category: string
+        genre: string
         "cover_key": string
         "file_key": string
         "page_keys": string[]
@@ -976,11 +1417,44 @@ export namespace comics {
         "is_premium": boolean
         tags: string[]
         "upload_session_id": string
+        /**
+         * Identifiers (at most one set per comic)
+         */
+        isbn: string
+
+        upc: string
+        issn: string
+        /**
+         * Optional volume (collected edition / chapter) and issue number.
+         */
+        volume: string
+
+        "issue_number": string
+        /**
+         * Reader support
+         */
+        "reading_direction": string
+
+        "page_dimensions": PageDimension[]
+        "archive_mimetype": string
+        /**
+         * Series association: either attach to an existing series or create a new
+         * one (title). SeriesGenre/Category/ScheduleDay are used only when a new
+         * series is created.
+         */
+        "series_id": string
+
+        "series_title": string
+        "series_genre": string
+        "series_category": string
+        "series_schedule_day": string
+        "turnstile_token": string
     }
 
     export interface CreateCommentParams {
         "body_text": string
         "parent_id": string
+        "turnstile_token": string
     }
 
     export interface CreateReadingListParams {
@@ -991,6 +1465,10 @@ export namespace comics {
     export interface CreateSeriesParams {
         title: string
         description: string
+        genre: string
+        category: string
+        "schedule_day": string
+        "cover_key": string
     }
 
     export interface FlagCommentParams {
@@ -1009,9 +1487,34 @@ export namespace comics {
         "created_at": string
     }
 
+    export interface GetComicPagesParams {
+        Offset: number
+        Limit: number
+        Preview: boolean
+    }
+
+    export interface GetComicPagesResponse {
+        total: number
+        offset: number
+        limit: number
+        pages: ComicPage[]
+    }
+
     export interface GetReadingListParams {
         Page: number
         Limit: number
+    }
+
+    /**
+     * HomeResponse is the full homepage payload.
+     */
+    export interface HomeResponse {
+        ad: AdBanner
+        categories: string[]
+        "popular_by_category": Series[]
+        "newly_released": Series[]
+        "daily_series": Series[]
+        "indie_series": Series[]
     }
 
     export interface LanguageFacet {
@@ -1069,6 +1572,10 @@ export namespace comics {
         total: number
     }
 
+    export interface ListReadingListsParams {
+        ComicID: string
+    }
+
     export interface ListReadingListsResponse {
         lists: ReadingList[]
     }
@@ -1079,10 +1586,20 @@ export namespace comics {
 
     export interface ListSeriesResponse {
         series: Series[]
+        total: number
     }
 
     export interface ListStaffPicksResponse {
         picks: StaffPick[]
+    }
+
+    /**
+     * PageDimension is one page's pixel dimensions, aligned by index with
+     * page_keys, used for layout-shift-free rendering.
+     */
+    export interface PageDimension {
+        width: number
+        height: number
     }
 
     export interface PendingComic {
@@ -1113,6 +1630,8 @@ export namespace comics {
         name: string
         "is_public": boolean
         "created_at": string
+        "comic_count": number
+        "has_comic": boolean
     }
 
     export interface RecycleBinParams {
@@ -1150,6 +1669,13 @@ export namespace comics {
         filters: string
     }
 
+    export interface SearchSeriesParams {
+        Search: string
+        Category: string
+        Page: number
+        Limit: number
+    }
+
     export interface SeedComicsResponse {
         created: number
         skipped: number
@@ -1166,13 +1692,36 @@ export namespace comics {
         token: string
     }
 
+    export interface SeedSeriesResponse {
+        created: number
+        skipped: number
+        message: string
+    }
+
     export interface Series {
         id: string
         title: string
         slug: string
         description: string
         "uploader_id": string
+        "cover_key": string
+        genre: string
+        category: string
+        "overlay_title": string
+        "views_count": number
+        "hearts_count": number
+        "schedule_day": string
         "created_at": string
+        /**
+         * Computed fields (not stored).
+         */
+        rank: number
+
+        "cover_url": string
+    }
+
+    export interface SeriesCategoriesResponse {
+        categories: string[]
     }
 
     export interface SeriesComicsParams {
@@ -1220,6 +1769,24 @@ export namespace comics {
         "like_count": number
     }
 
+    export interface TopViewedComic {
+        id: string
+        title: string
+        slug: string
+        "cover_key": string
+        "view_count": number
+    }
+
+    export interface TrendingPopularResponse {
+        trending: Series[]
+        popular: Series[]
+    }
+
+    export interface UpdateReadingListParams {
+        name: string
+        "is_public": boolean
+    }
+
     export interface UploaderFollowStatus {
         following: boolean
     }
@@ -1235,6 +1802,7 @@ export namespace comics {
             this.AddToReadingList = this.AddToReadingList.bind(this)
             this.AdminAuditLogs = this.AdminAuditLogs.bind(this)
             this.AdminListComics = this.AdminListComics.bind(this)
+            this.AdminListSeries = this.AdminListSeries.bind(this)
             this.ApproveComic = this.ApproveComic.bind(this)
             this.ArchiveComic = this.ArchiveComic.bind(this)
             this.BatchGetComics = this.BatchGetComics.bind(this)
@@ -1246,15 +1814,19 @@ export namespace comics {
             this.CreateSeries = this.CreateSeries.bind(this)
             this.DeleteComic = this.DeleteComic.bind(this)
             this.DeleteComment = this.DeleteComment.bind(this)
+            this.DeleteReadingList = this.DeleteReadingList.bind(this)
             this.DeleteSavedView = this.DeleteSavedView.bind(this)
             this.DevSeedComics = this.DevSeedComics.bind(this)
             this.DevSeedEngagement = this.DevSeedEngagement.bind(this)
+            this.DevSeedSeries = this.DevSeedSeries.bind(this)
             this.FlagComment = this.FlagComment.bind(this)
             this.FollowSeries = this.FollowSeries.bind(this)
             this.FollowUploader = this.FollowUploader.bind(this)
             this.GetComic = this.GetComic.bind(this)
-            this.GetComicsStats = this.GetComicsStats.bind(this)
+            this.GetComicPages = this.GetComicPages.bind(this)
+            this.GetHome = this.GetHome.bind(this)
             this.GetLikeStatus = this.GetLikeStatus.bind(this)
+            this.GetMyReadingList = this.GetMyReadingList.bind(this)
             this.GetReadingList = this.GetReadingList.bind(this)
             this.GetSeries = this.GetSeries.bind(this)
             this.GetUploaderFollowStatus = this.GetUploaderFollowStatus.bind(this)
@@ -1266,7 +1838,9 @@ export namespace comics {
             this.ListReadingLists = this.ListReadingLists.bind(this)
             this.ListSavedViews = this.ListSavedViews.bind(this)
             this.ListSeries = this.ListSeries.bind(this)
+            this.ListSeriesCategories = this.ListSeriesCategories.bind(this)
             this.ListStaffPicks = this.ListStaffPicks.bind(this)
+            this.ListTrendingPopular = this.ListTrendingPopular.bind(this)
             this.MyComics = this.MyComics.bind(this)
             this.PendingComics = this.PendingComics.bind(this)
             this.PopularTags = this.PopularTags.bind(this)
@@ -1279,13 +1853,16 @@ export namespace comics {
             this.ResolveAIReview = this.ResolveAIReview.bind(this)
             this.ResolveFlag = this.ResolveFlag.bind(this)
             this.RestoreComic = this.RestoreComic.bind(this)
+            this.RunAIModerationSweep = this.RunAIModerationSweep.bind(this)
             this.SaveView = this.SaveView.bind(this)
+            this.SearchSeries = this.SearchSeries.bind(this)
             this.SeriesComics = this.SeriesComics.bind(this)
             this.ToggleDislike = this.ToggleDislike.bind(this)
             this.ToggleFavorite = this.ToggleFavorite.bind(this)
             this.ToggleLike = this.ToggleLike.bind(this)
             this.UnfollowSeries = this.UnfollowSeries.bind(this)
             this.UnfollowUploader = this.UnfollowUploader.bind(this)
+            this.UpdateReadingList = this.UpdateReadingList.bind(this)
         }
 
         public async AIDecisions(): Promise<AIDecisionsResponse> {
@@ -1330,6 +1907,23 @@ export namespace comics {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/admin/comics`, undefined, {query})
             return await resp.json() as ListComicsResponse
+        }
+
+        public async AdminListSeries(params: AdminListSeriesParams): Promise<ListSeriesResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "filter_category": params.FilterCategory,
+                "filter_genre":    params.FilterGenre,
+                limit:             String(params.Limit),
+                page:              String(params.Page),
+                search:            params.Search,
+                sort:              params.Sort,
+                "sort_dir":        params.SortDir,
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/series`, undefined, {query})
+            return await resp.json() as ListSeriesResponse
         }
 
         public async ApproveComic(id: string): Promise<void> {
@@ -1386,6 +1980,10 @@ export namespace comics {
             await this.baseClient.callTypedAPI("DELETE", `/comments/${encodeURIComponent(id)}`)
         }
 
+        public async DeleteReadingList(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("DELETE", `/reading-lists/${encodeURIComponent(id)}`)
+        }
+
         public async DeleteSavedView(id: string): Promise<void> {
             await this.baseClient.callTypedAPI("DELETE", `/admin/views/${encodeURIComponent(id)}`)
         }
@@ -1400,6 +1998,12 @@ export namespace comics {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/dev/seed-engagement`, JSON.stringify(params))
             return await resp.json() as SeedEngagementResponse
+        }
+
+        public async DevSeedSeries(params: SeedParams): Promise<SeedSeriesResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/dev/seed-series`, JSON.stringify(params))
+            return await resp.json() as SeedSeriesResponse
         }
 
         public async FlagComment(id: string, params: FlagCommentParams): Promise<void> {
@@ -1420,16 +2024,41 @@ export namespace comics {
             return await resp.json() as Comic
         }
 
-        public async GetComicsStats(): Promise<ComicsStats> {
+        public async GetComicPages(slug: string, params: GetComicPagesParams): Promise<GetComicPagesResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                limit:   String(params.Limit),
+                offset:  String(params.Offset),
+                preview: String(params.Preview),
+            })
+
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/comics-stats`)
-            return await resp.json() as ComicsStats
+            const resp = await this.baseClient.callTypedAPI("GET", `/comics/${encodeURIComponent(slug)}/pages`, undefined, {query})
+            return await resp.json() as GetComicPagesResponse
+        }
+
+        public async GetHome(): Promise<HomeResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/home`)
+            return await resp.json() as HomeResponse
         }
 
         public async GetLikeStatus(id: string): Promise<LikeStatus> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/comics/${encodeURIComponent(id)}/like-status`)
             return await resp.json() as LikeStatus
+        }
+
+        public async GetMyReadingList(id: string, params: GetReadingListParams): Promise<PublicReadingListResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                limit: String(params.Limit),
+                page:  String(params.Page),
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/reading-lists/${encodeURIComponent(id)}/mine`, undefined, {query})
+            return await resp.json() as PublicReadingListResponse
         }
 
         public async GetReadingList(id: string, params: GetReadingListParams): Promise<PublicReadingListResponse> {
@@ -1510,9 +2139,14 @@ export namespace comics {
             return await resp.json() as ListFlaggedCommentsResponse
         }
 
-        public async ListReadingLists(): Promise<ListReadingListsResponse> {
+        public async ListReadingLists(params: ListReadingListsParams): Promise<ListReadingListsResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "comic_id": params.ComicID,
+            })
+
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/reading-lists`)
+            const resp = await this.baseClient.callTypedAPI("GET", `/reading-lists`, undefined, {query})
             return await resp.json() as ListReadingListsResponse
         }
 
@@ -1528,10 +2162,22 @@ export namespace comics {
             return await resp.json() as ListSeriesResponse
         }
 
+        public async ListSeriesCategories(): Promise<SeriesCategoriesResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/series-categories`)
+            return await resp.json() as SeriesCategoriesResponse
+        }
+
         public async ListStaffPicks(): Promise<ListStaffPicksResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/staff-picks`)
             return await resp.json() as ListStaffPicksResponse
+        }
+
+        public async ListTrendingPopular(): Promise<TrendingPopularResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/series-trending-popular`)
+            return await resp.json() as TrendingPopularResponse
         }
 
         public async MyComics(): Promise<ListComicsResponse> {
@@ -1613,10 +2259,31 @@ export namespace comics {
             await this.baseClient.callTypedAPI("POST", `/admin/comics/${encodeURIComponent(id)}/restore`)
         }
 
+        /**
+         * RunAIModerationSweep lets an admin manually trigger the AI moderation sweep.
+         */
+        public async RunAIModerationSweep(): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/admin/jobs/ai-moderate-comics/run`)
+        }
+
         public async SaveView(params: SaveViewParams): Promise<SavedView> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/admin/views`, JSON.stringify(params))
             return await resp.json() as SavedView
+        }
+
+        public async SearchSeries(params: SearchSeriesParams): Promise<ListSeriesResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                category: params.Category,
+                limit:    String(params.Limit),
+                page:     String(params.Page),
+                search:   params.Search,
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/series-search`, undefined, {query})
+            return await resp.json() as ListSeriesResponse
         }
 
         public async SeriesComics(id: string, params: SeriesComicsParams): Promise<ListComicsResponse> {
@@ -1656,6 +2323,102 @@ export namespace comics {
         public async UnfollowUploader(id: string): Promise<void> {
             await this.baseClient.callTypedAPI("DELETE", `/uploaders/${encodeURIComponent(id)}/follow`)
         }
+
+        public async UpdateReadingList(id: string, params: UpdateReadingListParams): Promise<ReadingList> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("PATCH", `/reading-lists/${encodeURIComponent(id)}`, JSON.stringify(params))
+            return await resp.json() as ReadingList
+        }
+    }
+}
+
+/**
+ * Package dashboard aggregates admin KPI stats from the other services and
+ * serves them over a single endpoint + an SSE stream for a realtime admin
+ * dashboard.
+ */
+export namespace dashboard {
+    export interface DashboardResponse {
+        users: auth.DashboardStats
+        comics: comics.ComicsStats
+        billing: billing.BillingStats
+        reading: reading.ReadingStats
+        storage: upload.StorageStats
+        "download_trend": reading.DownloadTrendPoint[]
+        "signup_trend": auth.SignupTrendPoint[]
+    }
+
+    export class ServiceClient {
+        private baseClient: BaseClient
+
+        constructor(baseClient: BaseClient) {
+            this.baseClient = baseClient
+            this.DashboardStream = this.DashboardStream.bind(this)
+            this.GetDashboard = this.GetDashboard.bind(this)
+        }
+
+        public async DashboardStream(method: "GET", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
+            return this.baseClient.callAPI(method, `/admin/dashboard-stream`, body, options)
+        }
+
+        public async GetDashboard(): Promise<DashboardResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/dashboard`)
+            return await resp.json() as DashboardResponse
+        }
+    }
+}
+
+/**
+ * Package jobs provides an app-level observability layer for background work
+ * (cron jobs and pubsub handlers). Encore's dead-letter queue is internal and
+ * not queryable from app code, so jobs record their own runs here; the admin
+ * dashboard reads this table to surface failures and manual re-runs.
+ */
+export namespace jobs {
+    export interface JobRun {
+        id: string
+        "job_name": string
+        ref: string
+        status: string
+        error: string
+        "started_at": string
+        "finished_at": string
+    }
+
+    export interface ListJobRunsParams {
+        JobName: string
+        Status: string
+        Limit: number
+    }
+
+    export interface ListJobRunsResponse {
+        runs: JobRun[]
+    }
+
+    export class ServiceClient {
+        private baseClient: BaseClient
+
+        constructor(baseClient: BaseClient) {
+            this.baseClient = baseClient
+            this.ListJobRuns = this.ListJobRuns.bind(this)
+        }
+
+        /**
+         * ListJobRuns lists recent job runs for the admin dashboard.
+         */
+        public async ListJobRuns(params: ListJobRunsParams): Promise<ListJobRunsResponse> {
+            // Convert our params into the objects we need for the request
+            const query = makeRecord<string, string | string[]>({
+                "job_name": params.JobName,
+                limit:      String(params.Limit),
+                status:     params.Status,
+            })
+
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/jobs`, undefined, {query})
+            return await resp.json() as ListJobRunsResponse
+        }
     }
 }
 
@@ -1678,6 +2441,11 @@ export namespace reading {
         message: string
     }
 
+    export interface DownloadTrendPoint {
+        day: string
+        count: number
+    }
+
     export interface Progress {
         id: string
         "user_id": string
@@ -1688,6 +2456,11 @@ export namespace reading {
         "updated_at": string
     }
 
+    export interface QuotaStatusResponse {
+        used: number
+        limit: number
+    }
+
     export interface ReadingStats {
         "total_downloads": number
     }
@@ -1696,6 +2469,16 @@ export namespace reading {
         "current_page": number
         "total_pages": number
         completed: boolean
+    }
+
+    export interface SeedParams {
+        token: string
+    }
+
+    export interface SeedQuotaResponse {
+        inserted: number
+        "user_id": string
+        message: string
     }
 
     export interface SeriesProgressItem {
@@ -1719,8 +2502,9 @@ export namespace reading {
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
             this.ContinueReading = this.ContinueReading.bind(this)
+            this.DevSeedQuota = this.DevSeedQuota.bind(this)
             this.GetProgress = this.GetProgress.bind(this)
-            this.GetReadingStats = this.GetReadingStats.bind(this)
+            this.GetQuotaStatus = this.GetQuotaStatus.bind(this)
             this.RecordDownload = this.RecordDownload.bind(this)
             this.SaveProgress = this.SaveProgress.bind(this)
             this.SeriesProgress = this.SeriesProgress.bind(this)
@@ -1732,16 +2516,26 @@ export namespace reading {
             return await resp.json() as ContinueReadingResponse
         }
 
+        /**
+         * DevSeedQuota exhausts the free-tier download quota for the dedicated demo
+         * user so the boost-quota flow can be tested manually.
+         */
+        public async DevSeedQuota(params: SeedParams): Promise<SeedQuotaResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/dev/seed-quota`, JSON.stringify(params))
+            return await resp.json() as SeedQuotaResponse
+        }
+
         public async GetProgress(comicId: string): Promise<Progress> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/reading/${encodeURIComponent(comicId)}`)
             return await resp.json() as Progress
         }
 
-        public async GetReadingStats(): Promise<ReadingStats> {
+        public async GetQuotaStatus(): Promise<QuotaStatusResponse> {
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/reading-stats`)
-            return await resp.json() as ReadingStats
+            const resp = await this.baseClient.callTypedAPI("GET", `/me/quota`)
+            return await resp.json() as QuotaStatusResponse
         }
 
         public async RecordDownload(comicId: string): Promise<DownloadResponse> {
@@ -1807,6 +2601,7 @@ export namespace social {
         subject: string
         body: string
         priority: string
+        "turnstile_token": string
     }
 
     export interface ListBroadcastsResponse {
@@ -1832,6 +2627,7 @@ export namespace social {
 
     export interface ReplyTicketParams {
         body: string
+        "turnstile_token": string
     }
 
     export interface SendMessageParams {
@@ -1876,6 +2672,7 @@ export namespace social {
             this.AssignTicket = this.AssignTicket.bind(this)
             this.CreateBroadcast = this.CreateBroadcast.bind(this)
             this.CreateTicket = this.CreateTicket.bind(this)
+            this.GetAnnouncements = this.GetAnnouncements.bind(this)
             this.GetConversation = this.GetConversation.bind(this)
             this.GetTicket = this.GetTicket.bind(this)
             this.ListBroadcasts = this.ListBroadcasts.bind(this)
@@ -1914,6 +2711,17 @@ export namespace social {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/support/tickets`, JSON.stringify(params))
             return await resp.json() as TicketResponse
+        }
+
+        /**
+         * GetAnnouncements returns broadcasts the caller should see: those targeting
+         * everyone (`target = 'all'`) plus those targeting their tier (`target = 'tier'`
+         * and matching `tier`). Anonymous callers only see the `all` broadcasts.
+         */
+        public async GetAnnouncements(): Promise<ListBroadcastsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/announcements`)
+            return await resp.json() as ListBroadcastsResponse
         }
 
         public async GetConversation(id: string): Promise<ConversationMessagesResponse> {
@@ -1979,10 +2787,6 @@ export namespace social {
 }
 
 export namespace tiers {
-    export interface AutoLinkPlanParams {
-        Host: string
-    }
-
     export interface AutoLinkPlanResponse {
         "provider_plan_id": string
         "plan_name": string
@@ -2006,7 +2810,6 @@ export namespace tiers {
         name: string
         interval: string
         "price_usd_cents": number
-        "quota_downloads": number
         features: string[]
         "is_active": boolean
         "provider_plan_id": string
@@ -2019,7 +2822,22 @@ export namespace tiers {
         name: string
         description: string
         "sort_order": number
+        "quota_downloads": number
         "created_at": string
+    }
+
+    export interface TierQuota {
+        name: string
+        "quota_downloads": number
+    }
+
+    export interface TierQuotaUpdate {
+        "tier_id": string
+        "quota_downloads": number
+    }
+
+    export interface TierQuotasResponse {
+        quotas: TierQuota[]
     }
 
     export interface UnlinkAllPlansResponse {
@@ -2030,11 +2848,16 @@ export namespace tiers {
         "provider_plan_id": string
     }
 
+    export interface UpdateTierQuotasParams {
+        quotas: TierQuotaUpdate[]
+    }
+
     export class ServiceClient {
         private baseClient: BaseClient
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
+            this.AdminUpdateTierQuotas = this.AdminUpdateTierQuotas.bind(this)
             this.AutoLinkPlan = this.AutoLinkPlan.bind(this)
             this.GetTier = this.GetTier.bind(this)
             this.ListPlans = this.ListPlans.bind(this)
@@ -2042,17 +2865,19 @@ export namespace tiers {
             this.PlanMatrixStatus = this.PlanMatrixStatus.bind(this)
             this.PlansReady = this.PlansReady.bind(this)
             this.UnlinkAllPlans = this.UnlinkAllPlans.bind(this)
+            this.UnlinkPlan = this.UnlinkPlan.bind(this)
             this.UpdatePlanProviderID = this.UpdatePlanProviderID.bind(this)
         }
 
-        public async AutoLinkPlan(id: string, params: AutoLinkPlanParams): Promise<AutoLinkPlanResponse> {
-            // Convert our params into the objects we need for the request
-            const headers = makeRecord<string, string>({
-                host: params.Host,
-            })
-
+        public async AdminUpdateTierQuotas(params: UpdateTierQuotasParams): Promise<TierQuotasResponse> {
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/link/${encodeURIComponent(id)}`, undefined, {headers})
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/tiers/quota`, JSON.stringify(params))
+            return await resp.json() as TierQuotasResponse
+        }
+
+        public async AutoLinkPlan(id: string): Promise<AutoLinkPlanResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/plans/link/${encodeURIComponent(id)}`)
             return await resp.json() as AutoLinkPlanResponse
         }
 
@@ -2092,6 +2917,10 @@ export namespace tiers {
             return await resp.json() as UnlinkAllPlansResponse
         }
 
+        public async UnlinkPlan(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/admin/plans/unlink/${encodeURIComponent(id)}`)
+        }
+
         public async UpdatePlanProviderID(id: string, params: UpdatePlanProviderParams): Promise<void> {
             await this.baseClient.callTypedAPI("PATCH", `/admin/plans/${encodeURIComponent(id)}`, JSON.stringify(params))
         }
@@ -2113,6 +2942,14 @@ export namespace upload {
 
     export interface CreateSessionParams {
         mode: string
+    }
+
+    export interface FinalizeMultipartParams {
+        "output_name": string
+    }
+
+    export interface FinalizeMultipartResponse {
+        key: string
     }
 
     export interface ListSessionsResponse {
@@ -2137,7 +2974,25 @@ export namespace upload {
         url: string
     }
 
+    /**
+     * StorageBucket is an aggregate of object count + bytes for one key-prefix
+     * category (archives, extracted pages, covers/previews, seed data, other).
+     */
+    export interface StorageBucket {
+        prefix: string
+        "object_count": number
+        "total_bytes": number
+    }
+
     export interface StorageStats {
+        "cf_configured": boolean
+        "cf_images_count": number
+    }
+
+    export interface StorageUsageResponse {
+        "s3_total_bytes": number
+        "s3_object_count": number
+        breakdown: StorageBucket[]
         "cf_configured": boolean
         "cf_images_count": number
     }
@@ -2162,11 +3017,15 @@ export namespace upload {
             this.CloudflarePresignedUpload = this.CloudflarePresignedUpload.bind(this)
             this.ConfirmPart = this.ConfirmPart.bind(this)
             this.CreateSession = this.CreateSession.bind(this)
+            this.DownloadArchive = this.DownloadArchive.bind(this)
+            this.FinalizeMultipart = this.FinalizeMultipart.bind(this)
             this.GetSession = this.GetSession.bind(this)
-            this.GetStorageStats = this.GetStorageStats.bind(this)
+            this.GetStorageUsage = this.GetStorageUsage.bind(this)
             this.ListActiveSessions = this.ListActiveSessions.bind(this)
             this.PresignUpload = this.PresignUpload.bind(this)
             this.ServeMedia = this.ServeMedia.bind(this)
+            this.UploadFile = this.UploadFile.bind(this)
+            this.UploadImage = this.UploadImage.bind(this)
         }
 
         public async AbortSession(id: string): Promise<void> {
@@ -2191,16 +3050,41 @@ export namespace upload {
             return await resp.json() as UploadSession
         }
 
+        /**
+         * DownloadArchive serves a comic archive for download. Small files are
+         * streamed directly through the backend; files larger than the configured
+         * threshold are served via a presigned redirect to object storage.
+         */
+        public async DownloadArchive(method: "GET", key: string[], body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
+            return this.baseClient.callAPI(method, `/download/${key.map(encodeURIComponent).join("/")}`, body, options)
+        }
+
+        /**
+         * FinalizeMultipart concatenates a session's uploaded parts (in part-number
+         * order) into a single object under the session prefix, deletes the parts and
+         * returns the final object key. Used to reassemble archives that were split
+         * into parts for upload.
+         */
+        public async FinalizeMultipart(id: string, params: FinalizeMultipartParams): Promise<FinalizeMultipartResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/upload-sessions/${encodeURIComponent(id)}/finalize`, JSON.stringify(params))
+            return await resp.json() as FinalizeMultipartResponse
+        }
+
         public async GetSession(id: string): Promise<UploadSession> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/upload-sessions/${encodeURIComponent(id)}`)
             return await resp.json() as UploadSession
         }
 
-        public async GetStorageStats(): Promise<StorageStats> {
+        /**
+         * GetStorageUsage enumerates the comic-files bucket (object count + bytes,
+         * broken down by key prefix) and reports the Cloudflare Images count.
+         */
+        public async GetStorageUsage(): Promise<StorageUsageResponse> {
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/storage-stats`)
-            return await resp.json() as StorageStats
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/storage`)
+            return await resp.json() as StorageUsageResponse
         }
 
         public async ListActiveSessions(): Promise<ListSessionsResponse> {
@@ -2215,25 +3099,44 @@ export namespace upload {
             return await resp.json() as PresignResponse
         }
 
-        public async ServeMedia(method: "GET", key: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
-            return this.baseClient.callAPI(method, `/media/${encodeURIComponent(key)}`, body, options)
+        public async ServeMedia(method: "GET", key: string[], body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
+            return this.baseClient.callAPI(method, `/media/${key.map(encodeURIComponent).join("/")}`, body, options)
+        }
+
+        /**
+         * UploadFile streams an uploaded archive/page file to S3 via multipart and
+         * returns the object key (preserving the uploaded filename).
+         */
+        public async UploadFile(method: "POST", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
+            return this.baseClient.callAPI(method, `/upload/file`, body, options)
+        }
+
+        /**
+         * UploadImage streams an uploaded cover/preview image to Cloudflare Images and
+         * returns its ID. Falls back to S3 when Cloudflare is not configured or the
+         * upload fails.
+         */
+        public async UploadImage(method: "POST", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
+            return this.baseClient.callAPI(method, `/upload/image`, body, options)
         }
     }
 }
 
 export namespace nowpayments {
     export interface BalanceEntry {
-        Amount: number
-        PendingAmount: number
+        amount: number
+        "pending_amount": number
     }
 
     export interface EstimateResponse {
-        EstimatedAmount: number
-        FromCurrency: string
-        ToCurrency: string
+        "estimated_amount": number
+        "from_currency": string
+        "to_currency": string
     }
 }
 
+// JSONValue represents an arbitrary JSON value.
+export type JSONValue = string | number | boolean | null | JSONValue[] | {[key: string]: JSONValue}
 
 
 function encodeQuery(parts: Record<string, string | string[]>): string {
@@ -2463,7 +3366,7 @@ class BaseClient {
         // Add User-Agent header if the script is running in the server
         // because browsers do not allow setting User-Agent headers to requests
         if (!BROWSER) {
-            this.headers["User-Agent"] = "comics-galore-backend-v5k2-Generated-TS-Client (Encore/v1.57.13)";
+            this.headers["User-Agent"] = "3cxq6-Generated-TS-Client (Encore/v1.57.13)";
         }
 
         this.requestInit = options.requestInit ?? {};

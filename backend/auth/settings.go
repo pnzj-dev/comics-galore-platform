@@ -9,15 +9,11 @@ import (
 )
 
 type UserPreferences struct {
-	Language             string `json:"language"`
-	ContentLanguage      string `json:"content_language"`
-	ItemsPerPage         int    `json:"items_per_page"`
-	PopularTagsLimit     int    `json:"popular_tags_limit"`
-	EmailFromFollowing   bool   `json:"email_from_following"`
-	EmailSupportReplies  bool   `json:"email_support_replies"`
-	EmailMarketing       bool   `json:"email_marketing"`
-	InAppEnabled         bool   `json:"in_app_enabled"`
-	HideMature           bool   `json:"hide_mature"`
+	Language         string `json:"language"`
+	ContentLanguage  string `json:"content_language"`
+	ItemsPerPage     int    `json:"items_per_page"`
+	PopularTagsLimit int    `json:"popular_tags_limit"`
+	HideMature       bool   `json:"hide_mature"`
 }
 
 type AppSettings struct {
@@ -30,20 +26,19 @@ type AppSettings struct {
 	RegistrationsOpen    bool    `json:"registrations_open"`
 	MaxUploadSizeMB      int     `json:"max_upload_size_mb"`
 	ImageServingMode     string  `json:"image_serving_mode"`
+	ImgproxyBaseURL      string  `json:"imgproxy_base_url"`
+	ImgproxyKey          string  `json:"imgproxy_key"`
+	ImgproxySalt         string  `json:"imgproxy_salt"`
+	UploadMode           string  `json:"upload_mode"`
 	RequireEmailVerify   bool    `json:"require_email_verify"`
 	RateLimit            int     `json:"rate_limit"`
 	S3PresignedTTLMin    int     `json:"s3_presigned_ttl_min"`
 	CFPresignedTTLMin    int     `json:"cf_presigned_ttl_min"`
-	QuotaFreeGB          int     `json:"quota_free_gb"`
-	QuotaBronzeGB        int     `json:"quota_bronze_gb"`
-	QuotaSilverGB        int     `json:"quota_silver_gb"`
-	QuotaGoldGB          int     `json:"quota_gold_gb"`
-	QuotaPlatinumGB      int     `json:"quota_platinum_gb"`
-	Boost1GB             int     `json:"boost_1_gb"`
+	Boost1Downloads      int     `json:"boost_1_downloads"`
 	Boost1Price          float64 `json:"boost_1_price"`
-	Boost2GB             int     `json:"boost_2_gb"`
+	Boost2Downloads      int     `json:"boost_2_downloads"`
 	Boost2Price          float64 `json:"boost_2_price"`
-	Boost3GB             int     `json:"boost_3_gb"`
+	Boost3Downloads      int     `json:"boost_3_downloads"`
 	Boost3Price          float64 `json:"boost_3_price"`
 	ContactEmail         string `json:"contact_email"`
 	HideMatureDefault    bool   `json:"hide_mature_default"`
@@ -58,18 +53,32 @@ type AppSettings struct {
 	AIPrompt                 string  `json:"ai_prompt"`
 	AIAutoApproveThreshold   float64 `json:"ai_auto_approve_threshold"`
 	AIAutoRejectThreshold    float64 `json:"ai_auto_reject_threshold"`
+
+	// Billing hygiene: downgrade subscriptions stuck in "waiting for payment".
+	WaitingPayJobEnabled   bool `json:"waiting_pay_job_enabled"`
+	WaitingPayExpiryHours  int  `json:"waiting_pay_expiry_hours"`
+
+	// Download delivery: archives above this size are served via a presigned
+	// redirect instead of being streamed through the backend.
+	DownloadStreamThresholdMB int `json:"download_stream_threshold_mb"`
+
+	// Upload page: above this page count the manual tab switches from image
+	// thumbnails to a compact file list.
+	PagePreviewThreshold int `json:"page_preview_threshold"`
+
+	// Upload: archives larger than this are split into multiple parts.
+	UploadPartSizeMB int `json:"upload_part_size_mb"`
+
+	// Upload: number of parts uploaded concurrently when splitting an archive.
+	UploadConcurrency int `json:"upload_concurrency"`
 }
 
 var defaultPreferences = UserPreferences{
-	Language:            "en",
-	ContentLanguage:     "en",
-	ItemsPerPage:        12,
-	PopularTagsLimit:    20,
-	EmailFromFollowing:  true,
-	EmailSupportReplies: true,
-	EmailMarketing:      false,
-	InAppEnabled:        true,
-	HideMature:          false,
+	Language:         "en",
+	ContentLanguage:  "en",
+	ItemsPerPage:     12,
+	PopularTagsLimit: 20,
+	HideMature:       false,
 }
 
 //encore:api auth method=GET path=/me/preferences
@@ -103,6 +112,23 @@ func SavePreferences(ctx context.Context, p *UserPreferences) (*UserPreferences,
 	return p, nil
 }
 
+// GetUserPreferences exposes a user's preferences (merged with global defaults)
+// to other services that cannot read the auth database directly (ADR 0016).
+//encore:api private method=GET path=/auth/user-preferences/:userID
+func GetUserPreferences(ctx context.Context, userID string) (*UserPreferences, error) {
+	var prefsJSON []byte
+	err := db.QueryRow(ctx, `SELECT preferences FROM users WHERE id = $1`, userID).Scan(&prefsJSON)
+	if err != nil || len(prefsJSON) <= 2 {
+		return getGlobalDefaults(ctx)
+	}
+
+	var prefs UserPreferences
+	if err := json.Unmarshal(prefsJSON, &prefs); err != nil {
+		return getGlobalDefaults(ctx)
+	}
+	return &prefs, nil
+}
+
 func getGlobalDefaults(ctx context.Context) (*UserPreferences, error) {
 	var raw []byte
 	err := db.QueryRow(ctx, `SELECT value FROM app_settings WHERE key = 'defaults'`).Scan(&raw)
@@ -118,19 +144,63 @@ func getGlobalDefaults(ctx context.Context) (*UserPreferences, error) {
 	}
 
 	return &UserPreferences{
-		Language:            settings.DefaultLanguage,
-		ContentLanguage:     settings.DefaultContentLang,
-		ItemsPerPage:        settings.ItemsPerPage,
-		PopularTagsLimit:    settings.PopularTagsLimit,
-		EmailFromFollowing:  true,
-		EmailSupportReplies: true,
-		EmailMarketing:      false,
-		InAppEnabled:        true,
-		HideMature:          false,
+		Language:         settings.DefaultLanguage,
+		ContentLanguage:  settings.DefaultContentLang,
+		ItemsPerPage:     settings.ItemsPerPage,
+		PopularTagsLimit: settings.PopularTagsLimit,
+		HideMature:       false,
 	}, nil
 }
 
 // ----- Admin Settings -----
+
+// loadSettings returns the merged global settings (defaults overlaid with the
+// stored blob), falling back to defaults when none are stored.
+func loadSettings(ctx context.Context) *AppSettings {
+	settings := *defaultAppSettings()
+	var raw []byte
+	if err := db.QueryRow(ctx, `SELECT value FROM app_settings WHERE key = 'defaults'`).Scan(&raw); err == nil && len(raw) > 0 {
+		json.Unmarshal(raw, &settings)
+	}
+	return &settings
+}
+
+// GetAppConfig exposes the merged global settings to other services that are
+// not allowed to read the auth database directly (ADR 0016).
+//encore:api private method=GET path=/auth/app-config
+func GetAppConfig(ctx context.Context) (*AppSettings, error) {
+	return loadSettings(ctx), nil
+}
+
+// SiteConfig is the public, non-sensitive subset of settings used for SEO,
+// metadata and footer content.
+type SiteConfig struct {
+	SiteName               string `json:"site_name"`
+	ContactEmail           string `json:"contact_email"`
+	DefaultMetaDescription string `json:"default_meta_description"`
+	DefaultLanguage        string `json:"default_language"`
+	MaintenanceMode        bool   `json:"maintenance_mode"`
+	UploadMode             string `json:"upload_mode"`
+	PagePreviewThreshold   int    `json:"page_preview_threshold"`
+	UploadPartSizeMB       int    `json:"upload_part_size_mb"`
+	UploadConcurrency      int    `json:"upload_concurrency"`
+}
+
+//encore:api public method=GET path=/site-config
+func GetSiteConfig(ctx context.Context) (*SiteConfig, error) {
+	s := loadSettings(ctx)
+	return &SiteConfig{
+		SiteName:               s.SiteName,
+		ContactEmail:           s.ContactEmail,
+		DefaultMetaDescription: s.DefaultMetaDescription,
+		DefaultLanguage:        s.DefaultLanguage,
+		MaintenanceMode:        s.MaintenanceMode,
+		UploadMode:             s.UploadMode,
+		PagePreviewThreshold:   s.PagePreviewThreshold,
+		UploadPartSizeMB:       s.UploadPartSizeMB,
+		UploadConcurrency:      s.UploadConcurrency,
+	}, nil
+}
 
 //encore:api auth method=GET path=/admin/settings
 func GetAdminSettings(ctx context.Context) (*AppSettings, error) {
@@ -138,34 +208,7 @@ func GetAdminSettings(ctx context.Context) (*AppSettings, error) {
 	if ad.Role != "admin" {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
 	}
-
-	var raw []byte
-	err := db.QueryRow(ctx, `SELECT value FROM app_settings WHERE key = 'defaults'`).Scan(&raw)
-	if err != nil || len(raw) == 0 {
-		return defaultAppSettings(), nil
-	}
-
-	var settings AppSettings
-	json.Unmarshal(raw, &settings)
-
-	// Migrate old boost keys to indexed format
-	if settings.Boost1GB == 0 && settings.Boost1Price == 0 {
-		var old struct {
-			Boost5Price  float64 `json:"boost_5gb_price"`
-			Boost10Price float64 `json:"boost_10gb_price"`
-			Boost20Price float64 `json:"boost_20gb_price"`
-		}
-		if json.Unmarshal(raw, &old) == nil && old.Boost5Price > 0 {
-			settings.Boost1GB = 5
-			settings.Boost1Price = old.Boost5Price
-			settings.Boost2GB = 10
-			settings.Boost2Price = old.Boost10Price
-			settings.Boost3GB = 20
-			settings.Boost3Price = old.Boost20Price
-		}
-	}
-
-	return &settings, nil
+	return loadSettings(ctx), nil
 }
 
 //encore:api auth method=PATCH path=/admin/settings
@@ -199,26 +242,22 @@ func defaultAppSettings() *AppSettings {
 		PopularTagsLimit:   20,
 		SiteName:           "Comics Galore",
 		RegistrationsOpen:  true,
-		MaxUploadSizeMB:    50,
+		MaxUploadSizeMB:    3000,
 		ImageServingMode:   "direct",
+		UploadMode:         "backend",
 		RateLimit:           60,
 		S3PresignedTTLMin:   15,
 		CFPresignedTTLMin:   15,
-		QuotaFreeGB:         1,
-		QuotaBronzeGB:       10,
-		QuotaSilverGB:       50,
-		QuotaGoldGB:         200,
-		QuotaPlatinumGB:     1000,
-		Boost1GB:             5,
-		Boost1Price:          5,
-		Boost2GB:             10,
-		Boost2Price:          8,
-		Boost3GB:             20,
-		Boost3Price:          12,
+		Boost1Downloads:     10,
+		Boost1Price:         5,
+		Boost2Downloads:     25,
+		Boost2Price:         10,
+		Boost3Downloads:         60,
+		Boost3Price:             20,
 		ContactEmail:         "",
 		HideMatureDefault:    false,
 		ForbidMatureForFree:  false,
-		EnableComments:       true,
+		EnableComments:       false,
 		DefaultMetaDescription: "",
 
 		AIModerationEnabled:    false,
@@ -227,5 +266,13 @@ func defaultAppSettings() *AppSettings {
 		AIPrompt:               "You moderate user-generated content on a comics platform. Reply with only JSON: {\"decision\":\"approved|rejected|uncertain\",\"confidence\":0.0,\"reason\":\"...\"}.",
 		AIAutoApproveThreshold: 0.85,
 		AIAutoRejectThreshold:  0.15,
+
+		WaitingPayJobEnabled:  true,
+		WaitingPayExpiryHours: 24,
+
+		DownloadStreamThresholdMB: 10,
+		PagePreviewThreshold:      20,
+		UploadPartSizeMB:          100,
+		UploadConcurrency:         4,
 	}
 }

@@ -87,22 +87,41 @@ Duplication of UI or validation logic is considered a bug.
 ### Public (`frontend-public/` — comics-galore.com)
 
 - Full SSR / progressive enhancement for public pages.
-- Route groups: `(public)`, `(app)`, `(auth)`.
+- Route groups: `(site)`, `(app)`, `(auth)`. The `(site)` group holds the shared nav + `<main>` + footer (public + app pages); `(app)` adds the auth guard; `(auth)` renders a minimal (no nav/footer) shell for the standalone `/login` page.
 - Uses `packages/ui` for almost all visual and form code.
 - Handles home, browse, detail, reader, series, tags, pricing, upload, settings, auth, SEO, RSS, Open Graph, legal pages, age gate.
 - **Server-side route guards**: `+layout.server.ts` and `+page.server.ts` load functions read the JWT from a cookie and `throw redirect(302)` before the page component renders. The `(app)` group requires authentication; the `upload` page requires `uploader`/`admin` role. See the cookie-based auth section below.
 
 ### Cookie-based Auth
 
-The auth system uses a **non-HttpOnly cookie** (`token`) for JWT storage, enabling both:
+The auth system uses an **HttpOnly session cookie** (`token`, kept for
+compatibility) holding an opaque session id. The session id is validated by the
+Encore auth handler against the `sessions` table (expiry + revocation). Because
+the cookie is HttpOnly, browser JS cannot read it:
 
-| Consumer | How it reads the token |
+| Consumer | How it authenticates |
 |----------|----------------------|
-| SvelteKit server (SSR) | `cookies.get('token')` in `+layout.server.ts` / `+page.server.ts` — validates before rendering |
-| Browser API client | `document.cookie.match('token=...')` — sends as `Authorization: Bearer` to Encore |
-| Auth store (`login`/`logout`) | `document.cookie = 'token=...'` — sets/clears on login/logout |
+| SvelteKit server (SSR) | `resolveUser(cookies)` in `+layout.server.ts` → calls Encore `/auth/me` with the session as `Authorization: Bearer` |
+| Browser API client | Routes through the same-origin `/api/[...path]` proxy, which reads the HttpOnly cookie and forwards the session to Encore |
+| Auth store (`login`/`register`/`logout`) | POSTs to SvelteKit server endpoints (`/auth/login`, `/auth/register`, `/auth/logout`) which set/clear the HttpOnly cookie |
 
-The cookie is set with `path=/`, `SameSite=Lax`, and `max-age=2592000` (30 days). Server-side guards decode the JWT payload to check roles before page rendering. Client-side `onMount` → `goto()` redirects have been removed from all protected pages.
+The cookie is set with `path=/`, `HttpOnly`, `SameSite=Lax`, and `max-age=2592000`
+(30 days); `Secure` is added in production. Server-side guards validate the
+session by asking Encore `/auth/me` rather than decoding a JWT payload. See
+`docs/authentication.md` and ADR `0022-auth-methods.md`.
+
+### Auth UX (modals + minimal login page)
+
+- **Login / Register / Forgot-password** are global **modals** (`LoginModal`,
+  `RegisterModal`, `ForgotPasswordModal`) mounted in the root layout and opened
+  via the shared `modal` store (single-active, non-stacking). Nav "Login" /
+  "Register" buttons (and home/pricing CTAs) open them instead of navigating.
+- A standalone **`/login` page** still exists (minimal shell, no nav/footer) as
+  the redirect target for auth-gated routes (`(app)` guard → `/login`).
+- Registration requires a **username** handle — `3–20` lowercase alphanumerics
+  with single `_`/`-` inside — validated live against `GET /auth/username-available`.
+- Password fields use a visibility toggle; auth cards show the Comics Galore brand
+  header.
 
 ### Data Loading — SvelteKit `load` Pattern
 
@@ -205,19 +224,45 @@ The full vision adds these domains. Detailed specs are in the ADRs; this section
 - **Implemented.** `coupons` table + admin CRUD; manual grant/revoke; past-due list. Force-sync and `revenue_by_tier_interval` deferred; second provider = new adapter behind `PaymentsProvider` (interface already in place).
 
 ### Social Engagement — ADR 0021
-- **Implemented.** `reading_lists` / `reading_list_items` (public shelves) in comics; `GET /comics/:id/related` (co-occurrence).
+- **Implemented.** `reading_lists` / `reading_list_items` (public shelves) in comics; `GET /comics/:id/related` (co-occurrence). Full shelf management shipped: rename / toggle-public / delete (`PATCH`/`DELETE /reading-lists/:id`), owner view of private shelves (`GET /reading-lists/:id/mine`), and an "Add to list" modal on the comic detail page.
+
+### Series association — ADR 0023
+- **Implemented.** Comics attach to a series at creation time (`series_id` or inline `series_title`); `series_order` auto-increments; series carry `cover_key`/`genre`/`category`/`schedule_day`/engagement aggregates. Series are discoverable/filterable via `GET /series-search` + `GET /series-categories`, and manageable in admin via `GET /admin/series`.
+
+### Comic archive build — ADR 0024
+- **Implemented.** Manual creation builds a self-describing `.cbz` (`metadata.json` + page images) on the client, then both Manual and Archive tabs converge on one shared extract → upload → publish pipeline with verbose step reporting. Storage split: cover/preview on Cloudflare Images, pages/original on S3.
 
 ## Upload & Creation Flow (identical on web and desktop)
 
-1. Create Upload Session.
-2. Obtain presigned URLs.
-3. Upload assets (browser or Wails webview → S3).
-4. Receive file keys.
-5. Build the **same form payload** (manual UI or archive+libarchive.js).
-6. `POST /comics` → comic created as `pending_review`.
-7. Redirect / navigate to “My Comics” tab.
+1. Choose a tab: **Manual** (metadata + cover + previews + page images) or **Archive** (drop a `.cbz`/`.cbr`/…).
+2. **Manual** builds a `.cbz` containing `metadata.json` + the page images client-side with **fflate** (ADR `0024`); the archive filename is derived from `author - title - volume - issue` (`#` → `no-`).
+3. The shared pipeline uploads the archive (original), extracts pages client-side with fflate, uploads each page to S3, and POSTs `/comics` — with verbose per-step progress.
+   - `upload_mode` (`direct` | `backend`, default `backend`) chooses presigned-URL uploads vs backend-streamed uploads.
+   - Archives larger than `upload_part_size_mb` are split into parts and uploaded with bounded concurrency (`upload_concurrency`), then merged server-side via `FinalizeMultipart`.
+4. Comic created as `pending_review`; user returns to the "My Comics" tab.
 
-Desktop may use a native file picker to choose the archive, but the rest of the pipeline is shared code from `packages/ui`.
+Desktop may use a native file picker, but the rest of the pipeline is shared code from `packages/ui`.
+
+### Download delivery
+
+- `GET /download/*key` (auth) serves the archive. Files under `download_stream_threshold_mb` are streamed with a `Content-Disposition` filename; larger files 302-redirect to a presigned URL — the object key basename carries the friendly filename (Encore's object API can't sign a `response-content-disposition`).
+- The download button records the download (quota check + counter) via `POST /comics/:id/download`, then navigates to the download URL.
+
+### Background-job observability
+
+- A dedicated `jobs` service owns a `job_runs` table and private `RecordJobStart` / `RecordJobFinish` endpoints; cron handlers and pubsub handlers record their runs (best-effort — recording failures never block the job).
+- Pubsub subscriptions (`archive-extract`, `ai-moderation`) configure `RetryPolicy{MaxRetries: 5}`; Encore dead-letters messages that exceed retries (the DLQ itself is internal/Cloud-only, so `failed` `job_runs` rows are the app-visible signal).
+- The admin "Background Jobs" page reads `GET /admin/jobs` and can manually re-trigger the two cron sweeps.
+
+### Storage usage
+
+- `GET /admin/storage` (upload service) enumerates the `comic-files` bucket via `ComicBucket.List` (object count + bytes, broken down by key prefix) and merges the Cloudflare Images count; the admin "Storage" page renders it. The older `storage_bytes` KPI is the DB `SUM(file_size_bytes)` — the bucket enumeration is the accurate source.
+
+### Admin dashboard (aggregate + SSE)
+
+- A dedicated `dashboard` service aggregates KPI stats from the other services and exposes `GET /admin/dashboard` (snapshot) plus `GET /admin/dashboard-stream` (SSE) — the stream pushes the aggregate on connect and every 15s, recomputing only while a client is connected.
+- The per-service stats endpoints (`auth.AdminDashboardStats`/`GetSignupTrend`, `comics.GetComicsStats`, `billing.GetBillingStats`, `reading.GetReadingStats`/`GetDownloadTrend`, `upload.GetStorageStats`) are `private` (service-internal); the admin frontend talks only to the `dashboard` service.
+- The admin dashboard keeps an SSE connection (toggleable "Realtime: On/Off", default on) via `EventSource('/api/admin/dashboard-stream')` through the same-origin `/api` proxy (cookie → Bearer).
 
 ## Why this split
 
@@ -289,10 +334,20 @@ Admin setting `image_serving_mode` (default: `direct`):
 - Page images on S3 may still be passed through imgproxy when mode is `imgproxy` (resize/webp); covers/previews already live on Cloudflare Images.
 - Reader and public grids always resolve URLs via a small media helper so switching mode does not require rewriting content.
 
+### imgproxy mode (implemented, deployment optional)
+
+- Admin settings: `imgproxy_base_url`, `imgproxy_key`, `imgproxy_salt` (hex-encoded key/salt, imgproxy `IMGPROXY_KEY`/`IMGPROXY_SALT` convention).
+- When `image_serving_mode == "imgproxy"` and a base URL is configured, `ServeMedia` (`GET /media/*key`) 302-redirects to a **signed** imgproxy URL (`buildImgproxyURL`: URL-safe base64 HMAC-SHA256 over `salt || path`, source = the S3 signed URL, processing `rs:fit:2000:2000`). The browser then fetches the CDN directly.
+- No live imgproxy deployment is required to ship this — the code + admin config are ready to be wired when a deployment is provisioned.
+
 ### Upload pipeline implications
 - Manual / archive creation: after presigned flow (or CF Images upload API for cover/preview), the creation payload includes keys **and** kind.
 - Cover & preview uploads target Cloudflare Images APIs (or CF-presigned flows), not the general S3 comic-page bucket.
 - Page files and the main archive remain on S3 via existing presigned upload sessions.
+- `upload_mode` (admin setting, default `backend`) controls the transport:
+  - `backend` — cover/preview streamed to Cloudflare Images via `POST /upload/image`; archive/pages streamed to S3 via `POST /upload/file` (multipart).
+  - `direct` — cover/preview via `POST /media/cloudflare/upload-url`; archive/pages via presigned upload sessions.
+- Large archives are split into parts (see Upload & Creation Flow) and merged server-side with `FinalizeMultipart`.
 
 
 ## Internationalization

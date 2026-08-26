@@ -1,0 +1,109 @@
+<script lang="ts">
+	import CommentList from '$lib/components/social/CommentList.svelte';
+	import CommentForm from '$lib/components/social/CommentForm.svelte';
+	import { Avatar, AvatarFallback } from '$lib/components/ui/avatar/index.js';
+	import { modal } from '$lib/stores/modal.svelte';
+	import { setNewMessage } from '$lib/stores/new-message.svelte';
+	import { formatDate } from '$lib/utils/format';
+
+	export interface Comment {
+		id: string;
+		comic_id: string;
+		user_id: string;
+		username?: string;
+		avatar_key?: string;
+		parent_id?: string;
+		body_text: string;
+		created_at: string;
+		replies?: Comment[];
+	}
+
+	interface Props {
+		comments: Comment[];
+		onReply: (commentId: string) => void;
+		onDelete: (commentId: string) => void;
+		onFlag: (commentId: string) => void;
+		onSubmitComment: (bodyText: string, parentId?: string) => Promise<void>;
+		userId?: string;
+		role?: string;
+		depth?: number;
+	}
+
+	let { comments, onReply, onDelete, onFlag, onSubmitComment, userId, role = 'user', depth = 0 }: Props = $props();
+
+	let activeReply = $state<string | null>(null);
+
+	function canDelete(commentUserId: string): boolean {
+		return userId === commentUserId || role === 'admin' || role === 'moderator';
+	}
+
+	function canFlag(commentUserId: string): boolean {
+		return !!userId && userId !== commentUserId;
+	}
+
+	function messageUser(comment: Comment) {
+		if (!userId || userId === comment.user_id) return;
+		setNewMessage(comment.user_id, comment.username || 'User');
+		modal.open('new-message');
+	}
+
+	async function handleReply(bodyText: string) {
+		await onSubmitComment(bodyText, activeReply!);
+		activeReply = null;
+	}
+</script>
+
+{#if comments.length > 0}
+	<div class="space-y-3 {depth > 0 ? 'ml-6 border-l-2 border-border pl-4' : ''}">
+		{#each comments as comment (comment.id)}
+			<div class="group">
+				<div class="flex items-start gap-2">
+					{#if userId && userId !== comment.user_id}
+						<button onclick={() => messageUser(comment)} class="shrink-0 mt-0.5" aria-label={`Message ${comment.username || 'user'}`}>
+							<Avatar class="size-7">
+								<AvatarFallback class="bg-purple-100 dark:bg-purple-900 text-[10px] font-medium text-purple-600 dark:text-purple-300">{(comment.username || 'U').charAt(0).toUpperCase()}</AvatarFallback>
+							</Avatar>
+						</button>
+					{:else}
+						<Avatar class="size-7 shrink-0 mt-0.5">
+							<AvatarFallback class="bg-purple-100 dark:bg-purple-900 text-[10px] font-medium text-purple-600 dark:text-purple-300">{(comment.username || 'U').charAt(0).toUpperCase()}</AvatarFallback>
+						</Avatar>
+					{/if}
+					<div class="flex-1 min-w-0">
+						<div class="flex items-center gap-2 flex-wrap">
+							{#if userId && userId !== comment.user_id}
+								<button onclick={() => messageUser(comment)} class="text-xs font-medium hover:text-primary hover:underline underline-offset-2 transition-colors" title="Message">{comment.username || 'User'}</button>
+							{:else}
+								<span class="text-xs font-medium">{comment.username || 'User'}</span>
+							{/if}
+							<span class="text-[10px] text-muted-foreground">{formatDate(comment.created_at, 'datetime')}</span>
+							{#if canDelete(comment.user_id)}
+								<button onclick={() => onDelete(comment.id)} class="text-[10px] text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Delete comment">Delete</button>
+							{/if}
+							{#if canFlag(comment.user_id)}
+								<button onclick={() => onFlag(comment.id)} class="text-[10px] text-muted-foreground hover:text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity" aria-label="Flag comment">Flag</button>
+							{/if}
+						</div>
+						<p class="text-sm mt-0.5 leading-relaxed">{comment.body_text}</p>
+						<button
+							onclick={() => { onReply(comment.id); activeReply = activeReply === comment.id ? null : comment.id; }}
+							class="text-[10px] text-muted-foreground hover:text-primary mt-1"
+						>
+							{activeReply === comment.id ? 'Cancel' : 'Reply'}
+						</button>
+
+						{#if activeReply === comment.id}
+							<div class="mt-2">
+								<CommentForm onSubmit={handleReply} placeholder="Write a reply..." />
+							</div>
+						{/if}
+					</div>
+				</div>
+
+				{#if comment.replies && comment.replies.length > 0}
+					<CommentList comments={comment.replies} {onReply} {onDelete} {onFlag} {onSubmitComment} {userId} {role} depth={depth + 1} />
+				{/if}
+			</div>
+		{/each}
+	</div>
+{/if}

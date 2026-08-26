@@ -18,28 +18,53 @@
 | POST | `/comics` | **Single creation endpoint** used by both Manual and Archive paths | Uploader |
 | GET | `/uploader/comics` | Paginated list of my comics (newest first) | Uploader |
 
-### Creation payload (conceptual)
+### Creation payload (`POST /comics`)
 
 ```json
 {
   "title": "...",
+  "author": "...",
   "description": "...",
-  "series_id": "...",
-  "series_order": 1,
-  "tags": ["..."],
-  "cover_key": "s3-key-from-presign",
-  "file_key": "s3-key-of-main-archive-or-primary",
-  "page_keys": ["..."],
+  "content_language": "en",
+  "category": "Manga",
+  "genre": "Action",
+  "cover_key": "cf-image-id-or-s3-key",
+  "file_key": "s3-key-of-original-archive",
+  "page_keys": ["preview-cf-id", "...", "page-s3-key"],
+  "page_dimensions": [{ "width": 800, "height": 1200 }],
+  "reading_direction": "ltr",
+  "archive_mimetype": "application/vnd.comicbook+zip",
+  "isbn": "", "upc": "", "issn": "",
+  "volume": "", "issue_number": "",
   "file_size_bytes": 123456789,
-  "min_tier_id": null,
-  "scheduled_for": null,
-  "upload_session_id": "..."
+  "min_tier_id": "",
+  "age_rating": "all_ages",
+  "is_premium": false,
+  "tags": ["..."],
+  "upload_session_id": "",
+  "series_id": "existing-series-uuid",
+  "series_title": "",
+  "series_genre": "", "series_category": "", "series_schedule_day": ""
 }
 ```
 
-- Manual form: user fills fields; file inputs produce keys via presigned uploads; then `POST /comics`.
-- Archive mode: libarchive.js + metadata JSON automatically build the **exact same payload**; then `POST /comics`.
+- **Series association** (ADR `0023-series-association.md`): pass `series_id` to attach to an existing series, or `series_title` (+ optional `series_genre`/`series_category`/`series_schedule_day`) to create a new series inline. `series_order` is auto-incremented.
+- **Manual form** builds a self-describing `.cbz` (see ADR `0024-comic-archive-build.md`); both Manual and Archive paths then converge on the same extract → upload → publish pipeline.
 - Backend creates the comic with `status = pending_review`.
+
+### Series discovery & filter
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/series` | List all series | No |
+| GET | `/series-search` | Paginated + filtered series (`search`, `category`, `page`, `limit`) — DB-side filtering | No |
+| GET | `/series-categories` | Distinct category values (facet list) | No |
+| POST | `/series` | Create a series (title, description, genre, category, schedule_day, cover_key) | Uploader |
+| GET | `/series/:id` | Series detail | No |
+| GET | `/series/:id/comics` | Series comics (paginated) | No |
+| GET | `/admin/series` | Admin series datalist (search/sort/filter/paginate) | Admin |
+
+`/series-search` and `/series-categories` power the public "Browse Series" page and the upload form's series picker (search + category + "load more" — all server-side).
 
 ## Comic Review
 
@@ -80,8 +105,18 @@
 | GET (admin) | `/admin/plans/matrix-status` | Admin check if plan matrix is complete | Admin |
 | PATCH (admin) | `/admin/plans/:id` | Manually set a plan's provider_plan_id (refuses if already linked) | Admin |
 | POST (admin) | `/admin/plans/link/:id` | Auto-create NowPayments plan via API + store the ID | Admin |
+| POST (admin) | `/admin/plans/unlink/:id` | Unlink a single plan (clear provider_plan_id) | Admin |
+| POST (admin) | `/admin/plans/unlink` | Unlink all plans (clear every provider_plan_id) | Admin |
 
-The auto-link endpoint (in the `tiers` service) calls the NowPayments `POST /v1/subscriptions/plans` API through the shared `nowpayments` package to create a remote plan and saves the returned ID as `provider_plan_id`. The `PATCH` endpoint has a lock guard preventing re-linking of already-configured plans.
+The auto-link endpoint (in the `tiers` service) calls the NowPayments `POST /v1/subscriptions/plans` API through the shared `nowpayments` package to create a remote plan and saves the returned ID as `provider_plan_id`. The `PATCH` endpoint has a lock guard preventing re-linking of already-configured plans. Note: NowPayments Recurring Payments and Custody/sub-partner responses are wrapped in a `result` object (`{"result": {...}}`); the `nowpayments` client unwraps `result` before parsing. The standard endpoints (`/auth`, `/estimate`) return top-level fields and are parsed as-is.
+
+Webhook callback URLs (`ipn_callback_url`) are built on the backend from `encore.Meta().APIBaseURL` (the running app's own base URL) rather than a client-supplied host header; a valid `NgrokURL` secret is only used to override the callback URL when running locally.
+
+The checkout flow fetches the merchant's accepted coins from `GET /billing/currencies` (public) — backed by NowPayments `GET /v1/merchant/coins` (the coins enabled in "coins settings"). `GET /billing/check-balance` returns `{ balances: { "<currency>": { amount, pending_amount } } }` and `POST /billing/estimate-price` returns `{ estimated_amount, from_currency, to_currency }`.
+
+## Bot protection (Cloudflare Turnstile)
+
+User-initiated write endpoints accept an optional `turnstile_token` and verify it server-side (via the private `turnstile` service → `POST /turnstile/verify`) before running their existing logic: `auth.Register`, `auth.Login`, `auth.RequestPasswordReset`, `comics.CreateComic`, `comics.CreateComment`, `social.CreateTicket`, `social.ReplyTicket`. The SvelteKit frontend renders the widget when `VITE_TURNSTILE_SITEKEY` is set and passes the token through. Verification is **inert** when `TURNSTILE_SECRET` is unset (dev), and otherwise fails closed on `success`, `action`, and `hostname ∈ TURNSTILE_HOSTNAMES`.
 
 ## Other domains
 Auth, users, tiers, intervals, plans, subscriptions, webhooks, settings, social, comments, messaging, support, admin KPIs & datalists remain as previously specified.
@@ -143,6 +178,7 @@ Private endpoints callable only from other Encore services — never exposed pub
 | PATCH | `/me/notification-preferences` | Update prefs | Yes |
 | POST | `/auth/verify-email` | Confirm email (token) | No |
 | POST | `/auth/resend-verification` | Resend verification | Yes |
+| GET | `/auth/username-available` | Check a username's availability + format validity | No |
 | POST | `/auth/password-reset/request` | Request reset | No |
 | POST | `/auth/password-reset/confirm` | Confirm reset | No |
 | GET | `/legal/terms` | Terms (or static) | No |
@@ -159,6 +195,8 @@ Comics payloads include `age_rating`. Public list/detail endpoints may filter or
 | GET | `/media/resolve` | Resolve delivery URL(s) for asset id/key according to `image_serving_mode` | Opt |
 | POST | `/media/cloudflare/upload-url` | Credential/url for cover or preview upload to Cloudflare Images | Uploader |
 | (existing) | `/upload-sessions/.../presign` | S3 presign for **pages** and **original** archives only | Uploader |
+| GET | `/media/*key` | Serve a stored image/object (Cloudflare or S3, by mode) | No |
+| GET | `/download/*key` | Archive download: stream (small) or presigned redirect (large) | User |
 
 Creation payload may reference:
 - `cover` → Cloudflare Images id/url (`kind=cover`)
@@ -167,6 +205,47 @@ Creation payload may reference:
 
 Admin settings include `image_serving_mode` and proxy base URL.
 
+### Upload (backend-streamed mode)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST | `/upload/image` | Stream a cover/preview to Cloudflare Images (S3 fallback); returns `{ key }` | Uploader |
+| POST | `/upload/file` | Stream an archive/page to S3 via multipart; returns `{ key }` | Uploader |
+| POST | `/upload-sessions/:id/finalize` | Concatenate a session's split parts into a single object; returns `{ key }` | Uploader |
+
+
+## Background jobs (observability)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/admin/jobs` | List recent job runs (filter by `job_name`, `status`) | Admin |
+| POST | `/admin/jobs/ai-moderate-comics/run` | Manually trigger the AI moderation sweep | Admin |
+| POST | `/admin/jobs/waiting-pay-expiry/run` | Manually trigger the WAITING_PAY expiry sweep | Admin |
+
+Job recording (service-to-service, private): `POST /jobs/record-start` → `{ id }`, `POST /jobs/record-finish` (`id`, optional `error`). Cron jobs (`ai-moderate-comics`, `waiting-pay-expiry`) and pubsub handlers (`archive-extract`, `ai-moderation`) record runs; pubsub subscriptions use `RetryPolicy{MaxRetries: 5}`.
+
+## Storage
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/admin/storage` | Enumerate the object bucket: total bytes + object count, per-prefix breakdown, Cloudflare Images count | Admin |
+
+## Announcements
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/announcements` | Broadcasts for the caller (`target=all` + their tier) | No |
+| POST | `/admin/broadcasts` | Create a broadcast (title, body, target, tier) | Admin |
+| GET | `/admin/broadcasts` | List broadcasts | Admin |
+
+## Dashboard (admin)
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/admin/dashboard` | Aggregated KPI stats (users/comics/billing/reading/storage + trends) | Admin |
+| GET | `/admin/dashboard-stream` | SSE stream pushing the aggregate every 15s | Admin |
+
+The `dashboard` service aggregates the per-service stats endpoints, which are now service-internal (`private`): `auth.AdminDashboardStats`, `auth.GetSignupTrend`, `comics.GetComicsStats`, `billing.GetBillingStats`, `reading.GetReadingStats`, `reading.GetDownloadTrend`, `upload.GetStorageStats`.
 
 ## Language & i18n
 
@@ -226,8 +305,11 @@ Summarised from ADRs 0017–0021. All auth-required unless noted.
 ## Social Engagement — ADR 0021 (implemented)
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| POST/GET | `/reading-lists` | Create/list shelves | Yes |
+| POST/GET | `/reading-lists` | Create/list my shelves (`GET` accepts `comic_id` and returns `has_comic` + `comic_count`) | Yes |
+| PATCH | `/reading-lists/:id` | Rename + toggle `is_public` | Yes |
+| DELETE | `/reading-lists/:id` | Delete shelf (cascades items) | Yes |
 | GET | `/reading-lists/:id` | Public shelf (if `is_public`) | Opt |
+| GET | `/reading-lists/:id/mine` | Owner view of a shelf (works for private shelves) | Yes |
 | POST | `/reading-lists/:id/items` | Add comic to shelf | Yes |
 | DELETE | `/reading-lists/:id/items/:comicId` | Remove from shelf | Yes |
 | GET | `/comics/:id/related` | "People also liked" | No |

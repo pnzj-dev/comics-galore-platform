@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 
+	myauth "comics-galore/backend/auth"
+
 	"encore.dev/storage/objects"
 )
 
@@ -18,30 +20,29 @@ var proxyClient = &http.Client{}
 
 func init() {
 	seedImages = []string{
-		"43fa19e1-5bbc-4865-3c5f-80dab3711200",
-		"7ef3f0b7-c330-4302-96c3-3fe876cf0200",
-		"7845d02b-f5b1-43b6-ff07-0002a3416100",
-		"5504dd7d-2dbd-4e36-d337-0e2b27542600",
-		"8cf41eb3-249e-4906-5824-cf31a866af00",
-		"8328c47e-b4ec-43f0-997b-8321e7b96100",
 		"cf2739fd-7ec2-44c8-bc47-47b31d8fe000",
-		"fd535c8b-95fa-49e5-be59-02fd3be9f100",
 		"0d90dacb-3868-4c71-2885-086cf63bd300",
+		"7845d02b-f5b1-43b6-ff07-0002a3416100",
+		"8328c47e-b4ec-43f0-997b-8321e7b96100",
 	}
 }
 
-//encore:api public raw path=/media/:key method=GET
+//encore:api public raw path=/media/*key method=GET
 func ServeMedia(w http.ResponseWriter, req *http.Request) {
-	key := req.PathValue("key")
+	// Encore raw endpoints are registered via httprouter, which does not expose
+	// path params through req.PathValue. Extract the key from the URL path
+	// ourselves; the *key wildcard matches keys containing slashes (e.g. the
+	// backend upload path "uploads/<uid>/<date>/<file>").
+	key := strings.TrimPrefix(req.URL.Path, "/media/")
 
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if strings.HasPrefix(key, "seed/") {
-		if len(seedImages) > 0 && cfSecrets.CloudflareImagesHash != "" {
+		if len(seedImages) > 0 && secrets.CloudflareImagesHash != "" {
 			h := fnv.New32a()
 			h.Write([]byte(key))
 			idx := int(h.Sum32()) % len(seedImages)
-			url := fmt.Sprintf("https://imagedelivery.net/%s/%s/public", cfSecrets.CloudflareImagesHash, seedImages[idx])
+			url := fmt.Sprintf("https://imagedelivery.net/%s/%s/public", secrets.CloudflareImagesHash, seedImages[idx])
 			proxyImage(w, req, url)
 			return
 		}
@@ -51,8 +52,15 @@ func ServeMedia(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if uuidRe.MatchString(key) && cfSecrets.CloudflareImagesHash != "" {
-		url := fmt.Sprintf("https://imagedelivery.net/%s/%s/public", cfSecrets.CloudflareImagesHash, key)
+	mode := "direct"
+	var cfg *myauth.AppSettings
+	if c, err := myauth.GetAppConfig(req.Context()); err == nil {
+		cfg = c
+		mode = c.ImageServingMode
+	}
+
+	if uuidRe.MatchString(key) && mode == "cloudflare_images" && secrets.CloudflareImagesHash != "" {
+		url := fmt.Sprintf("https://imagedelivery.net/%s/%s/public", secrets.CloudflareImagesHash, key)
 		proxyImage(w, req, url)
 		return
 	}
@@ -63,6 +71,16 @@ func ServeMedia(w http.ResponseWriter, req *http.Request) {
 		w.Write(placeholderSVG())
 		return
 	}
+
+	// imgproxy mode: redirect to a signed imgproxy URL so the browser fetches
+	// the CDN directly (the source is the S3 signed URL).
+	if mode == "imgproxy" && cfg != nil && cfg.ImgproxyBaseURL != "" {
+		if u := buildImgproxyURL(cfg.ImgproxyBaseURL, cfg.ImgproxyKey, cfg.ImgproxySalt, url.URL); u != "" {
+			http.Redirect(w, req, u, http.StatusFound)
+			return
+		}
+	}
+
 	proxyImage(w, req, url.URL)
 }
 

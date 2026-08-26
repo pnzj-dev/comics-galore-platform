@@ -59,8 +59,11 @@
 	async function suspendUser(userId: string) { await encore.auth.AdminSuspendUser(userId, { reason: '' }); await goto(page.url.pathname + page.url.search); }
 	async function unsuspendUser(userId: string) { await encore.auth.AdminUnsuspendUser(userId); await goto(page.url.pathname + page.url.search); }
 	async function impersonate(userId: string) {
-		const res = await encore.auth.AdminImpersonateUser(userId);
-		document.cookie = `token=${res.token}; path=/; SameSite=Lax; max-age=2592000`;
+		await fetch('/auth/impersonate', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ user_id: userId }),
+		});
 		window.location.href = '/';
 	}
 

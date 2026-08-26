@@ -20,7 +20,7 @@ func TestRegister_Valid(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	resp, err := Register(ctx, &RegisterParams{
-		Email:    "test@example.com",
+		Email:    "test@example.com", Username: "test",
 		Password: "password123",
 	})
 	if err != nil {
@@ -48,7 +48,7 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	_, err := Register(ctx, &RegisterParams{
-		Email:    "dup@example.com",
+		Email:    "dup@example.com", Username: "dup",
 		Password: "password123",
 	})
 	if err != nil {
@@ -56,7 +56,7 @@ func TestRegister_DuplicateEmail(t *testing.T) {
 	}
 
 	_, err = Register(ctx, &RegisterParams{
-		Email:    "dup@example.com",
+		Email:    "dup@example.com", Username: "dup",
 		Password: "different123",
 	})
 	if err == nil {
@@ -110,7 +110,7 @@ func TestRegister_ShortPassword(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	_, err := Register(ctx, &RegisterParams{
-		Email:    "short@example.com",
+		Email:    "short@example.com", Username: "short",
 		Password: "1234567",
 	})
 	if err == nil {
@@ -130,7 +130,7 @@ func TestLogin_Valid(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	_, err := Register(ctx, &RegisterParams{
-		Email:    "login@example.com",
+		Email:    "login@example.com", Username: "login",
 		Password: "password123",
 	})
 	if err != nil {
@@ -157,7 +157,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	_, err := Register(ctx, &RegisterParams{
-		Email:    "wrong@example.com",
+		Email:    "wrong@example.com", Username: "wrong",
 		Password: "password123",
 	})
 	if err != nil {
@@ -205,7 +205,7 @@ func TestMe(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	resp, err := Register(ctx, &RegisterParams{
-		Email:    "me@example.com",
+		Email:    "me@example.com", Username: "user_me",
 		Password: "password123",
 	})
 	if err != nil {
@@ -236,7 +236,7 @@ func TestRenewToken(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	resp, err := Register(ctx, &RegisterParams{
-		Email:    "renew@example.com",
+		Email:    "renew@example.com", Username: "renew",
 		Password: "password123",
 	})
 	if err != nil {
@@ -267,7 +267,7 @@ func TestAdminBanUser(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	resp, err := Register(ctx, &RegisterParams{
-		Email:    "victim@example.com",
+		Email:    "victim@example.com", Username: "victim",
 		Password: "password123",
 	})
 	if err != nil {
@@ -301,7 +301,7 @@ func TestAdminUnbanUser(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	resp, err := Register(ctx, &RegisterParams{
-		Email:    "pardoned@example.com",
+		Email:    "pardoned@example.com", Username: "pardoned",
 		Password: "password123",
 	})
 	if err != nil {
@@ -340,7 +340,7 @@ func TestAdminBanUser_NonAdmin(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	resp, err := Register(ctx, &RegisterParams{
-		Email:    "user@example.com",
+		Email:    "user@example.com", Username: "user",
 		Password: "password123",
 	})
 	if err != nil {
@@ -372,7 +372,7 @@ func TestAdminSuspendUser(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	resp, err := Register(ctx, &RegisterParams{
-		Email:    "suspendme@example.com",
+		Email:    "suspendme@example.com", Username: "suspendme",
 		Password: "password123",
 	})
 	if err != nil {
@@ -406,7 +406,7 @@ func TestAdminUnsuspendUser(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	resp, err := Register(ctx, &RegisterParams{
-		Email:    "unsuspendme@example.com",
+		Email:    "unsuspendme@example.com", Username: "unsuspendme",
 		Password: "password123",
 	})
 	if err != nil {
@@ -445,7 +445,7 @@ func TestBannedUser_CannotLogin(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	resp, err := Register(ctx, &RegisterParams{
-		Email:    "banned@example.com",
+		Email:    "banned@example.com", Username: "banned",
 		Password: "password123",
 	})
 	if err != nil {
@@ -485,7 +485,7 @@ func TestSuspendedUser_CannotLogin(t *testing.T) {
 	_, _ = et.NewTestDatabase(ctx, "authdb")
 
 	resp, err := Register(ctx, &RegisterParams{
-		Email:    "suspended@example.com",
+		Email:    "suspended@example.com", Username: "suspended",
 		Password: "password123",
 	})
 	if err != nil {

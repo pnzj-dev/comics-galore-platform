@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
 	import DetailRow from '$lib/components/DetailRow.svelte';
-	import { formatDate } from '$lib/utils/format';
+	import { formatDate, statusColor } from '$lib/utils/format';
 
 	let { data } = $props();
 	let actionLoading = $state('');
@@ -86,7 +86,7 @@
 			{:else if col.key === 'author'}
 				<span class="text-xs text-muted-foreground">{row.author as string || '—'}</span>
 			{:else if col.key === 'status'}
-				<span class="text-xs px-2 py-0.5 rounded-full w-fit {(row.status as string) === 'published' ? 'bg-green-100 text-green-700' : (row.status as string) === 'pending_review' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}">{(row.status as string)?.replace('_', ' ')}</span>
+				<span class="text-xs px-2 py-0.5 rounded-full w-fit {statusColor(row.status as string)}">{(row.status as string)?.replace('_', ' ')}</span>
 			{/if}
 		{/snippet}
 		{#snippet actions(row)}

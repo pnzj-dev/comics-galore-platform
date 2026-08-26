@@ -7,18 +7,14 @@ import (
 	"github.com/resend/resend-go/v2"
 )
 
-var emailSecrets struct {
-	ResendAPIKey string
-}
-
 // sendEmail sends an email via Resend. Returns silently on failure (best-effort).
 func sendEmail(to, subject, htmlBody string) {
-	if emailSecrets.ResendAPIKey == "" {
+	if secrets.ResendAPIKey == "" {
 		log.Println("[email] ResendAPIKey not configured, skipping email to", to)
 		return
 	}
 
-	client := resend.NewClient(emailSecrets.ResendAPIKey)
+	client := resend.NewClient(secrets.ResendAPIKey)
 	params := &resend.SendEmailRequest{
 		From:    "Comics Galore <noreply@comicsgalore.com>",
 		To:      []string{to},

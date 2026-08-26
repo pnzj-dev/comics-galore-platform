@@ -1,0 +1,57 @@
+<script lang="ts">
+	// OAuth provider sign-in buttons. Each button redirects the browser to the
+	// Encore backend which handles the OAuth dance and bounces back with a
+	// one-time code to /auth/oauth/callback.
+	const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
+
+	interface Props {
+		onError?: (message: string) => void;
+		disabled?: boolean;
+	}
+
+	let { onError, disabled = false }: Props = $props();
+
+	const providers = [
+		{ id: 'google', label: 'Google' },
+		{ id: 'facebook', label: 'Facebook' },
+		{ id: 'twitter', label: 'X' },
+		{ id: 'apple', label: 'Apple' },
+	];
+
+	function start(provider: string) {
+		window.location.href = `${BACKEND_URL}/auth/oauth/${provider}`;
+	}
+</script>
+
+<div class="grid grid-cols-2 gap-2">
+	{#each providers as p (p.id)}
+		<button
+			type="button"
+			onclick={() => start(p.id)}
+			disabled={disabled}
+			class="w-full flex items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+		>
+			{#if p.id === 'google'}
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" class="size-4 shrink-0" aria-hidden="true">
+					<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+					<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+					<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+					<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+				</svg>
+			{:else if p.id === 'facebook'}
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="size-4 shrink-0" fill="#1877F2" aria-hidden="true">
+					<path d="M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036 26.805 26.805 0 0 0-.733-.009c-.707 0-1.259.096-1.675.309a1.686 1.686 0 0 0-.679.622c-.258.42-.374.995-.374 1.752v1.297h3.919l-.386 2.103-.287 1.564h-3.246v8.245C19.396 23.238 24 18.179 24 12.044c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.628 3.874 10.35 9.101 11.647Z"/>
+				</svg>
+			{:else if p.id === 'twitter'}
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="size-4 shrink-0" fill="currentColor" aria-hidden="true">
+					<path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/>
+				</svg>
+			{:else if p.id === 'apple'}
+				<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="size-4 shrink-0" fill="currentColor" aria-hidden="true">
+					<path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.03 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09Z"/>
+				</svg>
+			{/if}
+			{p.label}
+		</button>
+	{/each}
+</div>

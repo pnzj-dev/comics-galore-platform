@@ -23,6 +23,12 @@ curl -s -X POST "$ENDPOINT/dev/seed-comics" \
   -d "{\"token\":\"$TOKEN\"}" | python3 -m json.tool 2>/dev/null || echo "(json.tool not available, raw output above)"
 
 echo ""
+echo "--- Series ---"
+curl -s -X POST "$ENDPOINT/dev/seed-series" \
+  -H "Content-Type: application/json" \
+  -d "{\"token\":\"$TOKEN\"}" | python3 -m json.tool 2>/dev/null || echo "(json.tool not available, raw output above)"
+
+echo ""
 echo "--- Engagement ---"
 curl -s -X POST "$ENDPOINT/dev/seed-engagement" \
   -H "Content-Type: application/json" \
@@ -31,6 +37,12 @@ curl -s -X POST "$ENDPOINT/dev/seed-engagement" \
 echo ""
 echo "--- Billing ---"
 curl -s -X POST "$ENDPOINT/dev/seed-billing" \
+  -H "Content-Type: application/json" \
+  -d "{\"token\":\"$TOKEN\"}" | python3 -m json.tool 2>/dev/null || echo "(json.tool not available, raw output above)"
+
+echo ""
+echo "--- Quota (exhaust free-tier downloads for boost testing) ---"
+curl -s -X POST "$ENDPOINT/dev/seed-quota" \
   -H "Content-Type: application/json" \
   -d "{\"token\":\"$TOKEN\"}" | python3 -m json.tool 2>/dev/null || echo "(json.tool not available, raw output above)"
 
@@ -46,3 +58,4 @@ echo "  member-bronze@pnzj.dev            (user / bronze)"
 echo "  member-silver@pnzj.dev            (user / silver)"
 echo "  member-gold@pnzj.dev              (user / gold)"
 echo "  member-platinum@pnzj.dev          (user / platinum)"
+echo "  member-exhausted@pnzj.dev         (user / free — download quota exhausted)"

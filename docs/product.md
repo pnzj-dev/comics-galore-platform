@@ -32,20 +32,17 @@ When the user has the `uploader` role, a dedicated **New Comic** area is availab
 - After a successful creation (manual or archive) the user is automatically returned to this tab (`/upload?tab=list`) so they can see the new comic.
 
 ### Tab 2 – Manual Creation
-- **Full-width 3-section layout**: Row 1 — metadata (left, `1fr`) + 3:4 cover dropzone (right, 320px); Row 2 — preview image grid (Cloudflare upload, min 2, up to 10); Row 3 — archive file grid (S3 upload, min 1, up to 10).
-- Rich form fields: title, author, description, synopsis, category, tags, language, age rating.
-- **All file inputs upload directly to S3 via presigned URLs**. The frontend receives **file keys** back.
-- Those keys are written into the form state.
-- When the form is complete and valid, the frontend sends the **same creation payload** to the backend.
-- Supports crash recovery via an **Upload Session**.
+- **Full-width layout**: metadata (left) + 3:4 cover dropzone (right); a **preview image grid** (Cloudflare Images, min 2, up to 10); and a **page-images picker** (the comic's pages, uploaded to S3).
+- Rich form fields: title, author, description, category, genre, tags, language, age rating, reading direction, identifiers (ISBN/UPC/ISSN), and a **series** selector (attach to an existing series or create a new one inline).
+- **Cover & previews** upload to **Cloudflare Images**; **pages** are packed into a self-describing `.cbz` (`metadata.json` + page images) and uploaded to **S3** (ADR `0024-comic-archive-build.md`).
+- On submit the frontend shows **verbose per-step progress** (build archive → upload archive → extract pages → upload pages → publish), then sends the unified payload to `POST /comics`.
 - On success the comic is created with status `pending_review` and the user is sent to Tab 1.
 
 ### Tab 3 – Archive + Metadata JSON
 - User selects a single archive (`.zip`, `.cbz`, `.cbr`, `.rar`…).
 - **Frontend** uses **libarchive.js** to parse the archive in the browser.
-- Frontend locates and validates `comic.json` / `metadata.json`.
-- Individual assets are uploaded via presigned URLs; the frontend receives **file keys**.
-- The archive path **automatically builds the exact same form payload** that the manual form would produce (title, description, series, cover_key, file_key, page_keys, tags, …).
+- Frontend locates and validates `comic.json` / `metadata.json` and prefills the form (title, author, tags, …).
+- The archive path runs the **same extract → upload → publish pipeline** as the manual path (ADR `0024`), plus a separate cover (Cloudflare) and previews (Cloudflare, min 2).
 - No user intervention is required after the archive is chosen (unless validation fails).
 - The frontend then calls the **same comic-creation API** as the manual path.
 - Same crash-recovery mechanism and same redirect to Tab 1 on success.
@@ -85,6 +82,7 @@ When the user has the `uploader` role, a dedicated **New Comic** area is availab
 - “Next issue” / Continue series CTAs
 
 ### Reader
+- **Tier-gated**: the web reader requires a paid plan (Bronze and above); free-tier and anonymous users see an "Upgrade to read" CTA instead of "Start Reading".
 - Keyboard + swipe; progress saving; Continue Reading shelf
 - **Page thumbnails / scrubber**
 - **Fit modes** (width / height / original)
@@ -94,7 +92,7 @@ When the user has the `uploader` role, a dedicated **New Comic** area is availab
 ### Social & library
 - Like, favorite, rate, comments, follow uploaders + series
 - Dedicated **Favorites** page (authenticated) listing all favorited comics with inline unfavorite
-- Shareable public reading lists / shelves
+- **Reading lists / shelves**: named, user-curated collections of comics; **add to list** from a comic's detail page (modal with checkboxes + inline "create new"); manage on `/lists` (rename, toggle public, delete) and `/lists/[id]` (owner view, remove items); public shelves shareable at `/lists/[id]`
 - Flagging / report flow
 
 ### Trust & compliance
@@ -227,6 +225,14 @@ Web client does **not** implement full-comic offline storage or native OS integr
   - `imgproxy` – deliver via configured image proxy
   - `cloudflare_images` – prefer Cloudflare Images delivery/variants
 - Every image asset carries a **kind** flag so the system never confuses covers, previews, and pages.
+
+### Download delivery & filename
+- The archive download is **auth-gated** and quota-checked (downloads/month per tier).
+- Small archives stream through the backend with a `Content-Disposition` filename; large archives redirect to a presigned URL.
+- The download filename is derived from the comic metadata: `author - title - volume - issue` (empty parts skipped; `#` in the issue number is mapped to `no-`), sanitized for filesystem/URL safety.
+
+### Advertising
+- The comic detail page includes a **placeholder ad zone** below the download button (`AdBanner.svelte`). Real ad content is supplied by a later ad-agency integration; the placeholder keeps the layout stable in the meantime.
 
 
 ## Preview gallery (tier-gated)

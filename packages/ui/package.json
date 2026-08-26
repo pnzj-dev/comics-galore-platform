@@ -1,6 +1,9 @@
 {
 	"name": "@comics-galore/ui",
 	"version": "0.1.0",
+	"devDependencies": {
+		"svelte-cryptocurrency-icons": "^1.0.4"
+	},
 	"peerDependencies": {
 		"svelte": "^5.0.0"
 	},

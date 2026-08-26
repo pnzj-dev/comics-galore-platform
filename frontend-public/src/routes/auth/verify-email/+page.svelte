@@ -12,7 +12,7 @@
 	onMount(async () => {
 		if (!token) { status = 'error'; message = 'No verification token provided.'; return; }
 		try {
-			await api.post('/auth/verify-email', { token });
+			await encore.auth.VerifyEmail({ token });
 			status = 'success';
 			message = 'Email verified successfully! You can now log in.';
 		} catch (err) {

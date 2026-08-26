@@ -223,6 +223,53 @@ Use `submitting` boolean, change button text, disable while in-flight. Show erro
 
 Comment tree is fetched server-side as a threaded structure (root comments with nested `replies` arrays). After submit/delete/SSE event, re-fetch the full threaded tree via `ListComments()` instead of manually inserting into the array. This ensures correct nesting and oldest-first ordering.
 
+## Code reuse / no duplication
+
+Before writing a formatter, status-color helper, compact-number, or toggle-button, **grep `$lib` first** — the logic likely already exists. Duplicating it reintroduces the bugs it was centralized to fix (see the `FavoriteStar` and `ReactionButton` extractions).
+
+### Canonical utils (`$lib/utils/format`)
+
+Import from `$lib/utils/format` — **never redefine locally**:
+
+- `formatDate(d, variant?, fallback?)` — variants: `'short'` (cards), `'long'` (profile), `'datetime'` (comments), `'admin'` (datalists). Admin defaults to `'admin'`/`'—'`; public defaults to `'short'`/`''`.
+- `formatNumber(n, fallback?)` — `1.5k` / `1.5M`, null/NaN → fallback.
+- `formatBytes(bytes, fallback?)` — GB/MB/KB/B.
+- `statusColor(status)` — tailwind classes for `published`/`pending_review`/`rejected`/default.
+
+`cn()` + `WithElementRef` live in `$lib/utils.ts` (shadcn convention) — reuse, don't copy.
+
+### Canonical shared components
+
+Reuse rather than re-implementing:
+
+- `ReactionButton.svelte` — like/dislike toggle with `kind`, `active`, `count`, `loading`, `onToggle`.
+- `FavoriteStar.svelte` — icon-only favorite star with hover preview (`comicId`, `initialFavorited`, `size`, `variant`, `class`, `onUnfavorite`).
+- `FavoriteButton.svelte` — favorite with visible count (detail-page reactions bar).
+- `TierBadge.svelte`, `Pagination.svelte`, `SubmitButton.svelte`, `LogoutConfirmationModal.svelte`.
+
+### Shared-module mirrors
+
+These are maintained byte-identical across `frontend-public`, `frontend-admin`, and `packages/ui` (the `@comics-galore/ui` package is **LATER** and not imported yet — keep mirrors in sync by copying after edits):
+
+- `utils/format.ts`, `utils.ts`
+- `stores/auth.ts` — `logout(redirectTo?)` accepts an optional redirect (admin passes `'/login'`)
+- `server/jwt.ts` — includes the `exp` expiry check
+- Generated Encore clients (`api/encore-client.ts`, `server/client.ts`, `api/encore.ts`, `server/encore.ts`) — generated, do not hand-edit; don't try to "dedupe" them.
+
+### Rule
+
+If you find yourself adding `formatDate`, `formatNumber`, `compactNum`, `statusColor`, or a filled/outlined toggle icon inline, stop and import the canonical version instead.
+
+## Modal conventions (no stacking)
+
+Modals use a single-slot store so **only one modal can be open at a time** — opening one always closes the previously open modal. Never use independent `open` booleans.
+
+- Store: `$lib/stores/modal.svelte.ts` — `modal.open(id)`, `modal.close(id?)`, `modal.closeAll()`, `modal.isOpen(id)`. Public ids: `profile`, `settings`, `logout`, `checkout`, `lightbox`, `agegate`. Admin ids: `logout`, `wizard`.
+- Each modal derives `const open = $derived(modal.isOpen('id'))` instead of accepting an `open` prop. Triggers call `modal.open('id')`.
+- All modal overlays use `z-50` (single active modal → no higher z-index needed).
+- `onClose` remains an optional side-effect hook, fired after `modal.close(id)`.
+- Exceptions (not governed by the store): the full-screen `Reader` (driven by the `reading` boolean) and `RowDetailsDrawer` (per-table, payload-bound drawer inside `AdminTable`).
+
 ## References
 
 - `docs/ui.md`, `docs/v1-scope.md`, ADR `0002-sveltekit.md`

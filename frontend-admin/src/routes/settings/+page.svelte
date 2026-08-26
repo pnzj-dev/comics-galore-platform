@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { encore } from '$lib/api/encore';
+	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card/index.js';
 	import { AlertCircle, CheckCircle, AlertTriangle } from 'lucide-svelte';
@@ -10,15 +11,14 @@
 	let settings = $state<auth.AppSettings>({
 		default_language: 'en', default_content_language: 'en',
 		items_per_page: 12, popular_tags_limit: 20, site_name: 'Comics Galore',
-		maintenance_mode: false, registrations_open: true, max_upload_size_mb: 50,
-		image_serving_mode: 'direct', require_email_verify: false,
+		maintenance_mode: false, registrations_open: true, max_upload_size_mb: 3000,
+		image_serving_mode: 'direct', upload_mode: 'backend', require_email_verify: false,
+		imgproxy_base_url: '', imgproxy_key: '', imgproxy_salt: '',
 		rate_limit: 60, s3_presigned_ttl_min: 15, cf_presigned_ttl_min: 15,
-		quota_free_gb: 1, quota_bronze_gb: 10, quota_silver_gb: 50,
-		quota_gold_gb: 200, quota_platinum_gb: 1000,
-		boost_1_gb: 5, boost_1_price: 5,
-		boost_2_gb: 10, boost_2_price: 8,
-		boost_3_gb: 20, boost_3_price: 12,
-		contact_email: '', hide_mature_default: false, enable_comments: true,
+		boost_1_downloads: 10, boost_1_price: 5,
+		boost_2_downloads: 25, boost_2_price: 10,
+		boost_3_downloads: 60, boost_3_price: 20,
+		contact_email: '', hide_mature_default: false, enable_comments: false,
 		forbid_mature_for_free: false,
 		default_meta_description: '',
 		ai_moderation_enabled: false,
@@ -27,6 +27,12 @@
 		ai_prompt: 'You moderate user-generated content on a comics platform. Reply with only JSON: {"decision":"approved|rejected|uncertain","confidence":0.0,"reason":"..."}.',
 		ai_auto_approve_threshold: 0.85,
 		ai_auto_reject_threshold: 0.15,
+		waiting_pay_job_enabled: true,
+		waiting_pay_expiry_hours: 24,
+		download_stream_threshold_mb: 10,
+		page_preview_threshold: 20,
+		upload_part_size_mb: 100,
+		upload_concurrency: 4,
 		// svelte-ignore state_referenced_locally
 		...(data.settings ?? {}),
 	});
@@ -37,6 +43,40 @@
 	let submitting = $state(false);
 	let saved = $state(false);
 	let error = $state('');
+
+	// Tier download quotas (stored on the tiers table, not AppSettings).
+	let tiers = $state<{ id: string; name: string; quota_downloads: number }[]>([]);
+	let tierQuotas = $state<Record<string, number>>({});
+	let quotaSaving = $state(false);
+	let quotaSaved = $state(false);
+	let quotaError = $state('');
+
+	async function loadTiers() {
+		try {
+			const res = await encore.tiers.ListTiers();
+			tiers = res.tiers || [];
+			const q: Record<string, number> = {};
+			for (const t of tiers) q[t.id] = t.quota_downloads;
+			tierQuotas = q;
+		} catch {}
+	}
+
+	async function saveTierQuotas() {
+		quotaSaving = true; quotaSaved = false; quotaError = '';
+		try {
+			await encore.tiers.AdminUpdateTierQuotas({
+				quotas: tiers.map((t) => ({ tier_id: t.id, quota_downloads: tierQuotas[t.id] ?? t.quota_downloads })),
+			});
+			quotaSaved = true;
+			setTimeout(() => quotaSaved = false, 2000);
+			await loadTiers();
+		} catch (e: any) {
+			quotaError = e?.message || 'Failed to save tier quotas';
+		}
+		quotaSaving = false;
+	}
+
+	onMount(() => { loadTiers(); });
 
 	let showUnlinkConfirm = $state(false);
 	let unlinking = $state(false);
@@ -187,11 +227,43 @@
 							<select bind:value={settings.image_serving_mode} class="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs">
 								<option value="direct">direct</option><option value="imgproxy">imgproxy</option><option value="cloudflare_images">CF images</option>
 							</select>
+							<span class="text-xs text-muted-foreground whitespace-nowrap ml-2">Upload</span>
+							<select bind:value={settings.upload_mode} class="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs">
+								<option value="backend">backend</option><option value="direct">direct</option>
+							</select>
 						</div>
 						<div class="flex items-start gap-2">
 							<span class="text-xs text-muted-foreground whitespace-nowrap pt-1.5">Meta</span>
 							<textarea bind:value={settings.default_meta_description} placeholder="SEO meta description..." class="flex-1 rounded-md border border-input bg-background px-2.5 py-1 text-xs resize-y" rows="2"></textarea>
 						</div>
+						<div class="flex items-center gap-2">
+							<span class="text-xs text-muted-foreground whitespace-nowrap">DL stream</span>
+							<input type="number" bind:value={settings.download_stream_threshold_mb} class="w-16 rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
+							<span class="text-xs text-muted-foreground">MB</span>
+							<span class="text-xs text-muted-foreground whitespace-nowrap ml-2">Page previews</span>
+							<input type="number" bind:value={settings.page_preview_threshold} class="w-16 rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
+							<span class="text-xs text-muted-foreground whitespace-nowrap ml-2">Part size</span>
+							<input type="number" bind:value={settings.upload_part_size_mb} class="w-16 rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
+							<span class="text-xs text-muted-foreground">MB</span>
+							<span class="text-xs text-muted-foreground whitespace-nowrap ml-2">Concurrency</span>
+							<input type="number" bind:value={settings.upload_concurrency} class="w-16 rounded-md border border-input bg-background px-2 py-1.5 text-sm" />
+						</div>
+						{#if settings.image_serving_mode === 'imgproxy'}
+							<div class="space-y-2 pt-2 border-t border-border">
+								<div class="flex items-center gap-2">
+									<span class="text-xs text-muted-foreground whitespace-nowrap">imgproxy URL</span>
+									<input bind:value={settings.imgproxy_base_url} placeholder="https://imgproxy.example.com" class="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" />
+								</div>
+								<div class="flex items-center gap-2">
+									<span class="text-xs text-muted-foreground whitespace-nowrap">Key</span>
+									<input bind:value={settings.imgproxy_key} placeholder="hex-encoded key" class="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" />
+								</div>
+								<div class="flex items-center gap-2">
+									<span class="text-xs text-muted-foreground whitespace-nowrap">Salt</span>
+									<input bind:value={settings.imgproxy_salt} placeholder="hex-encoded salt" class="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" />
+								</div>
+							</div>
+						{/if}
 					</CardContent>
 				</Card>
 
@@ -236,13 +308,33 @@
 			</div>
 
 			<Card>
-				<CardHeader class="pb-2"><CardTitle>Quotas</CardTitle></CardHeader>
-				<CardContent class="grid grid-cols-5 gap-2">
-					<div class="text-center"><span class="text-[10px] text-muted-foreground">Free</span><input type="number" bind:value={settings.quota_free_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
-					<div class="text-center"><span class="text-[10px] text-muted-foreground">Bronze</span><input type="number" bind:value={settings.quota_bronze_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
-					<div class="text-center"><span class="text-[10px] text-muted-foreground">Silver</span><input type="number" bind:value={settings.quota_silver_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
-					<div class="text-center"><span class="text-[10px] text-muted-foreground">Gold</span><input type="number" bind:value={settings.quota_gold_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
-					<div class="text-center"><span class="text-[10px] text-muted-foreground">Platinum</span><input type="number" bind:value={settings.quota_platinum_gb} class="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-center" /><span class="text-[10px] text-muted-foreground">GB</span></div>
+				<CardHeader class="pb-2"><CardTitle>Tier download quotas (downloads/month)</CardTitle></CardHeader>
+				<CardContent class="space-y-3">
+					{#each tiers as tier (tier.id)}
+						<div class="flex items-center gap-3">
+							<span class="text-xs text-muted-foreground w-20">{tier.name}</span>
+							<input
+								type="number"
+								min="0"
+								bind:value={tierQuotas[tier.id]}
+								class="w-32 rounded-md border border-input bg-background px-2 py-1 text-sm text-center"
+							/>
+							{#if tierQuotas[tier.id] >= 999999}
+								<span class="text-[10px] text-muted-foreground">unlimited</span>
+							{/if}
+						</div>
+					{/each}
+					<div class="flex items-center gap-3 pt-1">
+						<Button size="sm" onclick={saveTierQuotas} disabled={quotaSaving}>
+							{quotaSaving ? 'Saving…' : 'Save tier quotas'}
+						</Button>
+						{#if quotaSaved}
+							<span class="flex items-center gap-1 text-sm text-green-500"><CheckCircle class="size-3.5" /> Saved!</span>
+						{/if}
+						{#if quotaError}
+							<span class="flex items-center gap-1 text-sm text-red-500"><AlertCircle class="size-3.5" /> {quotaError}</span>
+						{/if}
+					</div>
 				</CardContent>
 			</Card>
 
@@ -252,26 +344,40 @@
 					<div class="flex items-center gap-2">
 						<span class="text-xs text-muted-foreground w-14">Boost 1</span>
 						<span class="text-xs text-muted-foreground">+</span>
-						<input type="number" bind:value={settings.boost_1_gb} class="w-14 rounded-md border border-input bg-background px-2 py-1 text-sm text-center" />
-						<span class="text-xs text-muted-foreground">GB</span>
+						<input type="number" bind:value={settings.boost_1_downloads} class="w-14 rounded-md border border-input bg-background px-2 py-1 text-sm text-center" />
+						<span class="text-xs text-muted-foreground">dl</span>
 						<span class="text-xs text-muted-foreground ml-4">$</span>
 						<input type="number" bind:value={settings.boost_1_price} class="w-16 rounded-md border border-input bg-background px-2 py-1 text-sm text-center" />
 					</div>
 					<div class="flex items-center gap-2">
 						<span class="text-xs text-muted-foreground w-14">Boost 2</span>
 						<span class="text-xs text-muted-foreground">+</span>
-						<input type="number" bind:value={settings.boost_2_gb} class="w-14 rounded-md border border-input bg-background px-2 py-1 text-sm text-center" />
-						<span class="text-xs text-muted-foreground">GB</span>
+						<input type="number" bind:value={settings.boost_2_downloads} class="w-14 rounded-md border border-input bg-background px-2 py-1 text-sm text-center" />
+						<span class="text-xs text-muted-foreground">dl</span>
 						<span class="text-xs text-muted-foreground ml-4">$</span>
 						<input type="number" bind:value={settings.boost_2_price} class="w-16 rounded-md border border-input bg-background px-2 py-1 text-sm text-center" />
 					</div>
 					<div class="flex items-center gap-2">
 						<span class="text-xs text-muted-foreground w-14">Boost 3</span>
 						<span class="text-xs text-muted-foreground">+</span>
-						<input type="number" bind:value={settings.boost_3_gb} class="w-14 rounded-md border border-input bg-background px-2 py-1 text-sm text-center" />
-						<span class="text-xs text-muted-foreground">GB</span>
+						<input type="number" bind:value={settings.boost_3_downloads} class="w-14 rounded-md border border-input bg-background px-2 py-1 text-sm text-center" />
+						<span class="text-xs text-muted-foreground">dl</span>
 						<span class="text-xs text-muted-foreground ml-4">$</span>
 						<input type="number" bind:value={settings.boost_3_price} class="w-16 rounded-md border border-input bg-background px-2 py-1 text-sm text-center" />
+					</div>
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader class="pb-2"><CardTitle>Billing hygiene</CardTitle></CardHeader>
+				<CardContent class="space-y-2">
+					<label class="flex items-center gap-2 text-sm cursor-pointer">
+						<input type="checkbox" bind:checked={settings.waiting_pay_job_enabled} class="rounded" />
+						Downgrade WAITING_PAY subscriptions to free
+					</label>
+					<div class="flex items-center gap-2">
+						<span class="text-xs text-muted-foreground w-40">Expire after (hours)</span>
+						<input type="number" bind:value={settings.waiting_pay_expiry_hours} class="w-20 rounded-md border border-input bg-background px-2 py-1 text-sm text-center" />
 					</div>
 				</CardContent>
 			</Card>

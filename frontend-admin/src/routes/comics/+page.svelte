@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import AdminTable from '$lib/components/table/AdminTable.svelte';
 	import DetailRow from '$lib/components/DetailRow.svelte';
-	import { formatDate } from '$lib/utils/format';
+	import { formatDate, statusColor } from '$lib/utils/format';
 
 	let { data } = $props();
 	let confirmDelete = $state('');
@@ -22,10 +22,6 @@
 		{ key: 'download_count', label: 'Downloads', sortable: true },
 		{ key: 'created_at', label: 'Created', sortable: true },
 	];
-
-	function statusClass(s: string): string {
-		return s === 'published' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : s === 'pending_review' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-	}
 
 	function buildUrl(updates: Record<string, string | undefined>) {
 		const url = new URL(page.url);
@@ -85,7 +81,7 @@
 			{:else if col.key === 'author'}
 				<span class="text-xs text-muted-foreground">{row.author as string || '—'}</span>
 			{:else if col.key === 'status'}
-				<span class="text-xs px-2 py-0.5 rounded-full flex items-center gap-1 w-fit {statusClass(row.status as string)}">
+				<span class="text-xs px-2 py-0.5 rounded-full flex items-center gap-1 w-fit {statusColor(row.status as string)}">
 					{#if row.status === 'published'}
 						<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V7"/><path d="M16 21V7"/><path d="M8 21V7"/><path d="M3 13h2l1 2 3-5 1 1.5 2-3"/></svg>
 					{/if}

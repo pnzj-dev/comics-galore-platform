@@ -55,8 +55,51 @@ func marshalStringSlice(ss []string) ([]byte, error) {
 	return json.Marshal(ss)
 }
 
+// marshalPageDimensions serializes the parallel page-dimension array.
+func marshalPageDimensions(dims []PageDimension) ([]byte, error) {
+	if dims == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal(dims)
+}
+
+// scanPageDimensions reads the page_dimensions JSONB column into a slice.
+func scanPageDimensions(dst *[]PageDimension) interface{} {
+	return &pageDimensionsScanner{dst: dst}
+}
+
+type pageDimensionsScanner struct{ dst *[]PageDimension }
+
+func (s *pageDimensionsScanner) Scan(src interface{}) error {
+	*s.dst = []PageDimension{}
+	if src == nil {
+		return nil
+	}
+	var b []byte
+	switch v := src.(type) {
+	case []byte:
+		b = v
+	case string:
+		b = []byte(v)
+	default:
+		return nil
+	}
+	if len(b) == 0 {
+		return nil
+	}
+	return json.Unmarshal(b, s.dst)
+}
+
 func nulString(s *string) *nulStr {
 	return &nulStr{s: s}
+}
+
+// nulOrValue converts an empty string to NULL for nullable identifier columns.
+func nulOrValue(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 type nulStr struct{ s *string }
@@ -82,10 +125,13 @@ func scanComics(rows *sqldb.Rows) ([]Comic, error) {
 		var pubAt sql.NullTime
 		err := rows.Scan(
 			&c.ID, &c.UploaderID, &c.Title, &c.Author, &c.Slug, &c.Description,
-			&c.ContentLanguage, &c.Status, &c.CoverKey, &c.FileKey,
-			scanStringSlice(&c.PageKeys), &c.FileSizeBytes, nulString(&c.MinTierID),
+			&c.ContentLanguage, &c.Status, &c.Category, &c.Genre, &c.CoverKey, &c.FileKey,
+			&c.FileSizeBytes, nulString(&c.MinTierID),
 			&c.AgeRating, &c.IsPremium, scanStringSlice(&c.Tags), nulString(&c.RejectionReason),
 			&pubAt, &c.ViewCount, &c.DownloadCount, &c.LikeCount, &c.FavCount, &c.DislikeCount,
+			&c.ReadingDirection, &c.PageCount, nulString(&c.ArchiveMimetype),
+			nulString(&c.Isbn), nulString(&c.Upc), nulString(&c.Issn),
+			nulString(&c.Volume), nulString(&c.IssueNumber),
 			&c.CreatedAt, &c.UpdatedAt,
 		)
 		if err != nil {
@@ -94,7 +140,7 @@ func scanComics(rows *sqldb.Rows) ([]Comic, error) {
 		if pubAt.Valid {
 			c.PublishedAt = pubAt.Time
 		}
-		resolveComicURLs(&c)
+		c.CoverURL = resolveCoverURL(c.CoverKey)
 		comics = append(comics, c)
 	}
 	return comics, rows.Err()

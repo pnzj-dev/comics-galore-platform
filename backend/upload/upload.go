@@ -111,7 +111,11 @@ func PresignUpload(ctx context.Context, id string, p *PresignParams) (*PresignRe
 	}
 
 	objKey := prefix + "/" + p.Key
-	url, err := ComicBucket.SignedUploadURL(ctx, objKey, objects.WithTTL(7200*time.Second))
+	ttl := 7200 * time.Second
+	if cfg, err := myauth.GetAppConfig(ctx); err == nil && cfg.S3PresignedTTLMin > 0 {
+		ttl = time.Duration(cfg.S3PresignedTTLMin) * time.Minute
+	}
+	url, err := ComicBucket.SignedUploadURL(ctx, objKey, objects.WithTTL(ttl))
 	if err != nil {
 		return nil, err
 	}

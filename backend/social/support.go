@@ -6,6 +6,7 @@ import (
 
 	"encore.dev/beta/auth"
 	myauth "comics-galore/backend/auth"
+	"comics-galore/backend/turnstile"
 
 	"encore.dev/beta/errs"
 )
@@ -33,13 +34,15 @@ type SupportMessage struct {
 }
 
 type CreateTicketParams struct {
-	Subject  string `json:"subject"`
-	Body     string `json:"body"`
-	Priority string `json:"priority"`
+	Subject        string `json:"subject"`
+	Body           string `json:"body"`
+	Priority       string `json:"priority"`
+	TurnstileToken string `json:"turnstile_token"`
 }
 
 type ReplyTicketParams struct {
-	Body string `json:"body"`
+	Body           string `json:"body"`
+	TurnstileToken string `json:"turnstile_token"`
 }
 
 type TicketResponse struct {
@@ -54,6 +57,11 @@ type ListTicketsResponse struct {
 //encore:api auth method=POST path=/support/tickets
 func CreateTicket(ctx context.Context, p *CreateTicketParams) (*TicketResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
+
+	if err := turnstile.Verify(ctx, &turnstile.VerifyParams{Token: p.TurnstileToken, Action: "support_ticket"}); err != nil {
+		return nil, err
+	}
+
 	if p.Subject == "" || p.Body == "" {
 		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "subject and body are required"}
 	}
@@ -125,6 +133,11 @@ func GetTicket(ctx context.Context, id string) (*TicketResponse, error) {
 //encore:api auth method=POST path=/support/tickets/:id/reply
 func ReplyTicket(ctx context.Context, id string, p *ReplyTicketParams) (*SupportMessage, error) {
 	ad := auth.Data().(*myauth.AuthData)
+
+	if err := turnstile.Verify(ctx, &turnstile.VerifyParams{Token: p.TurnstileToken, Action: "support_ticket"}); err != nil {
+		return nil, err
+	}
+
 	if p.Body == "" {
 		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "body is required"}
 	}
@@ -262,6 +275,43 @@ func ListBroadcasts(ctx context.Context) (*ListBroadcastsResponse, error) {
 	}
 
 	rows, err := db.Query(ctx, `SELECT id, title, body, target, tier, sent_at, created_at FROM broadcasts ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var broadcasts []Broadcast
+	for rows.Next() {
+		var b Broadcast
+		if err := rows.Scan(&b.ID, &b.Title, &b.Body, &b.Target, &b.Tier, &b.SentAt, &b.CreatedAt); err != nil {
+			return nil, err
+		}
+		broadcasts = append(broadcasts, b)
+	}
+	if broadcasts == nil {
+		broadcasts = []Broadcast{}
+	}
+	return &ListBroadcastsResponse{Broadcasts: broadcasts}, rows.Err()
+}
+
+// GetAnnouncements returns broadcasts the caller should see: those targeting
+// everyone (`target = 'all'`) plus those targeting their tier (`target = 'tier'`
+// and matching `tier`). Anonymous callers only see the `all` broadcasts.
+//encore:api public method=GET path=/announcements
+func GetAnnouncements(ctx context.Context) (*ListBroadcastsResponse, error) {
+	ad, hasAuth := auth.Data().(*myauth.AuthData)
+	tier := ""
+	if hasAuth {
+		tier = ad.Tier
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT id, title, body, target, tier, sent_at, created_at
+		FROM broadcasts
+		WHERE target = 'all' OR (target = 'tier' AND tier = $1)
+		ORDER BY created_at DESC
+		LIMIT 10
+	`, tier)
 	if err != nil {
 		return nil, err
 	}

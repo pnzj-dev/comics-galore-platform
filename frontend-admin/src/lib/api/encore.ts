@@ -1,11 +1,6 @@
-import Client, { Local } from '$lib/api/encore-client';
+import Client from '$lib/api/encore-client';
 
-export const encore = new Client(Local, {
-	fetcher: async (input, init) => {
-		const m = document.cookie.match(/(?:^|;\s*)token=([^;]*)/);
-		const token = m ? m[1] : null;
-		const headers = new Headers(init?.headers);
-		if (token) headers.set('Authorization', `Bearer ${token}`);
-		return fetch(input, { ...init, headers });
-	}
-});
+// The browser client routes through the same-origin SvelteKit proxy
+// (/api/[...path]) because the session cookie is HttpOnly and cannot be read
+// by client-side JS.
+export const encore = new Client('/api', {});

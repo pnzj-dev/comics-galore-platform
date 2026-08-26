@@ -19,5 +19,11 @@ export default defineConfig({
 			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 			adapter: adapter()
 		})
-	]
+	],
+	ssr: {
+		// Compile these Svelte-component libraries during SSR instead of
+		// externalizing them, otherwise Node/bun tries to load their raw
+		// `.svelte` files and throws ERR_UNKNOWN_FILE_EXTENSION.
+		noExternal: ['@lucide/svelte', 'lucide-svelte']
+	}
 });

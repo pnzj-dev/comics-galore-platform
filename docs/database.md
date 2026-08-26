@@ -13,15 +13,25 @@
 id, uploader_id, series_id, title, slug, description, ...
 status          TEXT NOT NULL DEFAULT 'pending_review'
                 -- pending_review | published | rejected | scheduled | …
-file_key        TEXT                  -- main archive or primary object
+file_key        TEXT                  -- main archive or primary object (download)
 cover_key       TEXT
-page_keys       JSONB                 -- optional ordered list of page objects
+page_keys       JSONB                 -- ordered list of page image keys (reader)
+page_dimensions JSONB                 -- parallel [{width,height}] aligned to page_keys
+page_count      INT                   -- denormalized len(page_keys)
+reading_direction TEXT                -- ltr | rtl (manga)
+archive_mimetype TEXT                 -- e.g. application/vnd.comicbook+zip
+isbn/upc/issn   TEXT                  -- identifier (one per comic; graphic novel/single-issue/periodical)
+volume          TEXT                  -- free-form volume or chapter label (e.g. "Vol. 2", "Ch. 5")
+issue_number    TEXT                  -- issue number for single-issue comics (e.g. "12", "#3")
 file_size_bytes BIGINT
 min_tier_id     UUID
 published_at    TIMESTAMPTZ
 rejection_reason TEXT
 ...
 ```
+
+Reader model: `page_keys` holds individual page images served via `GET /comics/:slug/pages` (paginated, chunk 20); `file_key` is the archive kept only for download. `page_dimensions` is populated by the uploader for client-extractable formats (.cbz/.zip); server-side extraction for PDF/RAR/7z is a LATER follow-up.
+
 
 ### upload_sessions (crash recovery)
 ```sql
@@ -41,6 +51,40 @@ updated_at      TIMESTAMPTZ
 ### Other existing tables
 users, tiers, plans, series, tags, likes, favorites, ratings, comments, flags, reading_progress, reading_lists, follows, download_logs, subscriptions, webhook_events, settings, support_tickets, conversations, messages, audit_logs, notifications, deposits…
 
+## Reading & quota (reading service)
+
+### download_logs
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+user_id         UUID NOT NULL
+comic_id        UUID NOT NULL
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+One row per download; the reading service counts rows within the current month per user to enforce `tiers.quota_downloads`.
+
+### quota_boosts
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+user_id         UUID NOT NULL
+downloads       INT NOT NULL CHECK (downloads > 0)
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+Purchased download-quota boosts that permanently add to a user's monthly allowance.
+
+## Background jobs (jobs service)
+
+### job_runs
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+job_name        TEXT NOT NULL               -- cron job or pubsub subscription name
+ref             TEXT NOT NULL DEFAULT ''    -- message payload key (pubsub) or '' (cron)
+status          TEXT NOT NULL CHECK (status IN ('running', 'success', 'failed'))
+error_message   TEXT
+started_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+finished_at     TIMESTAMPTZ
+```
+App-level observability for cron + pubsub work (Encore's dead-letter queue is internal). One row per cron execution or pubsub delivery attempt.
+
 ## Billing & Payments
 
 ### tiers
@@ -49,17 +93,18 @@ id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
 name            TEXT NOT NULL                    -- Free / Bronze / Silver / Gold / Platinum
 description     TEXT NOT NULL DEFAULT ''
 sort_order      INT NOT NULL DEFAULT 0
+quota_downloads INT NOT NULL DEFAULT 0           -- downloads/month (single source of truth)
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 
 Seed data (5 tiers):
-| Name | Sort | Description |
-|------|------|-------------|
-| Free | 0 | Limited access, browse and read comments |
-| Bronze | 1 | Entry-level paid tier |
-| Silver | 2 | Mid-range tier |
-| Gold | 3 | Premium tier |
-| Platinum | 4 | Top tier with full access |
+| Name | Sort | quota_downloads | Description |
+|------|------|-----------------|-------------|
+| Free | 0 | 5 | Limited access, browse and read comments |
+| Bronze | 1 | 50 | Entry-level paid tier |
+| Silver | 2 | 200 | Mid-range tier |
+| Gold | 3 | 999999 (unlimited) | Premium tier |
+| Platinum | 4 | 999999 (unlimited) | Top tier with full access |
 
 ### plans
 ```sql
@@ -71,7 +116,6 @@ interval                TEXT NOT NULL
 price_usd_cents         INT NOT NULL DEFAULT 0
 currency                TEXT NOT NULL DEFAULT 'USD'
 features                JSONB DEFAULT '[]'          -- cumulative string array
-quota_downloads         INT NOT NULL DEFAULT 0
 is_active               BOOLEAN NOT NULL DEFAULT true
 provider_plan_id        TEXT                        -- NowPayments plan ID
 provider_interval_days  INT DEFAULT 0               -- for NowPayments sync
@@ -98,11 +142,11 @@ Features are cumulative per tier (higher tiers inherit all lower-tier features):
 
 | Tier | Features |
 |------|----------|
-| Free | Browse comics, Read comments, 1 GB download quota |
-| Bronze | + Write comments, Download archives, Web reader, Full preview gallery, 10 GB download quota |
-| Silver | + 50 GB download quota |
-| Gold | + Premium & exclusive posts, 200 GB download quota |
-| Platinum | + 1 TB download quota |
+| Free | Browse comics, Read comments, 5 downloads/month |
+| Bronze | + Write comments, Download archives, Web reader, Full preview gallery, 50 downloads/month |
+| Silver | + 200 downloads/month |
+| Gold | + Premium & exclusive posts, Unlimited downloads |
+| Platinum | + Unlimited downloads |
 
 ### subscriptions
 ```sql
@@ -178,6 +222,25 @@ At process start: if zero admin users exist → log clear error and exit.
 - `age_rating` TEXT  -- e.g. all_ages | teen | mature | explicit
 - (optional) `content_warnings` TEXT[]
 
+### series (ranking + engagement)
+
+```sql
+id              UUID PRIMARY KEY
+uploader_id     UUID
+title, slug     TEXT
+description     TEXT
+cover_key       TEXT                  -- resolved like a comic cover (Cloudflare Images id / S3 key)
+genre           TEXT
+category        TEXT
+overlay_title   TEXT                  -- stylized title (defaults to title when empty)
+views_count     BIGINT                -- aggregate over the series' comics
+hearts_count    BIGINT                -- aggregate favourites over the series' comics
+schedule_day    TEXT                  -- mon..sun | completed | NULL (drives the Daily rail)
+created_at, updated_at
+```
+
+`views_count`/`hearts_count` are backfilled from `comics` (migration `22_add_series_engagement`) and re-computed when a comic is attached (ADR `0023-series-association.md`). `comics.series_id` + `comics.series_order` link issues into a series in order.
+
 ### series_follows
 ```sql
 user_id UUID NOT NULL REFERENCES users(id)
@@ -199,6 +262,7 @@ updated_at TIMESTAMPTZ
 
 ### users
 - `email_verified_at` TIMESTAMPTZ
+- `username` TEXT — public handle; **nullable** (OAuth/pre-existing accounts), unique via partial index `WHERE username IS NOT NULL`. Validated `3–20` lowercase alphanumerics with single `_`/`-` inside (see ADR `0022-auth-methods.md` / `docs/authentication.md`).
 
 
 ## Media assets
@@ -229,13 +293,19 @@ Global application settings stored as a JSON blob in `app_settings` (key `'defau
 - `registrations_open` — boolean, toggles registration
 - `contact_email` — from-address for Resend transactional emails
 - `image_serving_mode` = `direct` | `imgproxy` | `cloudflare_images` (default `direct`)
-- `imgproxy_base_url`
+- `imgproxy_base_url`, `imgproxy_key`, `imgproxy_salt` — imgproxy delivery config (key/salt hex-encoded)
 - `cloudflare_images_account` / delivery base (secrets via env, non-secret config in settings)
 - `require_email_verify` — boolean, email verification gate
 - `hide_mature_default` — boolean, default for anonymous users
 - `forbid_mature_for_free` — boolean, forbids mature/explicit content to free-tier and anonymous users entirely (lists, detail, reader, download)
 - `enable_comments` — boolean, global comment kill switch
 - `default_meta_description` — SEO fallback for public pages
+- `max_upload_size_mb` — hard cap on archive size (default 3000)
+- `upload_mode` = `direct` | `backend` (default `backend`) — upload transport
+- `upload_part_size_mb` — archive split threshold for multi-part upload (default 100)
+- `upload_concurrency` — number of parts uploaded in parallel (default 4)
+- `download_stream_threshold_mb` — stream vs presigned-redirect download threshold (default 10)
+- `page_preview_threshold` — page count above which the manual form shows a compact list (default 20)
 - Rate limit, presigned TTLs, per-tier quotas, boost prices (see `AppSettings` struct)
 
 
@@ -278,12 +348,12 @@ ai_decisions      id, target_type (comic|comment), target_id, decision (approved
                   confidence numeric, reason, model, created_at
 ai_review_queue   id, target_type, target_id, status (pending|resolved), created_at, resolved_by, resolved_at
 staff_picks       comic_id PK, position int, created_at
-reading_lists     id, user_id UUID, name, is_public bool, created_at
-reading_list_items list_id FK, comic_id FK, position int
 saved_views       id, admin_id UUID, resource, name, filters JSONB, created_at
 job_runs          id, name, status (pending|running|done|failed), attempts, error, payload JSONB,
                   next_retry_at, created_at
 ```
+
+> **Reading lists are implemented** (not LATER): `reading_lists(id, user_id, name, is_public, created_at)` and `reading_list_items(list_id FK, comic_id FK, position)` live in the comics service (migration `19_create_reading_lists`), with full CRUD + membership endpoints (ADR `0021-social-engagement.md`).
 
 ### `billing` service (extensions)
 ```sql

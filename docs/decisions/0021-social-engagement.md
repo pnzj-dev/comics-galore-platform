@@ -11,6 +11,7 @@ Beyond likes/favorites/follows, the product vision includes shareable public she
 ### Public reading lists (shelves)
 - `reading_lists(id, user_id, name, is_public, created_at)` and `reading_list_items(list_id, comic_id, position)` in the comics service.
 - `POST/GET /reading-lists`, `GET /reading-lists/:id` (public if `is_public`), `POST /reading-lists/:id/items`, `DELETE /reading-lists/:id/items/:comicId`.
+- Full management added: `PATCH /reading-lists/:id` (rename + toggle public), `DELETE /reading-lists/:id`, and `GET /reading-lists/:id/mine` (owner view, incl. private shelves). `GET /reading-lists` accepts `comic_id` and returns `has_comic` + `comic_count` per shelf (powers the "Add to list" modal).
 
 ### "People also liked"
 - `GET /comics/:id/related` — co-occurrence over `likes`/`favorites` (no new table); returns a short ranked list for the comic detail rail.

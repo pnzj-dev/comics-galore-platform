@@ -16,6 +16,7 @@ import (
 
 	myauth "comics-galore/backend/auth"
 	"comics-galore/backend/nowpayments"
+	myreading "comics-galore/backend/reading"
 	"comics-galore/backend/tiers"
 
 	"encore.dev/beta/auth"
@@ -42,8 +43,27 @@ func init() {
 		secrets.NowPaymentsEmail, secrets.NowPaymentsPassword)
 }
 
-func buildCallbackURL(host, path string) string {
-	return nowpayments.BuildCallbackURL(host, secrets.NgrokURL, path)
+func buildCallbackURL(path string) string {
+	return nowpayments.BuildCallbackURL(secrets.NgrokURL, path)
+}
+
+// normalizeSubStatus maps a raw NowPayments subscription/payment status to the
+// local subscriptions.status enum.
+func normalizeSubStatus(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "waiting", "waiting_pay", "waitingpay", "partially_paid", "partiallypaid":
+		return "waiting_pay"
+	case "active", "finished":
+		return "active"
+	case "expired":
+		return "expired"
+	case "failed":
+		return "failed"
+	case "canceled", "cancelled":
+		return "cancelled"
+	default:
+		return "pending"
+	}
 }
 
 // ----- Estimate Price -----
@@ -65,6 +85,21 @@ func EstimatePrice(ctx context.Context, p *EstimatePriceParams) (*nowpayments.Es
 		Currency: "usd",
 		Crypto:   p.Crypto,
 	})
+}
+
+// ----- List Currencies -----
+
+type ListCurrenciesResponse struct {
+	Currencies []string `json:"currencies"`
+}
+
+//encore:api public method=GET path=/billing/currencies
+func ListCurrencies(ctx context.Context) (*ListCurrenciesResponse, error) {
+	currencies, err := provider.ListCurrencies(ctx)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "failed to list currencies: " + err.Error()}
+	}
+	return &ListCurrenciesResponse{Currencies: currencies}, nil
 }
 
 // ----- Check Balance -----
@@ -110,7 +145,7 @@ func CreateSubscription(ctx context.Context, p *CreateSubParams) (*CreateSubResp
 
 	subResp, err := myauth.EnsureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
 	if err != nil {
-		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
+		return nil, &errs.Error{Code: errs.Internal, Message: "ensure sub_partner_id failed: " + err.Error()}
 	}
 	subPartnerID := subResp.SubPartnerID
 
@@ -160,10 +195,10 @@ func CreateSubscription(ctx context.Context, p *CreateSubParams) (*CreateSubResp
 	var subID string
 	err = db.QueryRow(ctx, `
 		INSERT INTO subscriptions (user_id, plan_id, provider, provider_subscription_id,
-			tier, active, expires_at)
-		VALUES ($1, $2, 'nowpayments', $3, $4, false, $5)
+			tier, status, active, expires_at)
+		VALUES ($1, $2, 'nowpayments', $3, $4, $5, false, $6)
 		RETURNING id
-	`, ad.UserID, p.PlanID, npResp.SubscriptionID, tierName, expiresAt).Scan(&subID)
+	`, ad.UserID, p.PlanID, npResp.SubscriptionID, tierName, normalizeSubStatus(npResp.Status), expiresAt).Scan(&subID)
 	if err != nil {
 		return nil, err
 	}
@@ -177,9 +212,8 @@ func CreateSubscription(ctx context.Context, p *CreateSubParams) (*CreateSubResp
 // ----- Create Deposit (Step 4B) -----
 
 type CreateDepositParams struct {
-	PlanID    string `json:"plan_id"`
-	Crypto    string `json:"crypto"`
-	Host      string `header:"Host"`
+	PlanID string `json:"plan_id"`
+	Crypto string `json:"crypto"`
 }
 
 type CreateDepositResponse struct {
@@ -196,7 +230,7 @@ func CreateDeposit(ctx context.Context, p *CreateDepositParams) (*CreateDepositR
 
 	subResp, err := myauth.EnsureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
 	if err != nil {
-		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
+		return nil, &errs.Error{Code: errs.Internal, Message: "ensure sub_partner_id failed: " + err.Error()}
 	}
 	subPartnerID := subResp.SubPartnerID
 
@@ -219,7 +253,7 @@ func CreateDeposit(ctx context.Context, p *CreateDepositParams) (*CreateDepositR
 		return nil, err
 	}
 
-	callbackURL := buildCallbackURL(p.Host, "/webhooks/nowpayments/deposit?deposit_id="+depositID)
+	callbackURL := buildCallbackURL("/webhooks/nowpayments/deposit?deposit_id="+depositID)
 
 	npResp, err := provider.CreateDeposit(ctx, DepositRequest{
 		Crypto:        p.Crypto,
@@ -242,6 +276,105 @@ func CreateDeposit(ctx context.Context, p *CreateDepositParams) (*CreateDepositR
 		PayAmount:   npResp.PayAmount,
 		PayCurrency: npResp.PayCurrency,
 		PlanID:      p.PlanID,
+	}, nil
+}
+
+// ----- Quota Boost -----
+
+type BoostOption struct {
+	Downloads int     `json:"downloads"`
+	PriceUSD  float64 `json:"price_usd"`
+}
+
+type BoostOptionsResponse struct {
+	Boosts []BoostOption `json:"boosts"`
+}
+
+//encore:api public method=GET path=/billing/quota-boosts
+func GetBoostOptions(ctx context.Context) (*BoostOptionsResponse, error) {
+	cfg, err := myauth.GetBoostConfig(ctx)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "quota config unavailable"}
+	}
+	return &BoostOptionsResponse{Boosts: []BoostOption{
+		{Downloads: cfg.Boost1Downloads, PriceUSD: cfg.Boost1Price},
+		{Downloads: cfg.Boost2Downloads, PriceUSD: cfg.Boost2Price},
+		{Downloads: cfg.Boost3Downloads, PriceUSD: cfg.Boost3Price},
+	}}, nil
+}
+
+type CreateQuotaBoostParams struct {
+	Downloads int    `json:"downloads"`
+	Crypto    string `json:"crypto"`
+}
+
+type CreateQuotaBoostResponse struct {
+	DepositID   string  `json:"deposit_id"`
+	PayAddress  string  `json:"pay_address"`
+	PayAmount   float64 `json:"pay_amount"`
+	PayCurrency string  `json:"pay_currency"`
+}
+
+//encore:api auth method=POST path=/billing/create-quota-boost
+func CreateQuotaBoost(ctx context.Context, p *CreateQuotaBoostParams) (*CreateQuotaBoostResponse, error) {
+	ad := auth.Data().(*myauth.AuthData)
+
+	cfg, err := myauth.GetBoostConfig(ctx)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "quota config unavailable"}
+	}
+
+	priceCents := 0
+	switch p.Downloads {
+	case cfg.Boost1Downloads:
+		priceCents = int(cfg.Boost1Price * 100)
+	case cfg.Boost2Downloads:
+		priceCents = int(cfg.Boost2Price * 100)
+	case cfg.Boost3Downloads:
+		priceCents = int(cfg.Boost3Price * 100)
+	default:
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "invalid boost quantity"}
+	}
+
+	subResp, err := myauth.EnsureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "ensure sub_partner_id failed: " + err.Error()}
+	}
+	if subResp.SubPartnerID == "" {
+		return nil, &errs.Error{Code: errs.NotFound, Message: "no sub_partner_id"}
+	}
+
+	var depositID string
+	err = db.QueryRow(ctx, `
+		INSERT INTO deposits (user_id, currency_crypto, amount_usd_cents, boost_downloads)
+		VALUES ($1, $2, $3, $4) RETURNING id
+	`, ad.UserID, p.Crypto, priceCents, p.Downloads).Scan(&depositID)
+	if err != nil {
+		return nil, err
+	}
+
+	callbackURL := buildCallbackURL("/webhooks/nowpayments/deposit?deposit_id="+depositID)
+
+	npResp, err := provider.CreateDeposit(ctx, DepositRequest{
+		Crypto:         p.Crypto,
+		AmountUSD:      float64(priceCents) / 100,
+		SubPartnerID:   subResp.SubPartnerID,
+		IPNCallbackURL: callbackURL,
+	})
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "nowpayments deposit creation failed: " + err.Error()}
+	}
+
+	db.Exec(ctx, `
+		UPDATE deposits SET provider_deposit_id = $1, pay_address = $2, amount_crypto = $3
+		WHERE id = $4
+	`, npResp.PaymentID, npResp.PayAddress, fmtNum(npResp.PayAmount), depositID)
+
+	return &CreateQuotaBoostResponse{
+		DepositID:   depositID,
+		PayAddress:  npResp.PayAddress,
+		PayAmount:   npResp.PayAmount,
+		PayCurrency: npResp.PayCurrency,
 	}, nil
 }
 
@@ -369,9 +502,13 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 
 	if status == "finished" {
 		if err == nil {
-			db.Exec(ctx, `UPDATE subscriptions SET active = true, status = 'active' WHERE provider_subscription_id = $1`, event.ID.String())
+			db.Exec(ctx, `UPDATE subscriptions SET active = true, status = 'active', updated_at = now() WHERE provider_subscription_id = $1`, event.ID.String())
 			myauth.SetUserTier(ctx, &myauth.SetUserTierParams{UserID: sub.UserID, Tier: sub.Tier})
 		}
+	} else if err == nil {
+		// Persist non-terminal payment states (waiting, partially_paid, expired,
+		// failed…) on the subscription so the expiry job can act on them.
+		db.Exec(ctx, `UPDATE subscriptions SET status = $1, updated_at = now() WHERE provider_subscription_id = $2`, normalizeSubStatus(event.PaymentStatus), event.ID.String())
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -424,12 +561,24 @@ func DepositWebhook(w http.ResponseWriter, req *http.Request) {
 		WHERE provider_deposit_id = $3
 	`, status, string(body), event.PaymentID.String())
 
-	// If finished, also set completed_at
+	// If finished, also set completed_at and grant any pending quota boost.
 	if status == "finished" {
 		if depositID != "" {
 			db.Exec(ctx, `UPDATE deposits SET completed_at = now() WHERE id = $1`, depositID)
 		}
 		db.Exec(ctx, `UPDATE deposits SET completed_at = now() WHERE provider_deposit_id = $1`, event.PaymentID.String())
+
+		// Grant a quota boost exactly once when the deposit was a boost.
+		var boostUserID string
+		var boostDownloads int
+		if depositID != "" {
+			db.QueryRow(ctx, `SELECT user_id, boost_downloads FROM deposits WHERE id = $1 AND boost_downloads > 0 AND boost_granted = false`, depositID).Scan(&boostUserID, &boostDownloads)
+		}
+		if boostDownloads > 0 && boostUserID != "" {
+			if err := myreading.GrantBoost(ctx, &myreading.GrantBoostParams{UserID: boostUserID, Downloads: boostDownloads}); err == nil {
+				db.Exec(ctx, `UPDATE deposits SET boost_granted = true WHERE id = $1`, depositID)
+			}
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -453,13 +602,8 @@ type BillingStats struct {
 	RevenueByTier     []RevenueByTier `json:"revenue_by_tier"`
 }
 
-//encore:api auth method=GET path=/admin/billing-stats
+//encore:api private
 func GetBillingStats(ctx context.Context) (*BillingStats, error) {
-	ad := auth.Data().(*myauth.AuthData)
-	if ad.Role != "admin" {
-		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
-	}
-
 	var stats BillingStats
 	db.QueryRow(ctx, `SELECT COALESCE(SUM(amount_usd_cents), 0) FROM payments WHERE status = 'finished'`).Scan(&stats.TotalRevenue)
 	db.QueryRow(ctx, `SELECT COALESCE(SUM(amount_usd_cents), 0) FROM payments WHERE status = 'finished' AND interval = 'monthly'`).Scan(&stats.ActiveRevenue)

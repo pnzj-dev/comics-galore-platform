@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"time"
 
 	"github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/images"
@@ -16,7 +17,7 @@ import (
 	"encore.dev/storage/objects"
 )
 
-var cfSecrets struct {
+var secrets struct {
 	CloudflareAccountID  string
 	CloudflareAPIToken   string
 	CloudflareImagesHash string
@@ -25,8 +26,8 @@ var cfSecrets struct {
 var cfClient *cloudflare.Client
 
 func init() {
-	if cfSecrets.CloudflareAPIToken != "" {
-		cfClient = cloudflare.NewClient(option.WithAPIToken(cfSecrets.CloudflareAPIToken))
+	if secrets.CloudflareAPIToken != "" {
+		cfClient = cloudflare.NewClient(option.WithAPIToken(secrets.CloudflareAPIToken))
 	}
 }
 
@@ -48,7 +49,7 @@ func CloudflarePresignedUpload(ctx context.Context) (*CloudflareUploadResponse, 
 	}
 
 	resp, err := cfClient.Images.V2.DirectUploads.New(ctx, images.V2DirectUploadNewParams{
-		AccountID: cloudflare.F(cfSecrets.CloudflareAccountID),
+		AccountID: cloudflare.F(secrets.CloudflareAccountID),
 	})
 	if err != nil {
 		return s3PresignedFallback(ctx)
@@ -63,7 +64,11 @@ func CloudflarePresignedUpload(ctx context.Context) (*CloudflareUploadResponse, 
 func s3PresignedFallback(ctx context.Context) (*CloudflareUploadResponse, error) {
 	// Generate a unique S3 key and presigned upload URL
 	key := "cover-" + randomHex(16)
-	url, err := ComicBucket.SignedUploadURL(ctx, key, objects.WithTTL(7200))
+	ttl := 7200 * time.Second
+	if cfg, err := myauth.GetAppConfig(ctx); err == nil && cfg.S3PresignedTTLMin > 0 {
+		ttl = time.Duration(cfg.S3PresignedTTLMin) * time.Minute
+	}
+	url, err := ComicBucket.SignedUploadURL(ctx, key, objects.WithTTL(ttl))
 	if err != nil {
 		return nil, err
 	}
@@ -84,20 +89,15 @@ type StorageStats struct {
 	CFImagesCount int  `json:"cf_images_count"`
 }
 
-//encore:api auth method=GET path=/admin/storage-stats
+//encore:api private
 func GetStorageStats(ctx context.Context) (*StorageStats, error) {
-	ad := auth.Data().(*myauth.AuthData)
-	if ad.Role != "admin" {
-		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
-	}
-
-	stats := &StorageStats{CFConfigured: cfClient != nil && cfSecrets.CloudflareAccountID != ""}
+	stats := &StorageStats{CFConfigured: cfClient != nil && secrets.CloudflareAccountID != ""}
 	if !stats.CFConfigured {
 		return stats, nil
 	}
 
 	resp, err := cfClient.Images.V2.List(ctx, images.V2ListParams{
-		AccountID: cloudflare.F(cfSecrets.CloudflareAccountID),
+		AccountID: cloudflare.F(secrets.CloudflareAccountID),
 		PerPage:   cloudflare.F(float64(10000)),
 	})
 	if err == nil && resp != nil {

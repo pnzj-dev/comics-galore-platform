@@ -12,10 +12,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"encore.dev"
 )
 
 const npBaseURL = "https://api.nowpayments.io/v1"
@@ -43,20 +46,21 @@ func NewProvider(apiKey, ipnKey, email, password string) *Provider {
 	}
 }
 
-// BuildCallbackURL builds a webhook callback URL. When running locally it
-// prefers the ngrok tunnel URL, otherwise it derives the scheme from the host.
-func BuildCallbackURL(host, ngrokURL, path string) string {
-	if (strings.Contains(host, "localhost") || strings.Contains(host, "127.0.0.1")) && ngrokURL != "" {
-		return strings.TrimRight(ngrokURL, "/") + path
+// BuildCallbackURL builds a webhook callback URL from the backend's own API
+// base URL (encore.Meta().APIBaseURL). When running locally and a valid ngrok
+// tunnel URL is configured, the tunnel is used instead so NowPayments can reach
+// the local machine.
+func BuildCallbackURL(ngrokURL, path string) string {
+	base := encore.Meta().APIBaseURL
+	host := base.Hostname()
+
+	if (host == "localhost" || host == "127.0.0.1") && ngrokURL != "" {
+		if u, err := url.Parse(ngrokURL); err == nil && u.Scheme != "" && u.Host != "" {
+			return strings.TrimRight(ngrokURL, "/") + path
+		}
 	}
-	scheme := "https"
-	if host == "" || strings.Contains(host, "localhost") || strings.Contains(host, ":4000") {
-		scheme = "http"
-	}
-	if host == "" {
-		host = "localhost:4000"
-	}
-	return scheme + "://" + host + path
+
+	return strings.TrimRight(base.String(), "/") + path
 }
 
 // getAuthToken returns a cached JWT token, refreshing if expired.
@@ -183,6 +187,24 @@ func (p *Provider) EstimatePrice(ctx context.Context, req EstimateRequest) (*Est
 	}, nil
 }
 
+// ----- ListCurrencies (API key only) -----
+
+// ListCurrencies returns the cryptocurrencies the merchant has enabled for
+// payments (NowPayments "coins settings"), via GET /v1/merchant/coins.
+func (p *Provider) ListCurrencies(ctx context.Context) ([]string, error) {
+	resp, err := p.doRequest(ctx, "GET", npBaseURL+"/merchant/coins", nil)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Currencies []string `json:"currencies"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, err
+	}
+	return result.Currencies, nil
+}
+
 // ----- CheckBalance (API key only) -----
 
 func (p *Provider) CheckBalance(ctx context.Context, subPartnerID string) (map[string]BalanceEntry, error) {
@@ -193,16 +215,20 @@ func (p *Provider) CheckBalance(ctx context.Context, subPartnerID string) (map[s
 		return nil, err
 	}
 
-	var raw map[string]struct {
-		Amount        json.Number `json:"amount"`
-		PendingAmount json.Number `json:"pendingAmount"`
+	var raw struct {
+		Result struct {
+			Balances map[string]struct {
+				Amount        json.Number `json:"amount"`
+				PendingAmount json.Number `json:"pendingAmount"`
+			} `json:"balances"`
+		} `json:"result"`
 	}
 	if err := json.Unmarshal(resp, &raw); err != nil {
 		return nil, err
 	}
 
 	result := make(map[string]BalanceEntry)
-	for k, v := range raw {
+	for k, v := range raw.Result.Balances {
 		amt, _ := v.Amount.Float64()
 		pend, _ := v.PendingAmount.Float64()
 		result[k] = BalanceEntry{Amount: amt, PendingAmount: pend}
@@ -223,13 +249,19 @@ func (p *Provider) CreateCustomer(ctx context.Context, name string) (string, err
 	}
 
 	var result struct {
-		ID json.Number `json:"id"`
+		Result struct {
+			ID json.Number `json:"id"`
+		} `json:"result"`
 	}
 	if err := json.Unmarshal(resp, &result); err != nil {
 		return "", fmt.Errorf("create customer parse: %w", err)
 	}
 
-	return result.ID.String(), nil
+	id := result.Result.ID.String()
+	if id == "" {
+		return "", fmt.Errorf("create customer: nowpayments returned no id (response: %s)", string(resp))
+	}
+	return id, nil
 }
 
 // ----- CreateSubscription (JWT + API key) -----
@@ -247,17 +279,49 @@ func (p *Provider) CreateSubscription(ctx context.Context, req SubscriptionReque
 		return nil, err
 	}
 
-	var result struct {
+	// The response wraps the created subscription in `result`, which is either
+	// a single object or an array of objects depending on the account type.
+	var envelope struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &envelope); err != nil {
+		return nil, fmt.Errorf("create subscription parse: %w", err)
+	}
+
+	trimmed := bytes.TrimSpace(envelope.Result)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		return nil, fmt.Errorf("create subscription: nowpayments returned empty result (response: %s)", string(resp))
+	}
+
+	sub := struct {
 		ID     json.Number `json:"id"`
 		Status string      `json:"status"`
+	}{}
+	if trimmed[0] == '[' {
+		var subs []struct {
+			ID     json.Number `json:"id"`
+			Status string      `json:"status"`
+		}
+		if err := json.Unmarshal(envelope.Result, &subs); err != nil {
+			return nil, fmt.Errorf("create subscription parse: %w", err)
+		}
+		if len(subs) == 0 {
+			return nil, fmt.Errorf("create subscription: nowpayments returned empty result (response: %s)", string(resp))
+		}
+		sub = subs[0]
+	} else {
+		if err := json.Unmarshal(envelope.Result, &sub); err != nil {
+			return nil, fmt.Errorf("create subscription parse: %w", err)
+		}
 	}
-	if err := json.Unmarshal(resp, &result); err != nil {
-		return nil, err
+
+	if sub.ID.String() == "" {
+		return nil, fmt.Errorf("create subscription: nowpayments returned no id (response: %s)", string(resp))
 	}
 
 	return &SubscriptionResponse{
-		SubscriptionID: result.ID.String(),
-		Status:         result.Status,
+		SubscriptionID: sub.ID.String(),
+		Status:         sub.Status,
 	}, nil
 }
 
@@ -280,21 +344,23 @@ func (p *Provider) CreateDeposit(ctx context.Context, req DepositRequest) (*Depo
 	}
 
 	var result struct {
-		PaymentID   json.Number `json:"payment_id"`
-		PayAddress  string      `json:"pay_address"`
-		PayAmount   json.Number `json:"pay_amount"`
-		PayCurrency string      `json:"pay_currency"`
+		Result struct {
+			PaymentID   json.Number `json:"payment_id"`
+			PayAddress  string      `json:"pay_address"`
+			PayAmount   json.Number `json:"pay_amount"`
+			PayCurrency string      `json:"pay_currency"`
+		} `json:"result"`
 	}
 	if err := json.Unmarshal(resp, &result); err != nil {
 		return nil, err
 	}
 
-	payAmt, _ := result.PayAmount.Float64()
+	payAmt, _ := result.Result.PayAmount.Float64()
 	return &DepositResponse{
-		PaymentID:   result.PaymentID.String(),
-		PayAddress:  result.PayAddress,
+		PaymentID:   result.Result.PaymentID.String(),
+		PayAddress:  result.Result.PayAddress,
 		PayAmount:   payAmt,
-		PayCurrency: result.PayCurrency,
+		PayCurrency: result.Result.PayCurrency,
 	}, nil
 }
 
@@ -334,14 +400,21 @@ func (p *Provider) CreatePlan(ctx context.Context, req CreatePlanRequest) (*Crea
 	}
 
 	var result struct {
-		ID json.Number `json:"id"`
+		Result struct {
+			ID json.Number `json:"id"`
+		} `json:"result"`
 	}
 
 	if err := json.Unmarshal(resp, &result); err != nil {
 		return nil, fmt.Errorf("create plan parse: %w", err)
 	}
 
+	providerPlanID := result.Result.ID.String()
+	if providerPlanID == "" {
+		return nil, fmt.Errorf("create plan: nowpayments returned no plan id (response: %s)", string(resp))
+	}
+
 	return &CreatePlanResponse{
-		ProviderPlanID: result.ID.String(),
+		ProviderPlanID: providerPlanID,
 	}, nil
 }

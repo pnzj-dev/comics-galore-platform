@@ -1,13 +1,21 @@
 import { render, screen, fireEvent } from '@testing-library/svelte';
-import Lightbox from '$lib/components/Lightbox.svelte';
+import Lightbox from '$lib/components/comics/Lightbox.svelte';
+import { modal } from '$lib/stores/modal.svelte';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const images = ['/img1.jpg', '/img2.jpg', '/img3.jpg'];
+
+beforeEach(() => {
+	vi.clearAllMocks();
+	modal.closeAll();
+});
 
 describe('Lightbox', () => {
 	it('renders images and shows the first image', () => {
 		const onClose = vi.fn();
 
-		render(Lightbox, { images, open: true, onClose });
+		modal.open('lightbox');
+		render(Lightbox, { images, onClose });
 
 		expect(screen.getByRole('dialog')).toBeVisible();
 		expect(screen.getByAltText('Image 1')).toBeVisible();
@@ -17,7 +25,8 @@ describe('Lightbox', () => {
 	it('prev button navigates to previous image', async () => {
 		const onClose = vi.fn();
 
-		render(Lightbox, { images, open: true, startIndex: 1, onClose });
+		modal.open('lightbox');
+		render(Lightbox, { images, startIndex: 1, onClose });
 
 		expect(screen.getByText('2 / 3')).toBeVisible();
 
@@ -29,7 +38,8 @@ describe('Lightbox', () => {
 	it('next button navigates to next image', async () => {
 		const onClose = vi.fn();
 
-		render(Lightbox, { images, open: true, startIndex: 0, onClose });
+		modal.open('lightbox');
+		render(Lightbox, { images, startIndex: 0, onClose });
 
 		expect(screen.getByText('1 / 3')).toBeVisible();
 
@@ -41,7 +51,8 @@ describe('Lightbox', () => {
 	it('Escape key closes lightbox', async () => {
 		const onClose = vi.fn();
 
-		render(Lightbox, { images, open: true, onClose });
+		modal.open('lightbox');
+		render(Lightbox, { images, onClose });
 
 		await fireEvent.keyDown(window, { key: 'Escape' });
 
@@ -51,7 +62,8 @@ describe('Lightbox', () => {
 	it('dot indicators render correct count', () => {
 		const onClose = vi.fn();
 
-		render(Lightbox, { images, open: true, onClose });
+		modal.open('lightbox');
+		render(Lightbox, { images, onClose });
 
 		const dots = screen.getAllByLabelText(/Image \d/);
 		expect(dots).toHaveLength(3);
@@ -60,7 +72,8 @@ describe('Lightbox', () => {
 	it('startIndex prop is respected', () => {
 		const onClose = vi.fn();
 
-		render(Lightbox, { images, open: true, startIndex: 2, onClose });
+		modal.open('lightbox');
+		render(Lightbox, { images, startIndex: 2, onClose });
 
 		expect(screen.getByText('3 / 3')).toBeVisible();
 	});

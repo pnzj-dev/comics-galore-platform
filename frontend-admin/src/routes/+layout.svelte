@@ -4,13 +4,12 @@
 	import { page } from '$app/state';
 	import { currentUser, isAuthenticated } from '$lib/stores/auth';
 	import { encore } from '$lib/api/encore';
+	import { modal } from '$lib/stores/modal.svelte';
 	import LogoutConfirmationModal from '$lib/components/LogoutConfirmationModal.svelte';
 	import NowPaymentsLinkWizard from '$lib/components/NowPaymentsLinkWizard.svelte';
-	import { LayoutDashboard, Shield, Users, CreditCard, BookOpen, Trash2, Settings, LogOut, AlertTriangle, ArrowDownToLine, ReceiptText, LifeBuoy, Sparkles, Ticket } from 'lucide-svelte';
+	import { LayoutDashboard, Shield, Users, CreditCard, BookOpen, Trash2, Settings, LogOut, AlertTriangle, ArrowDownToLine, ReceiptText, LifeBuoy, Sparkles, Ticket, Activity, HardDrive } from 'lucide-svelte';
 
 	let { data, children } = $props();
-	let logoutOpen = $state(false);
-	let wizardOpen = $state(false);
 	let planMatrixComplete = $state(true);
 	let wizardBlocked = $state(false);
 
@@ -30,11 +29,11 @@
 		try {
 			const res = await encore.tiers.PlanMatrixStatus();
 			planMatrixComplete = res.complete;
-			if (!res.complete && !wizardBlocked) wizardOpen = true;
+			if (!res.complete && !wizardBlocked) modal.open('wizard');
 		} catch { planMatrixComplete = true; }
 	}
 
-	function onWizardClose() { wizardOpen = false; wizardBlocked = !planMatrixComplete; }
+	function onWizardClose() { modal.close('wizard'); wizardBlocked = !planMatrixComplete; }
 
 	$effect(() => { if (authed && isAdmin) checkPlanMatrix(); });
 
@@ -51,7 +50,10 @@
 				{ href: '/payments', label: 'Payments', icon: ReceiptText },
 				{ href: '/coupons', label: 'Coupons', icon: Ticket },
 				{ href: '/comics', label: 'Comics', icon: BookOpen },
+				{ href: '/series', label: 'Series', icon: BookOpen },
 				{ href: '/comics/recycle-bin', label: 'Recycle Bin', icon: Trash2 },
+				{ href: '/jobs', label: 'Background Jobs', icon: Activity },
+				{ href: '/storage', label: 'Storage', icon: HardDrive },
 				{ href: '/settings', label: 'Settings', icon: Settings },
 			]
 			: [
@@ -90,7 +92,7 @@
 			</nav>
 
 			<div class="p-3 border-t border-slate-700/50">
-				<button class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer w-full text-left" onclick={() => logoutOpen = true}>
+				<button class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer w-full text-left" onclick={() => modal.open('logout')}>
 					<LogOut class="size-4 text-slate-400" />
 					<span class="text-sm text-slate-300 hover:text-white">Sign out</span>
 				</button>
@@ -101,7 +103,7 @@
 		<!-- Main content -->
 		<div class="flex-1 flex flex-col overflow-y-auto">
 			{#if !planMatrixComplete}
-				<button onclick={() => { wizardOpen = true; wizardBlocked = true; }} class="w-full flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs text-center py-1.5 font-medium cursor-pointer border-0 transition-colors flex-shrink-0">
+				<button onclick={() => { modal.open('wizard'); wizardBlocked = true; }} class="w-full flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-xs text-center py-1.5 font-medium cursor-pointer border-0 transition-colors flex-shrink-0">
 					<AlertTriangle class="size-3" />
 					Unlinked NowPayments plans — Click here to configure
 				</button>
@@ -113,8 +115,8 @@
 		</div>
 	</div>
 
-	<LogoutConfirmationModal open={logoutOpen} onClose={() => logoutOpen = false} />
-	<NowPaymentsLinkWizard open={wizardOpen} onClose={onWizardClose} />
+	<LogoutConfirmationModal />
+	<NowPaymentsLinkWizard onClose={onWizardClose} />
 {:else}
 	{@render children()}
 {/if}

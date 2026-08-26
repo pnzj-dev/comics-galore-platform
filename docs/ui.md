@@ -31,88 +31,66 @@
 
 ### Tab 2 – Manual Creation
 
-**Layout: full-width, three-row (metadata+cover, previews, archives)**
+**Layout: full-width, three sections (metadata+cover, previews, pages)**
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  Create New Comic                                                    │
 │                                                                      │
 │  ┌──────────────────── metadata ────────────────────┐ ┌── cover ──┐ │
-│  │ Title *, Author, Description, Synopsis,          │ │ 3:4        │ │
-│  │ Language + Age Rating, Category, Tags            │ │ dropzone   │ │
-│  └─────────────────────────────────────────────────┘ │ × progress │ │
-│                                                      └────────────┘ │
-│  Preview Images (min 2, up to 10)                        [+ Add]    │
+│  │ Title *, Author, Description,                    │ │ 3:4        │ │
+│  │ Language + Age Rating, Category, Genre, Tags,    │ │ dropzone   │ │
+│  │ Reading Direction, Identifiers, Series           │ │ × progress │ │
+│  └─────────────────────────────────────────────────┘ └────────────┘ │
+│  Preview Images (min 2, up to 10, Cloudflare)            [+ Add]    │
 │  ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐                  │
 │  │ 🌄 │ │ 🌄 │ │ 🌄 │ │ 🌄 │ │ 🌄 │ │  + │ │  + │                  │
 │  └────┘ └────┘ └────┘ └────┘ └────┘ └────┘ └────┘                  │
 │                                                                      │
-│  Archive Files (min 1, up to 10)                         [+ Add]    │
-│  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐                       │
-│  │  ⬇   │ │  ⬇   │ │ 50%  │ │  +   │ │  +   │                       │
-│  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘                       │
+│  Pages (comic page images, packed into a .cbz + metadata.json)       │
+│  ┌────┐ ┌────┐ ┌────┐ ┌────┐ ┌────┐ …                    [+ Add]    │
+│  │ 📄 │ │ 📄 │ │ 📄 │ │ 📄 │ │ 📄 │                                 │
+│  └────┘ └────┘ └────┘ └────┘ └────┘                                 │
 │                                                                      │
-│  [Publish Comic] (full width, standard submit pattern)               │
+│  [Create Comic] → verbose step list (build → upload → extract → …)  │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
 **Layout details:**
-- **Row 1:** `grid md:grid-cols-[1fr_320px]` — metadata fields stacked on left, 3:4 cover dropzone on right (320px fixed). Cover dropzone shows preview + upload progress overlay, removable via × button. Cover uses Cloudflare Images; archives use S3 presigned URLs.
-- **Row 2:** 7-column responsive grid of preview image slots (2:3 aspect), Cloudflare upload. Min 2 slots, max 10 via "+ Add". Each slot: file picker → preview thumbnail → upload progress → × remove.
-- **Row 3:** 5-column grid of archive file slots (square), S3 upload. Accepts `.cbr,.cbz,.pdf,.zip,.rar,.7z`. Min 1 slot, max 10. Each slot: upload → filename + filesize → purple border on success → × remove.
-- Submit button is full-width, standardized: `submitting ? 'Publishing...' : 'Publish Comic'`.
+- **Row 1:** `grid md:grid-cols-[1fr_320px]` — metadata fields stacked on left, 3:4 cover dropzone on right (320px fixed). Cover uses **Cloudflare Images**.
+- **Row 2:** 7-column responsive grid of preview image slots (2:3 aspect), **Cloudflare Images** upload. Min 2 slots, max 10 via "+ Add".
+- **Row 3:** a single **page-images picker** (multiple image files) — the comic's pages. On submit the client builds a `.cbz` containing `metadata.json` + pages and uploads it to **S3** (ADR `0024-comic-archive-build.md`).
+- **Series field** (`SeriesField`): a searchable, category-filterable, paginated `SeriesPicker` of existing series, or an inline "create new" (title + optional schedule day).
+- Submit button is full-width; the form validates title/cover/previews/pages/series and then shows **verbose per-step progress** (build archive → upload archive → extract pages → upload pages → publish).
 
 **Metadata fields (left column, stacked):**
-- Title (required)
-- Author
-- Description (2 rows textarea)
-- Synopsis (2 rows textarea)
-- Language selector + Age Rating selector (inline)
-- Category text input
-- Tags (comma-separated, full width in metadata column)
+- Title (required), Author, Description (2 rows textarea)
+- Language + Age Rating selectors (inline)
+- Category, Genre
+- Tags (comma-separated)
+- Reading Direction (LTR/RTL)
+- Identifiers (ISBN/UPC/ISSN)
+- Series (existing or new)
 
-**Cover Image (right column, 320px, required)**
-- 3:4 aspect ratio placeholder when empty
-- File input overlay (`accept="image/*"`)
-- On select: local `URL.createObjectURL()` preview fills the area
-- Upload starts immediately via presigned URL with XHR progress tracking
-- Progress state: dark overlay with spinner + percentage
-- × button (top-right) to remove and clear
+**Cover Image (right column, 320px, required)** — Cloudflare Images upload with progress overlay + × remove.
 
-**Preview Images (full width, min 2, max 10)**
-- 7-column responsive grid (3 on mobile, 5 on tablet, 7 on desktop)
-- Each slot: 2:3 aspect, dashed border, file input overlay
-- Empty: book icon placeholder
-- Uploaded: image preview with × remove button (cannot go below 2)
-- Progress overlay: spinner + percentage on upload
-- [+ Add] button (hidden at 10 max)
+**Preview Images (full width, min 2, max 10)** — Cloudflare Images uploads; 2:3 slots; + Add (hidden at 10).
 
-**Archive Files (full width, min 1, max 10)**
-- 5-column responsive grid (3 on mobile)
-- Each slot: square aspect, dashed border, file input overlay
-- Accepts: `.cbr,.cbz,.pdf,.zip,.rar,.7z`
-- Empty: download icon + "Archive" label
-- Uploaded: purple tint + download icon + filename (truncated) + file size + × remove (cannot go below 1)
-- Progress: spinner + percentage on upload
-- [+ Add] button (hidden at 10 max)
+**Pages (full width)** — multiple image selection (`accept="image/*" multiple`), sorted by name, thumbnails with × remove; empty-state explains the archive build.
 
 **Submit**
-- Validates: title, cover, at least 1 archive
-- Collects keys from uploaded files
-- Sends `POST /comics` with unified payload
-- On success: redirects to Tab 1 (My Comics)
+- Validates: title, cover, ≥2 previews, ≥1 page, series (if creating new).
+- Builds the `.cbz` (metadata.json + pages) then runs the shared pipeline.
+- On success: redirects to Tab 1 (My Comics).
 
 ### Tab 3 – Archive + JSON
 - Large drop zone.
 - On file select:
   1. libarchive.js parses the archive in the browser.
-  2. Looks for `comic.json` / `metadata.json`.
-  3. Validates against the public JSON Schema (client-side first, server-side authoritative).
-  4. Shows a preview of extracted metadata + file list.
-  5. Uploads each required object via presigned URLs (multipart for large files).
-- Progress UI for both parsing and uploading.
-- Crash recovery via the same Upload Session mechanism.
-- Builds the same form payload as the manual path (metadata + file keys).
+  2. Looks for `comic.json` / `metadata.json` and prefills the form.
+  3. Shows a preview of extracted metadata + detected page count.
+- Metadata form (same fields as Tab 2) + cover (Cloudflare) + previews (Cloudflare, min 2) + series.
+- On submit runs the **same shared pipeline** (upload archive → extract pages → upload pages → publish) with verbose step reporting.
 - Calls the same creation API.
 - On success → redirect to Tab 1.
 
@@ -135,7 +113,7 @@
 
 ### Pagination
 
-All comic grids use the shared **`Pagination.svelte`** component (`Prev`, numbered pages with ellipsis, `Next`), driven by `page` + `limit` query params and a `total` count from the backend. Applied uniformly to: `/comics` (browse), `/tags/[tag]`, `/series/[id]`, `/lists/[id]`, and `/favorites`. `limit` defaults to 20 and is capped at 50 server-side. Page changes navigate via `goto(url.pathname + url.search)` with `keepFocus: true`.
+All comic grids use the shared **`Pagination.svelte`** component (`Prev`, numbered pages with ellipsis, `Next`), driven by `page` + `limit` query params and a `total` count from the backend. Applied uniformly to: `/comics` (browse), `/tags/[tag]`, `/series/[id]`, `/lists/[id]`, and `/favorites`. `limit` defaults to 20 and is capped at 50 server-side. Page changes navigate via `goto(url.pathname + url.search)` with `keepFocus: true`. The component renders as a bottom footer (top border + generous spacing) so pagination sits at the bottom of the content on every page.
 
 ### Search & tag filters (browse)
 
@@ -167,7 +145,7 @@ When the admin setting `forbid_mature_for_free` is enabled, free-tier and anonym
 │                                        │
 │  ✓ Browse comics                       │
 │  ✓ Read comments                       │
-│  ✓ 1 GB download quota                 │
+│  ✓ 5 downloads/month                   │
 │                                        │
 │  Free                     (no button)  │
 └────────────────────────────────────────┘
@@ -180,7 +158,7 @@ When the admin setting `forbid_mature_for_free` is enabled, free-tier and anonym
 │  ✓ Download archives                   │
 │  ✓ Web reader                          │
 │  ✓ Full preview gallery                │
-│  + 50 GB download quota                │
+│  + 200 downloads/month                 │
 │                                        │
 │  $6.99/month                 [Select]  │
 └────────────────────────────────────────┘
@@ -240,13 +218,17 @@ Route: `/comics/:slug`
 │                                       ││                             │
 │                                       ││  [Start Reading] (emerald)  │
 │                                       ││  [Download] (outline)        │
-│                                       ││                             │
+│                                       ││  ┌────────────────────────┐ │
+│                                       ││  │  Advertisement (AdBanner)│ │
+│                                       ││  └────────────────────────┘ │
 │                                       ││  tags (purple pills)         │
 │                                       ││  Rejection reason (red box)  │
 └───────────────────────────────────────┘└─────────────────────────────┘
 ```
 
 **Mobile:** stack vertically — title/badges first, then cover (full-width), thumbnails, description, metadata, buttons, tags.
+
+An **advertising placeholder** (`AdBanner.svelte`, a self-contained gradient "Advertisement" box) renders in the info column below the Download button; real ad content is provided by a later agency integration.
 
 ### Lightbox component
 
@@ -313,13 +295,14 @@ Route: `/comics/:slug`
 
 **Reader Access**
 - "Start Reading" button (green/emerald) — opens existing `Reader` component
+- Tier-gated: only Bronze+ (and staff) see "Start Reading"; free/anonymous users see an "Upgrade to read" CTA (plans modal, or `/pricing` for anonymous).
 - If single archive: direct link. If multiple: dropdown button listing all files with name/size
 - Premium-gated: non-premium users see upsell banner instead
 
 **Download Section**
 - Gating ladder: not authenticated → "Sign in to Download" → premium upsell → quota exhausted → download button
 - Multi-archive: dropdown with filename + file size per entry
-- Quota exhausted state: "X of Y GB used (tier)" + "Upgrade Plan" button
+- Quota exhausted state: "X of Y downloads used (tier)" + boost/upgrade CTA
 
 **Related Comics** (4-col grid)
 - Lazy-loaded on mount via API call
@@ -347,9 +330,9 @@ Route: `/comics/:slug`
 - Same `CheckoutModal` from `/pricing` flow, triggered from "Subscribe" upsell on detail page
 
 **Boost Quota Modal**
-- Shows current quota: "X of Y GB used (tier)"
-- Three boost options: +5 GB ($5.00), +10 GB ($8.00), +20 GB ($12.00)
-- Each button POSTs to `/billing/boost` with SKU
+- Shows current quota: "X of Y downloads used (tier)"
+- Three boost options: +10 downloads ($5.00), +25 downloads ($10.00), +60 downloads ($20.00)
+- Each option POSTs to `/billing/create-quota-boost` with `downloads` + `crypto`
 
 #### v2 (LATER)
 
@@ -699,6 +682,27 @@ When loading, show skeleton cards matching the ComicCard layout:
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+**Auth modals (unauthenticated navbar)** — "Login" and "Register" buttons open
+`LoginModal` / `RegisterModal` (not page navigation). Both render a branded
+`AuthCard` (Comics Galore logo + name centered) with password visibility toggles.
+The login modal links to `ForgotPasswordModal` and the register modal; they switch
+in-place via the single-active `modal` store (modals never stack). A standalone
+minimal `/login` page remains for auth-gated redirects.
+
+**Form validation (Superforms + Zod)** — sign-in, register, forgot-password and
+reset-password forms use `superForm` (SPA mode) with `zodClient` schemas for
+client-side validation before any backend call. The register form also renders a
+**password strength meter** (`zxcvbn`) under the password field; username
+availability remains a debounced backend check (`/auth/username-available`).
+The manual upload form uses the same Superforms + Zod pattern for its metadata
+fields (title required, age_rating enum, optional volume/issue/identifiers).
+
+**Announcement banner** — the site layout renders a dismissible banner (`AnnouncementBanner.svelte`) below the navbar, showing the latest broadcast from `GET /announcements` (targeted `all` or the user's tier). Dismissal is persisted in `localStorage`.
+
+**Add-to-list modal** — from a comic detail page, "Add to list" opens
+`AddToListModal`: my shelves as checkboxes (membership from `has_comic`), an
+inline "create new" field, and add/remove toggles.
+
 **Profile modal** — opened by clicking the user's email area in navbar:
 - Avatar (purple circle, first letter)
 - Email + member since date
@@ -711,7 +715,6 @@ When loading, show skeleton cards matching the ComicCard layout:
 - Language: default language + default content language selects
 - Display: items per page + popular tags limit
 - **Notifications**: email from following, support replies, marketing, in-app (4 checkboxes)
-- Quota boosts: +5 GB/$5, +10 GB/$8, +20 GB/$12 (display only)
 - **Persistence**: saved to `users.preferences` JSONB column via `PATCH /me/preferences`.
   First load falls back to global defaults (`app_settings` table) → hardcoded defaults.
 
@@ -738,7 +741,7 @@ Loaded via `GET /admin/settings`, saved via `PATCH /admin/settings`:
 - **Site**: site name, contact email, maintenance toggle, registrations toggle
 - **Content**: language selects, max upload size, image serving mode, default meta description (textarea)
 - **Display**: items per page, popular tags limit, hide mature content (checkbox), enable comments (checkbox)
-- **Quotas**: per-tier GB inputs (Free/Bronze/Silver/Gold/Platinum)
+- **Tier download quotas**: per-tier downloads/month inputs (loaded via `GET /tiers`, saved via `POST /admin/tiers/quota`)
 - **Quota Boosts**: 3 boost prices editable
 - **Security**: rate limit, email verification toggle, S3/CF presigned TTL
 

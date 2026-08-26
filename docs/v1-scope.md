@@ -120,6 +120,38 @@ V1.1 builds on the shipped v1 web spine. The following **IN (v1.1)** items are t
 
 ---
 
+## Done since v1.1.1 (recent)
+
+Shipped after the v1.1.1 milestone; documented across `docs/`:
+
+- **Reading lists (full)** — create / rename / toggle-public / delete shelves, owner view of private shelves (`GET /reading-lists/:id/mine`), and an "Add to list" modal on the comic detail page (ADR `0021`).
+- **Series association** — a comic attaches to an existing series or creates a new one inline at upload (`series_id` / `series_title`); `series_order` auto-increments; series carry `cover_key`/genre/category/schedule/engagement (ADR `0023`).
+- **Series discovery & admin** — `GET /series-search` (DB-side search + category + pagination), `GET /series-categories`, `GET /admin/series` (admin datalist + drawer); public "Browse Series" page.
+- **Comic archive build** — Manual creation builds a self-describing `.cbz` (`metadata.json` + pages) and both tabs converge on a shared extract → upload → publish pipeline with verbose step reporting (ADR `0024`).
+- **Username handle** — required on registration, live-validated via `GET /auth/username-available`; `users.username`.
+- **Auth modals** — login/register/forgot-password as modals + a minimal `/login` redirect page (no nav/footer); password visibility toggle; branded `AuthCard`.
+- **Series cards polish** — 3:4 covers, views/hearts below genre, "All" category pill, left/right carousel arrows (batch scroll).
+- **Error pages** — `error.html` + `+error.svelte` in both frontends.
+- **Seeding rebuild** — 52 comics / 28 series (full daily coverage) + 4 image UUIDs.
+
+## Done since v1.1.1 (recent, continued)
+
+- **Downloads quota model** — tier `quota_downloads` (downloads/month) is the single source of truth; the reading service enforces it and records `download_logs`.
+- **Web reader tier gate** — the web reader requires a paid tier (Bronze+) or staff role (`canRead` on the detail page).
+- **Auth hardening** — passkey (WebAuthn) login, TOTP 2FA (self-serve), OAuth social login; avatar menu, Security modal, Preferences modal.
+- **2-mode upload** — `upload_mode` (`direct` | `backend`, default `backend`) toggles presigned-URL vs backend-streamed uploads; covers/previews target Cloudflare Images, archives/pages target S3.
+- **Archive pipeline (fflate)** — `libarchive.js` replaced with `fflate` for `.cbz` build, page extraction, and `metadata.json` parsing.
+- **Multi-part upload** — archives larger than `upload_part_size_mb` are split and uploaded in parallel (`upload_concurrency`) then merged server-side via `FinalizeMultipart`.
+- **Download endpoint** — auth-gated `GET /download/*key` streams small archives and 302-redirects large ones to a presigned URL (`download_stream_threshold_mb`).
+- **Download filename** — archive stored under `author - title - volume - issue` (`#` mapped to `no-`), so presigned + streamed downloads carry a friendly filename.
+- **Comic volume / issue** — `volume` + `issue_number` columns on comics, surfaced in the manual/archive forms and metadata.json.
+- **Superforms + Zod** — client-side validation on sign-in / register / forgot-password and the upload form; zxcvbn password strength meter.
+- **Advertising + pagination** — ad placeholder on the comic detail page; pagination rendered as a bottom footer (border + spacing).
+- **Background-job observability** — a `jobs` service (`job_runs` table) records cron + pubsub runs; pubsub subscriptions use `RetryPolicy{MaxRetries: 5}`; admin "Background Jobs" page with filters and manual re-run.
+- **Secret injection fix** — renamed mis-named secret structs (`cfSecrets`/`aiSecrets`/`emailSecrets` → `secrets`) so Encore injects Cloudflare, AI-moderation, and Resend secrets; covers/previews now upload to Cloudflare Images and the admin dashboard reports the CF image count.
+- **Admin dashboard widgets** — comic status distribution (published/pending/rejected), downloads (30d) and signups (30d) trend charts, and a top-viewed-comics table.
+- **Realtime admin dashboard** — a `dashboard` service aggregates the KPI stats (`GET /admin/dashboard`) and streams updates over SSE (`GET /admin/dashboard-stream`); the admin dashboard has a "Realtime: On/Off" toggle (SSE, default on). The per-service stats endpoints became service-internal (`private`).
+
 ## LATER — full vision (documented, not v1)
 
 ### Desktop (Wails)
@@ -136,22 +168,22 @@ V1.1 builds on the shipped v1 web spine. The following **IN (v1.1)** items are t
 - Second payment provider adapter  
 
 ### Social & engagement
-- Internal DMs  
-- Full support ticket system  
-- Broadcast announcements  
-- AI moderation (configurable LLM) + decision log  
-- Shareable public shelves polish, “People also liked”  
+- ~~Internal DMs~~ — **DONE** (conversations/messages/SSE + `/messages`)
+- ~~Full support ticket system~~ — **DONE** (create/list/get/reply + admin assign/resolve + `/support`)
+- Broadcast announcements — **DONE** (admin create/list + `GET /announcements` + dismissible in-app banner; email delivery remains a follow-up)
+- AI moderation (configurable LLM) + decision log
+- ~~Shareable public shelves polish, “People also liked”~~ — **DONE**
 
 ### Admin power tools
-- Impersonation, CSV export, saved datalist views  
-- Background job / dead-letter dashboard  
-- Staff Picks ordering UI polish  
-- Storage usage dashboard  
+- ~~Impersonation, CSV export, saved datalist views~~ — **DONE**
+- ~~Background job / dead-letter dashboard~~ — **DONE** (`jobs` service + `job_runs` + admin page; app-level, since Encore's DLQ is internal)
+- Staff Picks ordering UI polish
+- ~~Storage usage dashboard~~ — **DONE** (`GET /admin/storage` enumerates the object bucket; admin "Storage" page with per-prefix breakdown + CF images count)
 
 ### Other
-- imgproxy mode, advanced CDN strategy  
-- OPDS / advanced offline networking  
-- Creator payouts, remaining locale packs, native mobile  
+- ~~imgproxy mode~~ — **DONE** (signed URL generation + admin config; live deployment/advanced CDN strategy pending)
+- OPDS / advanced offline networking
+- Creator payouts, remaining locale packs, native mobile
 
 ---
 

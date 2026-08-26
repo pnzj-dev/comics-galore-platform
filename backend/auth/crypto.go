@@ -3,45 +3,21 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
-	"time"
+	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
-const tokenDuration = 72 * time.Hour
-
-type Claims struct {
-	UserID           string `json:"uid"`
-	Email            string `json:"email"`
-	Role             string `json:"role"`
-	Tier             string `json:"tier"`
-	ImpersonatedBy   string `json:"impersonated_by,omitempty"`
-	jwt.RegisteredClaims
-}
-
-func generateToken(c *Claims) (string, error) {
-	c.RegisteredClaims = jwt.RegisteredClaims{
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenDuration)),
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
+// splitCSV splits a comma-separated list, trimming whitespace and empties.
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
 	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
-	return token.SignedString([]byte(secrets.JWTSecret))
-}
-
-func validateToken(tokenString string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(t *jwt.Token) (interface{}, error) {
-		return []byte(secrets.JWTSecret), nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
-		return nil, errors.New("invalid token")
-	}
-	return claims, nil
+	return out
 }
 
 func hashPassword(password string) (string, error) {
@@ -56,6 +32,8 @@ func checkPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
+// randomToken returns a cryptographically-random hex string of n bytes.
+// Used for session ids, challenges, OAuth state, and email tokens.
 func randomToken(n int) string {
 	b := make([]byte, n)
 	rand.Read(b)

@@ -26,6 +26,10 @@ func (m *mockProvider) EstimatePrice(ctx context.Context, req EstimateRequest) (
 	return nil, fmt.Errorf("EstimatePrice not implemented")
 }
 
+func (m *mockProvider) ListCurrencies(ctx context.Context) ([]string, error) {
+	return []string{"btc", "eth", "usdt", "ltc"}, nil
+}
+
 func (m *mockProvider) CreateCustomer(ctx context.Context, name string) (string, error) {
 	if m.createCustomer != nil {
 		return m.createCustomer(ctx, name)

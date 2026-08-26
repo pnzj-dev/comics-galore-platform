@@ -9,14 +9,14 @@ type EstimateRequest struct {
 }
 
 type EstimateResponse struct {
-	EstimatedAmount float64
-	FromCurrency    string
-	ToCurrency      string
+	EstimatedAmount float64 `json:"estimated_amount"`
+	FromCurrency    string  `json:"from_currency"`
+	ToCurrency      string  `json:"to_currency"`
 }
 
 type BalanceEntry struct {
-	Amount        float64
-	PendingAmount float64
+	Amount        float64 `json:"amount"`
+	PendingAmount float64 `json:"pending_amount"`
 }
 
 type SubscriptionRequest struct {
@@ -26,8 +26,8 @@ type SubscriptionRequest struct {
 }
 
 type SubscriptionResponse struct {
-	SubscriptionID string
-	Status         string
+	SubscriptionID string `json:"subscription_id"`
+	Status         string `json:"status"`
 }
 
 type DepositRequest struct {
@@ -38,10 +38,10 @@ type DepositRequest struct {
 }
 
 type DepositResponse struct {
-	PaymentID   string
-	PayAddress  string
-	PayAmount   float64
-	PayCurrency string
+	PaymentID   string  `json:"payment_id"`
+	PayAddress  string  `json:"pay_address"`
+	PayAmount   float64 `json:"pay_amount"`
+	PayCurrency string  `json:"pay_currency"`
 }
 
 type CreatePlanRequest struct {
@@ -57,6 +57,7 @@ type CreatePlanResponse struct {
 
 type PaymentsProvider interface {
 	EstimatePrice(ctx context.Context, req EstimateRequest) (*EstimateResponse, error)
+	ListCurrencies(ctx context.Context) ([]string, error)
 	CheckBalance(ctx context.Context, subPartnerID string) (map[string]BalanceEntry, error)
 	CreateCustomer(ctx context.Context, name string) (string, error)
 	CreateSubscription(ctx context.Context, req SubscriptionRequest) (*SubscriptionResponse, error)

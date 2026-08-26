@@ -2,16 +2,20 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
 	"comics-galore/backend/nowpayments"
+	"comics-galore/backend/turnstile"
 
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
@@ -25,6 +29,26 @@ var secrets struct {
 	NowPaymentsIPNKey   string
 	NowPaymentsEmail    string
 	NowPaymentsPassword string
+
+	// WebAuthn / Passkey
+	WebAuthnRPID    string
+	WebAuthnOrigins string // comma-separated list of allowed origins
+
+	// OAuth providers
+	FrontendURL           string
+	GoogleClientID        string
+	GoogleClientSecret    string
+	FacebookClientID      string
+	FacebookClientSecret  string
+	TwitterClientID       string
+	TwitterClientSecret   string
+	AppleClientID         string
+	AppleTeamID           string
+	AppleKeyID            string
+	ApplePrivateKey       string
+
+	// Email (Resend)
+	ResendAPIKey string
 }
 
 var npProvider *nowpayments.Provider
@@ -69,29 +93,36 @@ func AuthHandler(ctx context.Context, p *AuthParams) (auth.UID, *AuthData, error
 		}
 	}
 
-	claims, err := validateToken(token)
+	sess, err := validateSession(ctx, token)
 	if err != nil {
-		return "", nil, &errs.Error{
-			Code:    errs.Unauthenticated,
-			Message: "invalid or expired token",
+		return "", nil, err
+	}
+	touchSession(ctx, token)
+
+	var email sql.NullString
+	var role, tier string
+	if err := db.QueryRow(ctx, `SELECT email, role, tier FROM users WHERE id = $1`, sess.UserID).Scan(&email, &role, &tier); err != nil {
+		if isNoRows(err) {
+			return "", nil, &errs.Error{Code: errs.Unauthenticated, Message: "invalid session"}
 		}
+		return "", nil, err
 	}
 
 	var maintenance bool
-	if e := db.QueryRow(ctx, `SELECT COALESCE((value::jsonb->>'maintenance_mode')::boolean, false) FROM app_settings WHERE key = 'defaults'`).Scan(&maintenance); e == nil && maintenance && claims.Role != "admin" {
+	if e := db.QueryRow(ctx, `SELECT COALESCE((value::jsonb->>'maintenance_mode')::boolean, false) FROM app_settings WHERE key = 'defaults'`).Scan(&maintenance); e == nil && maintenance && role != "admin" {
 		return "", nil, &errs.Error{Code: errs.Unavailable, Message: "the platform is under maintenance, please try again later"}
 	}
 
 	var requireVerify bool
 	if e := db.QueryRow(ctx, `SELECT COALESCE((value::jsonb->>'require_email_verify')::boolean, false) FROM app_settings WHERE key = 'defaults'`).Scan(&requireVerify); e == nil && requireVerify {
 		var emailVerified sql.NullTime
-		if e2 := db.QueryRow(ctx, `SELECT email_verified_at FROM users WHERE id = $1`, claims.UserID).Scan(&emailVerified); e2 == nil && !emailVerified.Valid {
+		if e2 := db.QueryRow(ctx, `SELECT email_verified_at FROM users WHERE id = $1`, sess.UserID).Scan(&emailVerified); e2 == nil && !emailVerified.Valid {
 			return "", nil, &errs.Error{Code: errs.PermissionDenied, Message: "email verification required"}
 		}
 	}
 
 	var bannedAt, suspendedAt sql.NullTime
-	if err := db.QueryRow(ctx, `SELECT banned_at, suspended_at FROM users WHERE id = $1`, claims.UserID).Scan(&bannedAt, &suspendedAt); err == nil {
+	if err := db.QueryRow(ctx, `SELECT banned_at, suspended_at FROM users WHERE id = $1`, sess.UserID).Scan(&bannedAt, &suspendedAt); err == nil {
 		if bannedAt.Valid {
 			return "", nil, &errs.Error{Code: errs.PermissionDenied, Message: "account is banned"}
 		}
@@ -100,27 +131,44 @@ func AuthHandler(ctx context.Context, p *AuthParams) (auth.UID, *AuthData, error
 		}
 	}
 
-	return auth.UID(claims.UserID), &AuthData{
-		UserID:         claims.UserID,
-		Email:          claims.Email,
-		Role:           claims.Role,
-		Tier:           claims.Tier,
-		ImpersonatedBy: claims.ImpersonatedBy,
+	return auth.UID(sess.UserID), &AuthData{
+		UserID:         sess.UserID,
+		Email:          email.String,
+		Role:           role,
+		Tier:           tier,
+		ImpersonatedBy: sess.ImpersonatedBy,
 	}, nil
 }
 
 type RegisterParams struct {
-	Email    string `json:"email"`
-	Password string `json:"password" encore:"sensitive"`
+	Email          string `json:"email"`
+	Password       string `json:"password" encore:"sensitive"`
+	Username       string `json:"username"`
+	TurnstileToken string `json:"turnstile_token"`
+}
+
+// usernameRe validates a public handle's characters/structure: starts and ends
+// with a lowercase alphanumeric, with single `_`/`-` only between alphanumerics
+// (no leading/trailing/consecutive). Length is checked separately (3-20).
+var usernameRe = regexp.MustCompile(`^[a-z0-9](?:[_-]?[a-z0-9])*$`)
+
+func validUsername(username string) bool {
+	return len(username) >= 3 && len(username) <= 20 && usernameRe.MatchString(username)
 }
 
 type AuthResponse struct {
-	Token string `json:"token"`
-	User  User   `json:"user"`
+	Token        string `json:"token"`
+	User         User   `json:"user"`
+	RequiresTOTP bool   `json:"requires_totp,omitempty"`
+	MFAToken     string `json:"mfa_token,omitempty"`
 }
 
 //encore:api public method=POST path=/auth/register
 func Register(ctx context.Context, p *RegisterParams) (*AuthResponse, error) {
+	if err := turnstile.Verify(ctx, &turnstile.VerifyParams{Token: p.TurnstileToken, Action: "register"}); err != nil {
+		return nil, err
+	}
+
 	if p.Email == "" || p.Password == "" {
 		return nil, &errs.Error{
 			Code:    errs.InvalidArgument,
@@ -133,6 +181,19 @@ func Register(ctx context.Context, p *RegisterParams) (*AuthResponse, error) {
 			Code:    errs.InvalidArgument,
 			Message: "password must be at least 8 characters",
 		}
+	}
+
+	username := strings.ToLower(strings.TrimSpace(p.Username))
+	if username == "" || !validUsername(username) {
+		return nil, &errs.Error{
+			Code:    errs.InvalidArgument,
+			Message: "username must be 3-20 characters, lowercase letters, numbers, and single - or _ in between",
+		}
+	}
+
+	var usernameTaken bool
+	if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)`, username).Scan(&usernameTaken); err == nil && usernameTaken {
+		return nil, &errs.Error{Code: errs.AlreadyExists, Message: "this username is already taken"}
 	}
 
 	var regOpen bool
@@ -165,20 +226,15 @@ func Register(ctx context.Context, p *RegisterParams) (*AuthResponse, error) {
 
 	var user User
 	err = db.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, role)
-		VALUES ($1, $2, $3)
-		RETURNING id, email, role, tier, created_at
-	`, p.Email, hash, role).Scan(&user.ID, &user.Email, &user.Role, &user.Tier, &user.CreatedAt)
+		INSERT INTO users (email, password_hash, role, username, terms_accepted_at)
+		VALUES ($1, $2, $3, $4, now())
+		RETURNING id, email, role, tier, COALESCE(username, ''), created_at
+	`, p.Email, hash, role, username).Scan(&user.ID, &user.Email, &user.Role, &user.Tier, &user.Username, &user.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 
-	token, err := generateToken(&Claims{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   user.Role,
-		Tier:   user.Tier,
-	})
+	token, err := createSession(ctx, user.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -193,13 +249,45 @@ func Register(ctx context.Context, p *RegisterParams) (*AuthResponse, error) {
 	}, nil
 }
 
+type UsernameAvailableParams struct {
+	Username string `query:"username"`
+}
+
+type UsernameAvailableResponse struct {
+	Available bool   `json:"available"`
+	Valid     bool   `json:"valid"`
+	Message   string `json:"message,omitempty"`
+}
+
+//encore:api public method=GET path=/auth/username-available
+func UsernameAvailable(ctx context.Context, p *UsernameAvailableParams) (*UsernameAvailableResponse, error) {
+	username := strings.ToLower(strings.TrimSpace(p.Username))
+	if username == "" || !validUsername(username) {
+		return &UsernameAvailableResponse{Available: false, Valid: false, Message: "username must be 3-20 characters, lowercase letters, numbers, and single - or _ in between"}, nil
+	}
+
+	var taken bool
+	if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)`, username).Scan(&taken); err != nil {
+		return nil, err
+	}
+	if taken {
+		return &UsernameAvailableResponse{Available: false, Valid: true, Message: "this username is already taken"}, nil
+	}
+	return &UsernameAvailableResponse{Available: true, Valid: true}, nil
+}
+
 type LoginParams struct {
-	Email    string `json:"email"`
-	Password string `json:"password" encore:"sensitive"`
+	Email          string `json:"email"`
+	Password       string `json:"password" encore:"sensitive"`
+	TurnstileToken string `json:"turnstile_token"`
 }
 
 //encore:api public method=POST path=/auth/login
 func Login(ctx context.Context, p *LoginParams) (*AuthResponse, error) {
+	if err := turnstile.Verify(ctx, &turnstile.VerifyParams{Token: p.TurnstileToken, Action: "login"}); err != nil {
+		return nil, err
+	}
+
 	if p.Email == "" || p.Password == "" {
 		return nil, &errs.Error{
 			Code:    errs.InvalidArgument,
@@ -218,7 +306,7 @@ func Login(ctx context.Context, p *LoginParams) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	if !checkPassword(user.PasswordHash, p.Password) {
+	if !user.PasswordHash.Valid || !checkPassword(user.PasswordHash.String, p.Password) {
 		return nil, &errs.Error{
 			Code:    errs.Unauthenticated,
 			Message: "invalid email or password",
@@ -243,12 +331,18 @@ func Login(ctx context.Context, p *LoginParams) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	token, err := generateToken(&Claims{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   user.Role,
-		Tier:   user.Tier,
-	})
+	// Two-factor authentication: when TOTP is enabled, don't issue a session yet.
+	// Return a short-lived MFA challenge that the client exchanges for a session
+	// after the user submits their authenticator-app code.
+	if _, enabled, err := userTOTPSecret(ctx, user.ID); err == nil && enabled {
+		mfaToken, err := storeMFAChallenge(ctx, user.ID)
+		if err != nil {
+			return nil, err
+		}
+		return &AuthResponse{RequiresTOTP: true, MFAToken: mfaToken}, nil
+	}
+
+	token, err := createSession(ctx, user.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -257,9 +351,10 @@ func Login(ctx context.Context, p *LoginParams) (*AuthResponse, error) {
 		Token: token,
 		User: User{
 			ID:        user.ID,
-			Email:     user.Email,
+			Email:     user.Email.String,
 			Role:      user.Role,
 			Tier:      user.Tier,
+			Username:  user.Username.String,
 			CreatedAt: user.CreatedAt,
 		},
 	}, nil
@@ -295,12 +390,7 @@ func RenewToken(ctx context.Context) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	token, err := generateToken(&Claims{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   user.Role,
-		Tier:   user.Tier,
-	})
+	token, err := createSession(ctx, user.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -309,6 +399,80 @@ func RenewToken(ctx context.Context) (*AuthResponse, error) {
 		Token: token,
 		User:  *user,
 	}, nil
+}
+
+// LogoutParams carries the session token being terminated. The frontend sends
+// the same bearer token it uses for API calls.
+type LogoutParams struct {
+	Token string `json:"token"`
+}
+
+//encore:api public method=POST path=/auth/logout
+func Logout(ctx context.Context, p *LogoutParams) error {
+	if p.Token == "" {
+		return nil
+	}
+	_ = deleteSession(ctx, p.Token)
+	return nil
+}
+
+//encore:api auth method=POST path=/auth/logout-all
+func LogoutAll(ctx context.Context) error {
+	data := auth.Data().(*AuthData)
+	return revokeAllSessions(ctx, data.UserID)
+}
+
+//encore:api auth method=GET path=/auth/sessions
+func ListSessions(ctx context.Context) (*SessionsResponse, error) {
+	data := auth.Data().(*AuthData)
+	rows, err := db.Query(ctx, `
+		SELECT id, created_at, last_seen_at, expires_at
+		FROM sessions WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+		ORDER BY created_at DESC
+	`, data.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out SessionsResponse
+	for rows.Next() {
+		var s SessionInfo
+		if err := rows.Scan(&s.ID, &s.CreatedAt, &s.LastSeenAt, &s.ExpiresAt); err != nil {
+			return nil, err
+		}
+		out.Sessions = append(out.Sessions, s)
+	}
+	return &out, rows.Err()
+}
+
+type SessionsResponse struct {
+	Sessions []SessionInfo `json:"sessions"`
+}
+
+type SessionInfo struct {
+	ID         string    `json:"id"`
+	CreatedAt  time.Time `json:"created_at"`
+	LastSeenAt time.Time `json:"last_seen_at"`
+	ExpiresAt  time.Time `json:"expires_at"`
+}
+
+// RevokeSessionParams revokes one session by id (logout of another device).
+type RevokeSessionParams struct {
+	SessionID string `json:"session_id"`
+}
+
+//encore:api auth method=POST path=/auth/sessions/revoke
+func RevokeSession(ctx context.Context, p *RevokeSessionParams) error {
+	data := auth.Data().(*AuthData)
+	if p.SessionID == "" {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "session_id is required"}
+	}
+	_, err := db.Exec(ctx, `
+		UPDATE sessions SET revoked_at = now()
+		WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
+	`, p.SessionID, data.UserID)
+	return err
 }
 
 // ----- Email Verification -----
@@ -345,6 +509,14 @@ func VerifyEmail(ctx context.Context, p *VerifyEmailParams) error {
 	return nil
 }
 
+// nowpaymentsSubPartnerName builds a unique, non-email, ≤30-character name for
+// a NowPayments sub-partner. NowPayments rejects emails and names longer than
+// 30 characters for the `name` field of POST /sub-partner/balance.
+func nowpaymentsSubPartnerName(userID string) string {
+	sum := sha256.Sum256([]byte(userID))
+	return "cg-" + hex.EncodeToString(sum[:8]) // 19 characters
+}
+
 // ensureSubPartnerID returns the user's NowPayments sub-partner id, creating
 // the customer on NowPayments and saving it atomically when missing.
 func ensureSubPartnerID(ctx context.Context, userID string) (string, error) {
@@ -357,14 +529,12 @@ func ensureSubPartnerID(ctx context.Context, userID string) (string, error) {
 		return existing, nil
 	}
 
-	var email string
-	if err := db.QueryRow(ctx, `SELECT email FROM users WHERE id = $1`, userID).Scan(&email); err != nil {
-		return "", err
-	}
-
-	subID, err := npProvider.CreateCustomer(ctx, email)
+	subID, err := npProvider.CreateCustomer(ctx, nowpaymentsSubPartnerName(userID))
 	if err != nil {
 		return "", err
+	}
+	if subID == "" {
+		return "", fmt.Errorf("nowpayments created sub-partner with empty id for user %s", userID)
 	}
 
 	// Atomic claim: only set if still empty, guarding against concurrent creation.
@@ -524,20 +694,117 @@ func GetAIModerationConfig(ctx context.Context) (*AIModerationConfig, error) {
 // (which may not read the auth database directly — ADR 0016).
 type ContentPolicy struct {
 	ForbidMatureForFree bool `json:"forbid_mature_for_free"`
+	HideMatureDefault   bool `json:"hide_mature_default"`
+	EnableComments      bool `json:"enable_comments"`
 }
 
 //encore:api private method=GET path=/auth/content-policy
 func GetContentPolicy(ctx context.Context) (*ContentPolicy, error) {
+	settings := loadSettings(ctx)
+	return &ContentPolicy{
+		ForbidMatureForFree: settings.ForbidMatureForFree,
+		HideMatureDefault:   settings.HideMatureDefault,
+		EnableComments:      settings.EnableComments,
+	}, nil
+}
+
+// BillingConfig exposes the subscription-expiry job settings to the billing
+// service (which may not read the auth database directly — ADR 0016).
+type BillingConfig struct {
+	WaitingPayJobEnabled  bool `json:"waiting_pay_job_enabled"`
+	WaitingPayExpiryHours int  `json:"waiting_pay_expiry_hours"`
+}
+
+//encore:api private method=GET path=/auth/billing-config
+func GetBillingConfig(ctx context.Context) (*BillingConfig, error) {
 	var raw []byte
 	err := db.QueryRow(ctx, `SELECT value FROM app_settings WHERE key = 'defaults'`).Scan(&raw)
 	if err != nil || len(raw) == 0 {
-		return &ContentPolicy{}, nil
+		return &BillingConfig{WaitingPayJobEnabled: true, WaitingPayExpiryHours: 24}, nil
 	}
-	var settings AppSettings
+	// Merge onto defaults so settings written before these keys existed still
+	// resolve to the intended defaults (enabled, 24h).
+	settings := *defaultAppSettings()
 	if err := json.Unmarshal(raw, &settings); err != nil {
-		return &ContentPolicy{}, nil
+		return &BillingConfig{WaitingPayJobEnabled: true, WaitingPayExpiryHours: 24}, nil
 	}
-	return &ContentPolicy{ForbidMatureForFree: settings.ForbidMatureForFree}, nil
+	hours := settings.WaitingPayExpiryHours
+	if hours <= 0 {
+		hours = 24
+	}
+	return &BillingConfig{
+		WaitingPayJobEnabled:  settings.WaitingPayJobEnabled,
+		WaitingPayExpiryHours: hours,
+	}, nil
+}
+
+// BoostConfig exposes the quota-boost tiers to the billing service (which may
+// not read the auth database directly — ADR 0016). Per-tier download quotas
+// now live on the tiers table (see tiers.GetTierQuotas).
+type BoostConfig struct {
+	Boost1Downloads int     `json:"boost_1_downloads"`
+	Boost1Price     float64 `json:"boost_1_price"`
+	Boost2Downloads int     `json:"boost_2_downloads"`
+	Boost2Price     float64 `json:"boost_2_price"`
+	Boost3Downloads int     `json:"boost_3_downloads"`
+	Boost3Price     float64 `json:"boost_3_price"`
+}
+
+//encore:api private method=GET path=/auth/boost-config
+func GetBoostConfig(ctx context.Context) (*BoostConfig, error) {
+	settings := loadSettings(ctx)
+	return &BoostConfig{
+		Boost1Downloads: settings.Boost1Downloads,
+		Boost1Price:     settings.Boost1Price,
+		Boost2Downloads: settings.Boost2Downloads,
+		Boost2Price:     settings.Boost2Price,
+		Boost3Downloads: settings.Boost3Downloads,
+		Boost3Price:     settings.Boost3Price,
+	}, nil
+}
+
+// UserPublicInfo is the minimal public identity another service needs to
+// display/address a user (e.g. comment authors, uploaders) without reading the
+// auth database directly.
+type UserPublicInfo struct {
+	ID        string `json:"id"`
+	Username  string `json:"username"`
+	AvatarKey string `json:"avatar_key"`
+}
+
+type GetUsersInfoParams struct {
+	IDs []string `json:"ids"`
+}
+
+type GetUsersInfoResponse struct {
+	Users []UserPublicInfo `json:"users"`
+}
+
+// GetUsersInfo returns public identity for a batch of user IDs.
+//encore:api private method=POST path=/auth/users-info
+func GetUsersInfo(ctx context.Context, p *GetUsersInfoParams) (*GetUsersInfoResponse, error) {
+	if len(p.IDs) == 0 {
+		return &GetUsersInfoResponse{Users: []UserPublicInfo{}}, nil
+	}
+
+	rows, err := db.Query(ctx, `
+		SELECT id, COALESCE(username, ''), COALESCE(avatar_key::text, '')
+		FROM users WHERE id = ANY($1)
+	`, p.IDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	users := make([]UserPublicInfo, 0, len(p.IDs))
+	for rows.Next() {
+		var u UserPublicInfo
+		if err := rows.Scan(&u.ID, &u.Username, &u.AvatarKey); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return &GetUsersInfoResponse{Users: users}, rows.Err()
 }
 
 //encore:api auth method=POST path=/auth/resend-verification
@@ -570,11 +837,16 @@ func ResendVerification(ctx context.Context) error {
 // ----- Password Reset -----
 
 type PasswordResetRequest struct {
-	Email string `json:"email"`
+	Email          string `json:"email"`
+	TurnstileToken string `json:"turnstile_token"`
 }
 
 //encore:api public method=POST path=/auth/password-reset/request
 func RequestPasswordReset(ctx context.Context, p *PasswordResetRequest) error {
+	if err := turnstile.Verify(ctx, &turnstile.VerifyParams{Token: p.TurnstileToken, Action: "password_reset"}); err != nil {
+		return err
+	}
+
 	if p.Email == "" {
 		return &errs.Error{Code: errs.InvalidArgument, Message: "email is required"}
 	}
@@ -632,16 +904,18 @@ type User struct {
 	Email     string    `json:"email"`
 	Role      string    `json:"role"`
 	Tier      string    `json:"tier"`
+	Username  string    `json:"username,omitempty"`
 	AvatarKey string    `json:"avatar_key,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
 type userRow struct {
 	ID           string
-	Email        string
-	PasswordHash string
+	Email        sql.NullString
+	PasswordHash sql.NullString
 	Role         string
 	Tier         string
+	Username     sql.NullString
 	AvatarKey    sql.NullString
 	BannedAt     sql.NullTime
 	SuspendedAt  sql.NullTime
@@ -651,9 +925,9 @@ type userRow struct {
 func getUserByEmail(ctx context.Context, email string) (*userRow, error) {
 	var u userRow
 	err := db.QueryRow(ctx, `
-		SELECT id, email, password_hash, role, tier, COALESCE(avatar_key::text, ''), banned_at, suspended_at, created_at
+		SELECT id, email, password_hash, role, tier, COALESCE(username, ''), COALESCE(avatar_key::text, ''), banned_at, suspended_at, created_at
 		FROM users WHERE email = $1
-	`, email).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.Tier, &u.AvatarKey, &u.BannedAt, &u.SuspendedAt, &u.CreatedAt)
+	`, email).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.Tier, &u.Username, &u.AvatarKey, &u.BannedAt, &u.SuspendedAt, &u.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -662,13 +936,15 @@ func getUserByEmail(ctx context.Context, email string) (*userRow, error) {
 
 func getUserByID(ctx context.Context, id string) (*User, error) {
 	var u User
+	var email sql.NullString
 	err := db.QueryRow(ctx, `
-		SELECT id, email, role, tier, COALESCE(avatar_key::text, ''), created_at
+		SELECT id, email, role, tier, COALESCE(username, ''), COALESCE(avatar_key::text, ''), created_at
 		FROM users WHERE id = $1
-	`, id).Scan(&u.ID, &u.Email, &u.Role, &u.Tier, &u.AvatarKey, &u.CreatedAt)
+	`, id).Scan(&u.ID, &email, &u.Role, &u.Tier, &u.Username, &u.AvatarKey, &u.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
+	u.Email = email.String
 	return &u, nil
 }
 
@@ -679,6 +955,7 @@ type UserProfile struct {
 	Email     string `json:"email"`
 	Role      string `json:"role"`
 	Tier      string `json:"tier"`
+	Username  string `json:"username,omitempty"`
 	AvatarKey string `json:"avatar_key,omitempty"`
 	CreatedAt string `json:"created_at"`
 }
@@ -695,6 +972,47 @@ func GetProfile(ctx context.Context) (*UserProfile, error) {
 		Email:     user.Email,
 		Role:      user.Role,
 		Tier:      user.Tier,
+		Username:  user.Username,
+		AvatarKey: user.AvatarKey,
+		CreatedAt: user.CreatedAt.Format(time.RFC3339),
+	}, nil
+}
+
+type UpdateUsernameParams struct {
+	Username string `json:"username"`
+}
+
+//encore:api auth method=POST path=/me/username
+func UpdateUsername(ctx context.Context, p *UpdateUsernameParams) (*UserProfile, error) {
+	data := auth.Data().(*AuthData)
+
+	username := strings.ToLower(strings.TrimSpace(p.Username))
+	if username == "" || !validUsername(username) {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "username must be 3-20 characters, lowercase letters, numbers, and single - or _ in between"}
+	}
+
+	var taken bool
+	if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE username = $1 AND id != $2)`, username, data.UserID).Scan(&taken); err != nil {
+		return nil, err
+	}
+	if taken {
+		return nil, &errs.Error{Code: errs.AlreadyExists, Message: "this username is already taken"}
+	}
+
+	if _, err := db.Exec(ctx, `UPDATE users SET username = $1 WHERE id = $2`, username, data.UserID); err != nil {
+		return nil, err
+	}
+
+	user, err := getUserByID(ctx, data.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return &UserProfile{
+		ID:        user.ID,
+		Email:     user.Email,
+		Role:      user.Role,
+		Tier:      user.Tier,
+		Username:  user.Username,
 		AvatarKey: user.AvatarKey,
 		CreatedAt: user.CreatedAt.Format(time.RFC3339),
 	}, nil
@@ -961,13 +1279,7 @@ func AdminImpersonateUser(ctx context.Context, id string) (*ImpersonateResponse,
 		return nil, err
 	}
 
-	token, err := generateToken(&Claims{
-		UserID:         user.ID,
-		Email:          user.Email,
-		Role:           user.Role,
-		Tier:           user.Tier,
-		ImpersonatedBy: data.UserID,
-	})
+	token, err := createImpersonationSession(ctx, user.ID, data.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -1031,18 +1343,50 @@ type DashboardStats struct {
 	NewUsersThisMonth int `json:"new_users_this_month"`
 }
 
-//encore:api auth method=GET path=/admin/stats
+//encore:api private
 func AdminDashboardStats(ctx context.Context) (*DashboardStats, error) {
-	data := auth.Data().(*AuthData)
-	if data.Role != "admin" {
-		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
-	}
-
 	var stats DashboardStats
 	db.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&stats.TotalUsers)
 	db.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE created_at >= date_trunc('month', now())`).Scan(&stats.NewUsersThisMonth)
 
 	return &stats, nil
+}
+
+type SignupTrendPoint struct {
+	Day   string `json:"day"`
+	Count int    `json:"count"`
+}
+
+type SignupTrendResponse struct {
+	Points []SignupTrendPoint `json:"points"`
+}
+
+//encore:api private
+func GetSignupTrend(ctx context.Context) (*SignupTrendResponse, error) {
+	rows, err := db.Query(ctx, `
+		SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day, COUNT(*)
+		FROM users
+		WHERE created_at >= now() - interval '30 days'
+		GROUP BY 1
+		ORDER BY 1 ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	points := []SignupTrendPoint{}
+	for rows.Next() {
+		var p SignupTrendPoint
+		if err := rows.Scan(&p.Day, &p.Count); err != nil {
+			return nil, err
+		}
+		points = append(points, p)
+	}
+	if points == nil {
+		points = []SignupTrendPoint{}
+	}
+	return &SignupTrendResponse{Points: points}, rows.Err()
 }
 
 // ----- CSV Export -----

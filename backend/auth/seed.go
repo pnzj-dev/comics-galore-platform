@@ -26,6 +26,7 @@ type demoUser struct {
 	Email         string
 	Role          string
 	Tier          string
+	Username      string
 	SubPartnerID  string
 }
 
@@ -36,14 +37,15 @@ func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error
 	}
 
 	demoUsers := []demoUser{
-		{ID: "10000000-0000-0000-0000-000000000001", Email: "admin@comics-galore.dev", Role: "admin", Tier: "platinum"},
-		{ID: "10000000-0000-0000-0000-000000000002", Email: "author-free@pnzj.dev", Role: "uploader", Tier: "free"},
-		{ID: "10000000-0000-0000-0000-000000000003", Email: "author-gold@pnzj.dev", Role: "uploader", Tier: "gold"},
-		{ID: "10000000-0000-0000-0000-000000000004", Email: "member-free@pnzj.dev", Role: "user", Tier: "free", SubPartnerID: "254825522"},
-		{ID: "10000000-0000-0000-0000-000000000005", Email: "member-bronze@pnzj.dev", Role: "user", Tier: "bronze"},
-		{ID: "10000000-0000-0000-0000-000000000006", Email: "member-silver@pnzj.dev", Role: "user", Tier: "silver"},
-		{ID: "10000000-0000-0000-0000-000000000007", Email: "member-gold@pnzj.dev", Role: "user", Tier: "gold"},
-		{ID: "10000000-0000-0000-0000-000000000008", Email: "member-platinum@pnzj.dev", Role: "user", Tier: "platinum"},
+		{ID: "10000000-0000-0000-0000-000000000001", Email: "admin@comics-galore.dev", Role: "admin", Tier: "platinum", Username: "admin"},
+		{ID: "10000000-0000-0000-0000-000000000002", Email: "author-free@pnzj.dev", Role: "uploader", Tier: "free", Username: "author_free"},
+		{ID: "10000000-0000-0000-0000-000000000003", Email: "author-gold@pnzj.dev", Role: "uploader", Tier: "gold", Username: "author_gold"},
+		{ID: "10000000-0000-0000-0000-000000000004", Email: "member-free@pnzj.dev", Role: "user", Tier: "free", SubPartnerID: "254825522", Username: "member_free"},
+		{ID: "10000000-0000-0000-0000-000000000005", Email: "member-bronze@pnzj.dev", Role: "user", Tier: "bronze", Username: "member_bronze"},
+		{ID: "10000000-0000-0000-0000-000000000006", Email: "member-silver@pnzj.dev", Role: "user", Tier: "silver", Username: "member_silver"},
+		{ID: "10000000-0000-0000-0000-000000000007", Email: "member-gold@pnzj.dev", Role: "user", Tier: "gold", Username: "member_gold"},
+		{ID: "10000000-0000-0000-0000-000000000008", Email: "member-platinum@pnzj.dev", Role: "user", Tier: "platinum", Username: "member_platinum"},
+		{ID: "10000000-0000-0000-0000-000000000009", Email: "member-exhausted@pnzj.dev", Role: "user", Tier: "free", Username: "member_exhausted"},
 	}
 
 	defaultPassword := "devpassword"
@@ -64,9 +66,9 @@ func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error
 		}
 
 		_, err := db.Exec(ctx, `
-			INSERT INTO users (id, email, password_hash, role, tier, sub_partner_id)
-			VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''))
-		`, u.ID, u.Email, hash, u.Role, u.Tier, u.SubPartnerID)
+			INSERT INTO users (id, email, password_hash, role, tier, username, sub_partner_id)
+			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''))
+		`, u.ID, u.Email, hash, u.Role, u.Tier, u.Username, u.SubPartnerID)
 		if err != nil {
 			return nil, err
 		}

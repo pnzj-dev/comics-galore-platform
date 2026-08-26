@@ -2,11 +2,13 @@ package reading
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"encore.dev/beta/auth"
 	myauth "comics-galore/backend/auth"
 	comics "comics-galore/backend/comics"
+	mytiers "comics-galore/backend/tiers"
 
 	"encore.dev/beta/errs"
 	"encore.dev/storage/sqldb"
@@ -187,7 +189,7 @@ func RecordDownload(ctx context.Context, comicId string) (*DownloadResponse, err
 		}
 	}
 
-	limit := quotaLimit(ad.Tier)
+	limit := quotaLimit(ctx, ad.Tier, ad.UserID)
 	used, err := countDownloadsThisMonth(ctx, ad.UserID)
 	if err != nil {
 		used = 0
@@ -198,7 +200,7 @@ func RecordDownload(ctx context.Context, comicId string) (*DownloadResponse, err
 			Allowed: false,
 			Used:    used,
 			Limit:   limit,
-			Message: "Download quota exceeded. Upgrade your plan to download more.",
+			Message: "Download quota exceeded. Boost your quota or upgrade your plan to download more.",
 		}, nil
 	}
 
@@ -216,21 +218,62 @@ func RecordDownload(ctx context.Context, comicId string) (*DownloadResponse, err
 	}, nil
 }
 
-func quotaLimit(tier string) int {
+func quotaLimit(ctx context.Context, tier, userID string) int {
+	// Fallback defaults used only when the tiers config is unavailable.
+	base := 5
 	switch tier {
-	case "free":
-		return 5
 	case "bronze":
-		return 50
+		base = 50
 	case "silver":
-		return 200
-	case "gold":
-		return 999999
-	case "platinum":
-		return 999999
-	default:
-		return 5
+		base = 200
+	case "gold", "platinum":
+		base = 999999
 	}
+
+	if quotas, err := mytiers.GetTierQuotas(ctx); err == nil {
+		m := make(map[string]int, len(quotas.Quotas))
+		for _, q := range quotas.Quotas {
+			m[q.Name] = q.Quota
+		}
+		if v, ok := m[strings.ToLower(tier)]; ok {
+			base = v
+		} else if v, ok := m["free"]; ok {
+			base = v
+		}
+	}
+
+	var boosted int
+	db.QueryRow(ctx, `SELECT COALESCE(SUM(downloads), 0) FROM quota_boosts WHERE user_id = $1`, userID).Scan(&boosted)
+	return base + boosted
+}
+
+type QuotaStatusResponse struct {
+	Used  int `json:"used"`
+	Limit int `json:"limit"`
+}
+
+//encore:api auth method=GET path=/me/quota
+func GetQuotaStatus(ctx context.Context) (*QuotaStatusResponse, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	limit := quotaLimit(ctx, ad.Tier, ad.UserID)
+	used, _ := countDownloadsThisMonth(ctx, ad.UserID)
+	return &QuotaStatusResponse{Used: used, Limit: limit}, nil
+}
+
+type GrantBoostParams struct {
+	UserID    string `json:"user_id"`
+	Downloads int    `json:"downloads"`
+}
+
+// GrantBoost grants a purchased quota boost to a user. Called by the billing
+// service when a boost deposit is confirmed.
+//encore:api private method=POST path=/quota/grant-boost
+func GrantBoost(ctx context.Context, p *GrantBoostParams) error {
+	if p.Downloads <= 0 {
+		return &errs.Error{Code: errs.InvalidArgument, Message: "downloads must be positive"}
+	}
+	_, err := db.Exec(ctx, `INSERT INTO quota_boosts (user_id, downloads) VALUES ($1, $2)`, p.UserID, p.Downloads)
+	return err
 }
 
 func countDownloadsThisMonth(ctx context.Context, userID string) (int, error) {
@@ -246,14 +289,46 @@ type ReadingStats struct {
 	TotalDownloads int `json:"total_downloads"`
 }
 
-//encore:api auth method=GET path=/admin/reading-stats
+//encore:api private
 func GetReadingStats(ctx context.Context) (*ReadingStats, error) {
-	ad := auth.Data().(*myauth.AuthData)
-	if ad.Role != "admin" {
-		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
-	}
-
 	var stats ReadingStats
 	db.QueryRow(ctx, `SELECT COUNT(*) FROM download_logs`).Scan(&stats.TotalDownloads)
 	return &stats, nil
+}
+
+type DownloadTrendPoint struct {
+	Day   string `json:"day"`
+	Count int    `json:"count"`
+}
+
+type DownloadTrendResponse struct {
+	Points []DownloadTrendPoint `json:"points"`
+}
+
+//encore:api private
+func GetDownloadTrend(ctx context.Context) (*DownloadTrendResponse, error) {
+	rows, err := db.Query(ctx, `
+		SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day, COUNT(*)
+		FROM download_logs
+		WHERE created_at >= now() - interval '30 days'
+		GROUP BY 1
+		ORDER BY 1 ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	points := []DownloadTrendPoint{}
+	for rows.Next() {
+		var p DownloadTrendPoint
+		if err := rows.Scan(&p.Day, &p.Count); err != nil {
+			return nil, err
+		}
+		points = append(points, p)
+	}
+	if points == nil {
+		points = []DownloadTrendPoint{}
+	}
+	return &DownloadTrendResponse{Points: points}, rows.Err()
 }

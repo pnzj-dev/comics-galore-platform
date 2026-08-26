@@ -128,6 +128,50 @@ func AdminRevokeSubscription(ctx context.Context, id string) error {
 	return err
 }
 
+// ----- User-facing subscription management -----
+
+type MySubscription struct {
+	ID       string     `json:"id"`
+	Tier     string     `json:"tier"`
+	Status   string     `json:"status"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+}
+
+//encore:api auth method=GET path=/billing/my-subscription
+func GetMySubscription(ctx context.Context) (*MySubscription, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	var s MySubscription
+	err := db.QueryRow(ctx, `
+		SELECT id, tier, status, expires_at
+		FROM subscriptions
+		WHERE user_id = $1 AND active = true
+		ORDER BY created_at DESC LIMIT 1
+	`, ad.UserID).Scan(&s.ID, &s.Tier, &s.Status, &s.ExpiresAt)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &s, nil
+}
+
+//encore:api auth method=POST path=/billing/cancel-subscription
+func CancelMySubscription(ctx context.Context) error {
+	ad := auth.Data().(*myauth.AuthData)
+	res, err := db.Exec(ctx, `
+		UPDATE subscriptions SET active = false, status = 'cancelled', updated_at = now()
+		WHERE user_id = $1 AND active = true
+	`, ad.UserID)
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() > 0 {
+		myauth.SetUserTier(ctx, &myauth.SetUserTierParams{UserID: ad.UserID, Tier: "free"})
+	}
+	return nil
+}
+
 // ----- Past-due / failed payments -----
 
 type PastDuePayment struct {

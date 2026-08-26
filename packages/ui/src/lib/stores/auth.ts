@@ -57,8 +57,11 @@ export async function fetchMe(): Promise<User | null> {
 	}
 }
 
-export function logout() {
+export function logout(redirectTo?: string) {
 	clearToken();
 	currentUser.set(null);
 	isAuthenticated.set(false);
+	if (redirectTo) {
+		window.location.assign(redirectTo);
+	}
 }

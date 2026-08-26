@@ -121,8 +121,9 @@ func DevSeedEngagement(ctx context.Context, p *SeedParams) (*SeedEngagementRespo
 		} else {
 			db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM favorites WHERE user_id = $1 AND comic_id = $2)`, r.UserID, r.ComicID).Scan(&exists)
 			if !exists {
-				db.Exec(ctx, `INSERT INTO favorites (user_id, comic_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, r.UserID, r.ComicID)
-				db.Exec(ctx, `UPDATE comics SET fav_count = fav_count + 1 WHERE id = $1`, r.ComicID)
+			db.Exec(ctx, `INSERT INTO favorites (user_id, comic_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, r.UserID, r.ComicID)
+			db.Exec(ctx, `UPDATE comics SET fav_count = fav_count + 1 WHERE id = $1`, r.ComicID)
+			db.Exec(ctx, `UPDATE series SET hearts_count = hearts_count + 1 WHERE id = (SELECT series_id FROM comics WHERE id = $1)`, r.ComicID)
 				reactionCount++
 			}
 		}

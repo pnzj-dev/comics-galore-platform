@@ -33,11 +33,12 @@ func init() {
 }
 
 type Tier struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	SortOrder   int       `json:"sort_order"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Description    string    `json:"description"`
+	SortOrder      int       `json:"sort_order"`
+	QuotaDownloads int       `json:"quota_downloads"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 type Plan struct {
@@ -46,7 +47,6 @@ type Plan struct {
 	Name                 string    `json:"name"`
 	Interval             string    `json:"interval"`
 	PriceUsdCents        int       `json:"price_usd_cents"`
-	QuotaDownloads       int       `json:"quota_downloads"`
 	Features             []string  `json:"features"`
 	IsActive             bool      `json:"is_active"`
 	ProviderPlanID       string    `json:"provider_plan_id,omitempty"`
@@ -57,7 +57,7 @@ type Plan struct {
 //encore:api public method=GET path=/tiers
 func ListTiers(ctx context.Context) (*ListTiersResponse, error) {
 	rows, err := db.Query(ctx, `
-		SELECT id, name, description, sort_order, created_at
+		SELECT id, name, description, sort_order, quota_downloads, created_at
 		FROM tiers
 		ORDER BY sort_order ASC
 	`)
@@ -69,7 +69,7 @@ func ListTiers(ctx context.Context) (*ListTiersResponse, error) {
 	var tiers []Tier
 	for rows.Next() {
 		var t Tier
-		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &t.SortOrder, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &t.SortOrder, &t.QuotaDownloads, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		tiers = append(tiers, t)
@@ -89,9 +89,9 @@ type ListTiersResponse struct {
 func GetTier(ctx context.Context, id string) (*Tier, error) {
 	var t Tier
 	err := db.QueryRow(ctx, `
-		SELECT id, name, description, sort_order, created_at
+		SELECT id, name, description, sort_order, quota_downloads, created_at
 		FROM tiers WHERE id = $1
-	`, id).Scan(&t.ID, &t.Name, &t.Description, &t.SortOrder, &t.CreatedAt)
+	`, id).Scan(&t.ID, &t.Name, &t.Description, &t.SortOrder, &t.QuotaDownloads, &t.CreatedAt)
 	if err != nil {
 		if isNoRows(err) {
 			return nil, &errs.Error{
@@ -104,11 +104,72 @@ func GetTier(ctx context.Context, id string) (*Tier, error) {
 	return &t, nil
 }
 
+// ----- Tier download quota -----
+
+type TierQuota struct {
+	Name  string `json:"name"`
+	Quota int    `json:"quota_downloads"`
+}
+
+type TierQuotasResponse struct {
+	Quotas []TierQuota `json:"quotas"`
+}
+
+// GetTierQuotas exposes the per-tier download quota to the reading service for
+// enforcement (which may not read the tiers database directly — ADR 0016).
+// Names are lowercased to match the user's tier string (e.g. "bronze").
+//encore:api private method=GET path=/internal/tier-quotas
+func GetTierQuotas(ctx context.Context) (*TierQuotasResponse, error) {
+	rows, err := db.Query(ctx, `SELECT LOWER(name), quota_downloads FROM tiers ORDER BY sort_order ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	quotas := make([]TierQuota, 0)
+	for rows.Next() {
+		var q TierQuota
+		if err := rows.Scan(&q.Name, &q.Quota); err != nil {
+			return nil, err
+		}
+		quotas = append(quotas, q)
+	}
+	return &TierQuotasResponse{Quotas: quotas}, rows.Err()
+}
+
+type TierQuotaUpdate struct {
+	TierID         string `json:"tier_id"`
+	QuotaDownloads int    `json:"quota_downloads"`
+}
+
+type UpdateTierQuotasParams struct {
+	Quotas []TierQuotaUpdate `json:"quotas"`
+}
+
+//encore:api auth method=POST path=/admin/tiers/quota
+func AdminUpdateTierQuotas(ctx context.Context, p *UpdateTierQuotasParams) (*TierQuotasResponse, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	for _, q := range p.Quotas {
+		if q.TierID == "" || q.QuotaDownloads < 0 {
+			return nil, &errs.Error{Code: errs.InvalidArgument, Message: "tier_id and a non-negative quota_downloads are required"}
+		}
+		if _, err := db.Exec(ctx, `UPDATE tiers SET quota_downloads = $1 WHERE id = $2`, q.QuotaDownloads, q.TierID); err != nil {
+			return nil, err
+		}
+	}
+
+	return GetTierQuotas(ctx)
+}
+
 //encore:api public method=GET path=/plans
 func ListPlans(ctx context.Context) (*ListPlansResponse, error) {
 	rows, err := db.Query(ctx, `
 		SELECT plans.id, plans.tier_id, COALESCE(plans.name, t.name || ' ' || plans.interval) as name, plans.interval,
-			plans.price_usd_cents, plans.quota_downloads, COALESCE(plans.features, '[]'),
+			plans.price_usd_cents, COALESCE(plans.features, '[]'),
 			plans.is_active, COALESCE(plans.provider_plan_id, ''), COALESCE(plans.provider_interval_days, 0), plans.created_at
 		FROM plans LEFT JOIN tiers t ON t.id = plans.tier_id
 		ORDER BY plans.price_usd_cents ASC
@@ -123,7 +184,7 @@ func ListPlans(ctx context.Context) (*ListPlansResponse, error) {
 		var p Plan
 		var featuresJSON []byte
 		if err := rows.Scan(&p.ID, &p.TierID, &p.Name, &p.Interval, &p.PriceUsdCents,
-			&p.QuotaDownloads, &featuresJSON, &p.IsActive, &p.ProviderPlanID,
+			&featuresJSON, &p.IsActive, &p.ProviderPlanID,
 			&p.ProviderIntervalDays, &p.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -175,7 +236,7 @@ type MatrixStatus struct {
 //encore:api public method=GET path=/plans/ready
 func PlansReady(ctx context.Context) (*MatrixStatus, error) {
 	var count int
-	db.QueryRow(ctx, `SELECT COUNT(*) FROM plans WHERE provider_plan_id IS NULL OR provider_plan_id = ''`).Scan(&count)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM plans WHERE (provider_plan_id IS NULL OR provider_plan_id = '') AND price_usd_cents > 0`).Scan(&count)
 	return &MatrixStatus{Complete: count == 0}, nil
 }
 
@@ -187,7 +248,7 @@ func PlanMatrixStatus(ctx context.Context) (*MatrixStatus, error) {
 	}
 
 	var count int
-	db.QueryRow(ctx, `SELECT COUNT(*) FROM plans WHERE provider_plan_id IS NULL OR provider_plan_id = ''`).Scan(&count)
+	db.QueryRow(ctx, `SELECT COUNT(*) FROM plans WHERE (provider_plan_id IS NULL OR provider_plan_id = '') AND price_usd_cents > 0`).Scan(&count)
 	return &MatrixStatus{Complete: count == 0}, nil
 }
 
@@ -223,12 +284,8 @@ type AutoLinkPlanResponse struct {
 	PlanName       string `json:"plan_name"`
 }
 
-type AutoLinkPlanParams struct {
-	Host string `header:"Host"`
-}
-
 //encore:api auth method=POST path=/admin/plans/link/:id
-func AutoLinkPlan(ctx context.Context, id string, p *AutoLinkPlanParams) (*AutoLinkPlanResponse, error) {
+func AutoLinkPlan(ctx context.Context, id string) (*AutoLinkPlanResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 	if ad.Role != "admin" {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
@@ -270,7 +327,7 @@ func AutoLinkPlan(ctx context.Context, id string, p *AutoLinkPlanParams) (*AutoL
 		Name:           displayName,
 		PriceAmount:    float64(plan.PriceUsdCents) / 100.0,
 		Period:         period,
-		IPNCallbackURL: nowpayments.BuildCallbackURL(p.Host, secrets.NgrokURL, "/webhooks/nowpayments/subscription"),
+		IPNCallbackURL: nowpayments.BuildCallbackURL(secrets.NgrokURL, "/webhooks/nowpayments/subscription"),
 	})
 	if err != nil {
 		return nil, &errs.Error{Code: errs.Internal, Message: "nowpayments plan creation failed: " + err.Error()}
@@ -306,6 +363,23 @@ func UnlinkAllPlans(ctx context.Context) (*UnlinkAllPlansResponse, error) {
 	return &UnlinkAllPlansResponse{Count: int(count)}, nil
 }
 
+//encore:api auth method=POST path=/admin/plans/unlink/:id
+func UnlinkPlan(ctx context.Context, id string) error {
+	ad := auth.Data().(*myauth.AuthData)
+	if ad.Role != "admin" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
+	}
+
+	result, err := db.Exec(ctx, `UPDATE plans SET provider_plan_id = NULL WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return &errs.Error{Code: errs.NotFound, Message: "plan not found"}
+	}
+	return nil
+}
+
 func intervalToPeriod(interval string) string {
 	switch strings.ToLower(interval) {
 	case "daily":
@@ -314,6 +388,10 @@ func intervalToPeriod(interval string) string {
 		return "week"
 	case "monthly":
 		return "month"
+	case "quarterly":
+		return "quarter"
+	case "semesterly":
+		return "semester"
 	case "yearly":
 		return "year"
 	default:

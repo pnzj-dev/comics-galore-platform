@@ -46,7 +46,7 @@
 		class: className,
 		variant = "default",
 		size = "default",
-		ref = $bindable<HTMLButtonElement | HTMLAnchorElement | null>(null),
+		ref = $bindable(null),
 		href = undefined,
 		type = "button",
 		disabled,
