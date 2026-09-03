@@ -1816,10 +1816,11 @@ func ListSeries(ctx context.Context) (*ListSeriesResponse, error) {
 }
 
 type SearchSeriesParams struct {
-	Search   string `query:"search"`
-	Category string `query:"category"`
-	Page     int    `query:"page"`
-	Limit    int    `query:"limit"`
+	Search      string `query:"search"`
+	SearchField string `query:"search_field"`
+	Category    string `query:"category"`
+	Page        int    `query:"page"`
+	Limit       int    `query:"limit"`
 }
 
 //encore:api public method=GET path=/series-search
@@ -1835,9 +1836,21 @@ func SearchSeries(ctx context.Context, p *SearchSeriesParams) (*ListSeriesRespon
 	args := []interface{}{}
 	argIdx := 1
 	if p.Search != "" {
-		where += fmt.Sprintf(" AND (title ILIKE $%d OR slug ILIKE $%d)", argIdx, argIdx)
-		args = append(args, "%"+p.Search+"%")
-		argIdx++
+		pattern := "%" + p.Search + "%"
+		switch p.SearchField {
+		case "title":
+			where += fmt.Sprintf(" AND title ILIKE $%d", argIdx)
+			args = append(args, pattern)
+			argIdx++
+		case "description":
+			where += fmt.Sprintf(" AND description ILIKE $%d", argIdx)
+			args = append(args, pattern)
+			argIdx++
+		default:
+			where += fmt.Sprintf(" AND (title ILIKE $%d OR slug ILIKE $%d OR description ILIKE $%d)", argIdx, argIdx+1, argIdx+2)
+			args = append(args, pattern, pattern, pattern)
+			argIdx += 3
+		}
 	}
 	if p.Category != "" {
 		where += fmt.Sprintf(" AND category = $%d", argIdx)
@@ -1891,11 +1904,11 @@ func ListSeriesCategories(ctx context.Context) (*SeriesCategoriesResponse, error
 	return &SeriesCategoriesResponse{Categories: cats}, nil
 }
 
-//encore:api public method=GET path=/series/:id
-func GetSeries(ctx context.Context, id string) (*Series, error) {
+//encore:api public method=GET path=/series/:slug
+func GetSeries(ctx context.Context, slug string) (*Series, error) {
 	var s Series
 	var scheduleDay sql.NullString
-	err := db.QueryRow(ctx, `SELECT id, title, slug, description, uploader_id, cover_key, genre, category, overlay_title, views_count, hearts_count, schedule_day, created_at FROM series WHERE id = $1`, id).Scan(
+	err := db.QueryRow(ctx, `SELECT id, title, slug, description, uploader_id, cover_key, genre, category, overlay_title, views_count, hearts_count, schedule_day, created_at FROM series WHERE slug = $1`, slug).Scan(
 		&s.ID, &s.Title, &s.Slug, &s.Description, &s.UploaderID, &s.CoverKey, &s.Genre, &s.Category, &s.OverlayTitle, &s.ViewsCount, &s.HeartsCount, &scheduleDay, &s.CreatedAt,
 	)
 	if err != nil {

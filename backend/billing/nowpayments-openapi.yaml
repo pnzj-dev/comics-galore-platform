@@ -3,184 +3,807 @@ info:
   title: NOWPayments API
   version: 1.0.0
   description: |
-    NOWPayments is a cryptocurrency payment processing platform.
-    Accept payments in a wide range of cryptos and get them instantly
-    converted into a coin of your choice.
+    NOWPayments is a cryptocurrency payment processing platform. Accept payments
+    in a wide range of cryptos and get them instantly converted into a coin of
+    your choice and sent to your Custody balance.
 
-    Authentication: Sign up at nowpayments.io, set up Primary balance,
-    and generate an IPN secret key.
+    # Authentication
+    - Sign up at https://nowpayments.io, set up your Primary balance, and generate
+      an IPN secret key (shown fully only once at creation).
+    - API key: sent via the `x-api-key` header.
+    - JWT: `POST /v1/auth` with your dashboard email + password returns a token
+      (expires in 5 minutes); send it as `Authorization: Bearer <token>` for
+      endpoints that require it (list payments, payouts, conversions, sub-partner
+      management, subscription create/update/delete).
 
-    Integration Guide: https://nowpayments.notion.site/NOWPayments-Integration-Guide-40c516d0d940489d903b61efc002ba47
+    # IPN (Instant Payment Notifications)
+    - Provide `ipn_callback_url` in the create request.
+    - The callback is a POST with an `x-nowpayments-sig` header (HMAC-SHA512 over
+      the sorted-key JSON body, using the IPN secret key).
+    - No callbacks are sent after a payment expires.
 
-    IPN (Instant Payment Notifications):
-    - Generate IPN Secret key in Payment Settings
-    - Provide ipn_callback_url in create_payment request
-    - Verify webhook signatures with HMAC-SHA512 sorted-keys method
-    - Whitelist NOWPayments IPs if behind Cloudflare
+    # Response envelope
+    Recurring-payments and customer-management (custody) endpoints wrap their
+    payload in a top-level `result` object.
 
-    Key endpoints used in v1:
-    - GET  /v1/status          - API availability check
-    - GET  /v1/estimate        - Live crypto price estimate
-    - POST /v1/payment         - Create payment (returns pay_address)
-    - POST /v1/invoice         - Create invoice payment link
-    - GET  /v1/payment/{id}    - Get payment status
-    - POST /v1/sub-partner/balance  - Create customer account -> sub_partner_id
-    - GET  /v1/sub-partner/balance/{id} - Check customer balance
-    - POST /v1/sub-partner/payment     - Deposit with payment (top-up)
-    - POST /v1/subscriptions           - Create recurring payment (subscription)
-    - POST /v1/subscriptions/plans     - Create/manage subscription plans
-    - GET  /v1/subscriptions/plans     - List subscription plans
-    - GET  /v1/subscriptions/{sub_id}  - Get recurring payment status
-    - DELETE /v1/subscriptions/{sub_id} - Delete recurring payment
-    - GET  /v1/balance         - Get master account balance
+    **KNOWN DOCUMENTATION BUG** — `POST /v1/subscriptions` ("Create recurring
+    payments" / "Create an email subscription") returns `result` as an **array**
+    in practice, even though the docs show a single object. The Go client
+    (`CreateSubscription`) parses both shapes.
 
-    Webhook IPN body example (payments):
-    {
-      "payment_id": 123456789,
-      "parent_payment_id": 987654321,
-      "invoice_id": null,
-      "payment_status": "finished",
-      "pay_address": "address",
-      "price_amount": 1,
-      "price_currency": "usd",
-      "pay_amount": 15,
-      "actually_paid": 15,
-      "pay_currency": "trx",
-      "order_id": null,
-      "purchase_id": "123456789",
-      "outcome_amount": 14.8106,
-      "outcome_currency": "trx"
-    }
+    # Integration guide
+    https://nowpayments.notion.site/NOWPayments-Integration-Guide-40c516d0d940489d903b61efc002ba47
 
-    Webhook IPN body example (recurring payments):
-    {
-      "id": "1234567890",
-      "status": "FINISHED",
-      "currency": "trx",
-      "amount": "12.171365564140688",
-      "ipn_callback_url": "callback_url",
-      "created_at": "2023-07-26T14:20:11.531Z",
-      "updated_at": "2023-07-26T14:20:21.079Z"
-    }
+    # Repeated / wrong-asset deposits
+    Track `parent_payment_id` in IPNs; verify amount + asset + network before
+    fulfilling orders. Wrong-asset deposits require manual resolution unless
+    auto-processing is enabled.
 servers:
   - url: https://api.nowpayments.io
+tags:
+  - name: Auth and API status
+  - name: Currencies
+  - name: Payments
+  - name: Mass payouts
+  - name: Conversions
+  - name: Customer management
+  - name: Recurring Payments API (Email Subscriptions feature)
+  - name: Fiat payouts
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
 paths:
   /v1/status:
     get:
       summary: Get API status
       tags: [Auth and API status]
-  /v1/estimate:
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+              example: { message: OK }
+  /v1/auth:
+    post:
+      summary: Authentication
+      tags: [Auth and API status]
+      description: Obtain a JWT token (email + password, case-sensitive).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+  /v1/currencies:
     get:
-      summary: Get estimated price in crypto
+      summary: Get available currencies
+      tags: [Currencies]
+      parameters:
+        - { name: fixed_rate, in: query, schema: { type: boolean } }
+        - { $ref: '#/components/parameters/apiKey' }
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currencies: { type: array, items: { type: string } }
+  /v1/full-currencies:
+    get:
+      summary: Get available currencies (detailed)
+      tags: [Currencies]
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currencies:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        code: { type: string }
+                        name: { type: string }
+                        enable: { type: boolean }
+                        wallet_regex: { type: string }
+                        priority: { type: integer }
+                        extra_id_exists: { type: boolean }
+                        extra_id_regex: { type: string, nullable: true }
+                        logo_url: { type: string }
+                        track: { type: boolean }
+                        cg_id: { type: string }
+                        is_maxlimit: { type: boolean }
+                        network: { type: string }
+                        smart_contract: { type: string, nullable: true }
+                        network_precision: { type: integer, nullable: true }
+  /v1/merchant/coins:
+    get:
+      summary: Get available checked currencies
+      description: The coins you set as available for payments in "coins settings".
+      tags: [Currencies]
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currencies: { type: array, items: { type: string } }
+  /v1/min-amount:
+    get:
+      summary: Get the minimum payment amount
       tags: [Payments]
       parameters:
-        - name: amount
-          in: query
-          schema: { type: number }
-        - name: currency_from
-          in: query
-          schema: { type: string }
-        - name: currency_to
-          in: query
-          schema: { type: string }
-        - name: x-api-key
-          in: header
-          schema: { type: string }
+        - { name: currency_from, in: query, required: true, schema: { type: string } }
+        - { name: currency_to, in: query, required: true, schema: { type: string } }
+        - { name: fiat_equivalent, in: query, schema: { type: string } }
+        - { name: is_fixed_rate, in: query, schema: { type: string } }
+        - { name: is_fee_paid_by_user, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currency_from: { type: string }
+                  currency_to: { type: string }
+                  min_amount: { type: number }
+                  fiat_equivalent: { type: number }
+  /v1/invoice:
+    post:
+      summary: Create invoice
+      description: Creates a payment link (customer follows `invoice_url`).
+      tags: [Payments]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                price_amount: { type: number }
+                price_currency: { type: string }
+                pay_currency: { type: string }
+                ipn_callback_url: { type: string }
+                order_id: { type: string }
+                order_description: { type: string }
+                success_url: { type: string }
+                cancel_url: { type: string }
+                partially_paid_url: { type: string }
+                is_fixed_rate: { type: boolean }
+                is_fee_paid_by_user: { type: boolean }
+      responses:
+        '201':
+          description: '201'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  invoice_url: { type: string }
+                  price_amount: { type: string }
+                  price_currency: { type: string }
+                  pay_currency: { type: string, nullable: true }
+                  ipn_callback_url: { type: string }
+                  success_url: { type: string }
+                  cancel_url: { type: string }
+                  created_at: { type: string }
+                  updated_at: { type: string }
   /v1/payment:
     post:
-      summary: Create payment (returns pay_address + pay_amount)
+      summary: Create payment
+      description: Creates a payment and returns `pay_address` + `pay_amount`.
+      tags: [Payments]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                price_amount: { type: number }
+                price_currency: { type: string }
+                pay_currency: { type: string }
+                pay_amount: { type: number }
+                ipn_callback_url: { type: string }
+                order_id: { type: string }
+                order_description: { type: string }
+                is_fixed_rate: { type: boolean }
+                is_fee_paid_by_user: { type: boolean }
+      responses:
+        '201':
+          description: '201'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+  /v1/invoice-payment:
+    post:
+      summary: Create payment by invoice
+      tags: [Payments]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                iid: { type: string }
+                pay_currency: { type: string }
+                purchase_id: { type: string }
+                order_description: { type: string }
+                customer_email: { type: string }
+                payout_address: { type: string }
+                payout_extra_id: { type: string, nullable: true }
+                payout_currency: { type: string }
+      responses:
+        '201':
+          description: '201'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+  /v1/payment/{id}/update-merchant-estimate:
+    post:
+      summary: Get/Update payment estimate
       tags: [Payments]
       parameters:
-        - name: x-api-key
-          in: header
-          schema: { type: string }
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  token_id: { type: string }
+                  pay_amount: { type: number }
+                  expiration_estimate_date: { type: string }
+  /v1/estimate:
+    get:
+      summary: Get estimated price
+      tags: [Payments]
+      parameters:
+        - { name: amount, in: query, schema: { type: number } }
+        - { name: currency_from, in: query, schema: { type: string } }
+        - { name: currency_to, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currency_from: { type: string }
+                  amount_from: { type: number }
+                  currency_to: { type: string }
+                  estimated_amount: { type: number }
   /v1/payment/{payment_id}:
     get:
       summary: Get payment status
       tags: [Payments]
       parameters:
-        - name: payment_id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: x-api-key
-          in: header
-          schema: { type: string }
-  /v1/invoice:
-    post:
-      summary: Create invoice (returns invoice_url)
+        - { name: payment_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+  /v1/payment/:
+    get:
+      summary: Get list of payments
+      description: Requires JWT + API key.
       tags: [Payments]
       parameters:
-        - name: x-api-key
-          in: header
-          schema: { type: string }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: sortBy, in: query, schema: { type: string } }
+        - { name: orderBy, in: query, schema: { type: string } }
+        - { name: dateFrom, in: query, schema: { type: string } }
+        - { name: dateTo, in: query, schema: { type: string } }
+        - { name: invoiceId, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Payment' } }
+                  limit: { type: integer }
+                  page: { type: integer }
+                  pagesCount: { type: integer }
+                  total: { type: integer }
   /v1/balance:
     get:
-      summary: Get master account balances
+      summary: Get balance
+      description: Master account balances per currency.
+      tags: [Mass payouts]
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    amount: { type: number }
+                    pendingAmount: { type: number }
+  /v1/payout/validate-address:
+    post:
+      summary: Validate address
+      tags: [Mass payouts]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                address: { type: string }
+                currency: { type: string }
+                extra_id: { type: string }
+  /v1/payout:
+    post:
+      summary: Create payout
+      description: Requires JWT + API key and whitelisted IP/addresses.
+      tags: [Mass payouts]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ipn_callback_url: { type: string }
+                withdrawals:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      address: { type: string }
+                      currency: { type: string }
+                      amount: { type: number }
+                      ipn_callback_url: { type: string }
+                      payout_description: { type: string }
+    get:
+      summary: List of payouts
       tags: [Mass payouts]
       parameters:
-        - name: x-api-key
-          in: header
-          schema: { type: string }
+        - { name: batch_id, in: query, schema: { type: integer } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: order_by, in: query, schema: { type: string } }
+        - { name: order, in: query, schema: { type: string } }
+        - { name: date_from, in: query, schema: { type: string } }
+        - { name: date_to, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer } }
+  /v1/payout/{batch-withdrawal-id}/verify:
+    post:
+      summary: Verify payout
+      description: Requires 2FA `verification_code`.
+      tags: [Mass payouts]
+      parameters:
+        - { name: batch-withdrawal-id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                verification_code: { type: string }
+  /v1/payout/{payout_id}:
+    get:
+      summary: Get payout status
+      tags: [Mass payouts]
+      parameters:
+        - { name: payout_id, in: path, required: true, schema: { type: string } }
+  /v1/payout-withdrawal/min-amount/{coin}:
+    get:
+      summary: Get minimal amount for withdrawal
+      tags: [Mass payouts]
+      parameters:
+        - { name: coin, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  result: { type: number }
+  /v1/payout/fee:
+    get:
+      summary: Get withdrawal fee estimate
+      tags: [Mass payouts]
+      parameters:
+        - { name: currency, in: query, schema: { type: string } }
+        - { name: amount, in: query, schema: { type: integer } }
+  /v1/payout/{payout_id}/cancel:
+    post:
+      summary: Cancel a scheduled/recurring payout
+      tags: [Mass payouts]
+      parameters:
+        - { name: payout_id, in: path, required: true, schema: { type: string } }
+  /v1/payout/{batch_id}/cancel-batch:
+    post:
+      summary: Cancel a scheduled/recurring batch
+      tags: [Mass payouts]
+      parameters:
+        - { name: batch_id, in: path, required: true, schema: { type: string } }
+  /v1/conversion:
+    post:
+      summary: Create conversion
+      description: Requires JWT.
+      tags: [Conversions]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: number }
+                from_currency: { type: string }
+                to_currency: { type: string }
+    get:
+      summary: Get list of conversions
+      description: Requires JWT.
+      tags: [Conversions]
+      parameters:
+        - { name: id, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: from_currency, in: query, schema: { type: string } }
+        - { name: to_currency, in: query, schema: { type: string } }
+        - { name: created_at_from, in: query, schema: { type: string } }
+        - { name: created_at_to, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+        - { name: order, in: query, schema: { type: string } }
+  /v1/conversion/{conversion_id}:
+    get:
+      summary: Get conversion status
+      description: Requires JWT.
+      tags: [Conversions]
+      parameters:
+        - { name: conversion_id, in: path, required: true, schema: { type: string } }
   /v1/sub-partner/balance:
     post:
-      summary: Create customer account (returns sub_partner_id)
+      summary: Create new customer account
+      description: |
+        Creates a customer (sub-partner). Body `name` must be a unique string
+        ≤ 30 characters and MUST NOT be an email.
       tags: [Customer management]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+  /v1/subscriptions:
+    post:
+      summary: Create recurring payments
+      description: |
+        Creates a recurring charge from a user account. Requires JWT + API key.
+        Body uses `subscription_plan_id` + `sub_partner_id` (custody) or `email`
+        (email subscription).
+
+        **KNOWN DOCUMENTATION BUG**: the response `result` is an **array** in
+        practice, although the docs show a single object.
+      tags: [Customer management]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                subscription_plan_id: { type: integer }
+                sub_partner_id: { type: integer }
+                email: { type: string }
+    get:
+      summary: Get many recurring payments
+      tags: [Recurring Payments API (Email Subscriptions feature)]
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: subscription_plan_id, in: query, schema: { type: integer } }
+        - { name: is_active, in: query, schema: { type: boolean } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
   /v1/sub-partner/balance/{id}:
     get:
       summary: Get customer balance
+      description: Whitelisted IP required (or any API key if whitelisting is off).
       tags: [Customer management]
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: x-api-key
-          in: header
-          schema: { type: string }
+        - { name: id, in: path, required: true, schema: { type: string } }
+  /v1/sub-partner:
+    get:
+      summary: Get customers
+      description: Requires JWT.
+      tags: [Customer management]
+      parameters:
+        - { name: id, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: order, in: query, schema: { type: string } }
+  /v1/sub-partner/transfers:
+    get:
+      summary: Get all transfers
+      description: Requires JWT.
+      tags: [Customer management]
+      parameters:
+        - { name: id, in: query, schema: { type: integer } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+        - { name: order, in: query, schema: { type: string } }
+  /v1/sub-partner/transfer/{id}:
+    get:
+      summary: Get transfer
+      description: Requires JWT.
+      tags: [Customer management]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+  /v1/sub-partner/transfer:
+    post:
+      summary: Transfer
+      description: Transfer funds between customer accounts. Requires JWT.
+      tags: [Customer management]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currency: { type: string }
+                amount: { type: number }
+                from_id: { type: string }
+                to_id: { type: string }
   /v1/sub-partner/payment:
     post:
-      summary: Deposit with payment (top-up customer account)
+      summary: Deposit with payment
+      description: Top up a customer account with a general payment. Requires JWT + API key.
       tags: [Customer management]
-      parameters:
-        - name: x-api-key
-          in: header
-          schema: { type: string }
-  /v1/subscriptions:
-    post:
-      summary: Create recurring payment (subscription)
-      tags: [Customer management]
-      parameters:
-        - name: x-api-key
-          in: header
-          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currency: { type: string }
+                amount: { type: number }
+                sub_partner_id: { type: string }
+                is_fixed_rate: { type: boolean }
+                is_fee_paid_by_user: { type: boolean }
+                ipn_callback_url: { type: string }
+  /v1/sub-partner/payments:
     get:
-      summary: List recurring payments
-      tags: [Recurring Payments]
+      summary: Get customer payments
+      description: Requires JWT.
+      tags: [Customer management]
       parameters:
-        - name: x-api-key
-          in: header
-          schema: { type: string }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: id, in: query, schema: { type: string } }
+        - { name: pay_currency, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: sub_partner_id, in: query, schema: { type: string } }
+        - { name: date_from, in: query, schema: { type: string } }
+        - { name: date_to, in: query, schema: { type: string } }
+        - { name: orderBy, in: query, schema: { type: string } }
+        - { name: sortBy, in: query, schema: { type: string } }
+  /v1/sub-partner/deposit:
+    post:
+      summary: Deposit from your master account
+      description: Requires JWT.
+      tags: [Customer management]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currency: { type: string }
+                amount: { type: number }
+                sub_partner_id: { type: string }
+  /v1/sub-partner/write-off:
+    post:
+      summary: Write off on your account
+      description: Withdraw funds from a customer to your master account. Requires JWT.
+      tags: [Customer management]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currency: { type: string }
+                amount: { type: number }
+                sub_partner_id: { type: string }
+  /v1/fiat-payouts/providers:
+    get:
+      summary: Get available providers
+      description: Requires JWT.
+      tags: [Fiat payouts]
+  /v1/fiat-payouts/fiat-currencies:
+    get:
+      summary: Get available currencies
+      description: Requires JWT.
+      tags: [Fiat payouts]
+  /v1/fiat-payouts/crypto-currencies:
+    get:
+      summary: Get crypto currencies
+      description: Requires JWT.
+      tags: [Fiat payouts]
+      parameters:
+        - { name: provider, in: query, schema: { type: string } }
+        - { name: currency, in: query, schema: { type: string } }
+  /v1/fiat-payouts/payment-methods:
+    get:
+      summary: Get available payment methods
+      description: Requires JWT.
+      tags: [Fiat payouts]
+      parameters:
+        - { name: provider, in: query, schema: { type: string } }
+        - { name: currency, in: query, schema: { type: string } }
+  /v1/fiat-payouts/account:
+    post:
+      summary: Create an account
+      description: Requires JWT + API key.
+      tags: [Fiat payouts]
+  /v1/fiat-payouts/accounts:
+    get:
+      summary: Get accounts
+      description: Requires JWT.
+      tags: [Fiat payouts]
+  /v1/fiat-payouts:
+    post:
+      summary: Request payout
+      description: Requires JWT + API key.
+      tags: [Fiat payouts]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fiatCurrency: { type: string }
+                cryptoCurrency: { type: string }
+                amount: { type: integer }
+                provider: { type: string }
+    get:
+      summary: Get payouts
+      description: Requires JWT.
+      tags: [Fiat payouts]
   /v1/subscriptions/plans:
     post:
-      summary: Create subscription plan
-      tags: [Recurring Payments]
+      summary: Create plan
+      description: Requires JWT.
+      tags: [Recurring Payments API (Email Subscriptions feature)]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                interval_day: { type: integer }
+                amount: { type: number }
+                currency: { type: string }
+                ipn_callback_url: { type: string }
+                success_url: { type: string }
+                cancel_url: { type: string }
+                partially_paid_url: { type: string }
     get:
-      summary: List subscription plans
-      tags: [Recurring Payments]
+      summary: Get all plans
+      tags: [Recurring Payments API (Email Subscriptions feature)]
       parameters:
-        - name: x-api-key
-          in: header
-          schema: { type: string }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+  /v1/subscriptions/plans/{plan-id}:
+    patch:
+      summary: Update plan
+      description: Requires JWT.
+      tags: [Recurring Payments API (Email Subscriptions feature)]
+      parameters:
+        - { name: plan-id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                interval_day: { type: integer }
+                amount: { type: number }
+                currency: { type: string }
+    get:
+      summary: Get one plan
+      tags: [Recurring Payments API (Email Subscriptions feature)]
+      parameters:
+        - { name: plan-id, in: path, required: true, schema: { type: string } }
   /v1/subscriptions/{sub_id}:
     get:
-      summary: Get recurring payment status
-      tags: [Recurring Payments]
+      summary: Get one recurring payment
+      tags: [Recurring Payments API (Email Subscriptions feature)]
       parameters:
-        - name: sub_id
-          in: path
-          required: true
-          schema: { type: string }
-        - name: x-api-key
-          in: header
-          schema: { type: string }
+        - { name: sub_id, in: path, required: true, schema: { type: string } }
+    delete:
+      summary: Delete recurring payment
+      description: Requires JWT.
+      tags: [Recurring Payments API (Email Subscriptions feature)]
+      parameters:
+        - { name: sub_id, in: path, required: true, schema: { type: string } }
+components:
+  schemas:
+    Payment:
+      type: object
+      description: |
+        NowPayments payment object. ID/amount fields are returned as strings by
+        some endpoints and numbers by others.
+      properties:
+        payment_id: { type: string }
+        invoice_id: { type: string, nullable: true }
+        payment_status: { type: string }
+        pay_address: { type: string }
+        payin_extra_id: { type: string, nullable: true }
+        price_amount: { type: number }
+        price_currency: { type: string }
+        pay_amount: { type: number }
+        actually_paid: { type: number }
+        pay_currency: { type: string }
+        order_id: { type: string, nullable: true }
+        order_description: { type: string, nullable: true }
+        purchase_id: { type: string }
+        outcome_amount: { type: number }
+        outcome_currency: { type: string }
+        payout_hash: { type: string }
+        payin_hash: { type: string }
+        amount_received: { type: number }
+        smart_contract: { type: string }
+        network: { type: string }
+        network_precision: { type: integer }
+        time_limit: { type: string, nullable: true }
+        burning_percent: { type: string, nullable: true }
+        expiration_estimate_date: { type: string }
+        type: { type: string }
+        payment_extra_ids: { type: array, items: { type: string } }
+  parameters:
+    apiKey:
+      name: x-api-key
+      in: header
+      required: true
+      schema: { type: string }

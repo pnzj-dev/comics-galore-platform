@@ -71,6 +71,10 @@ type AppSettings struct {
 
 	// Upload: number of parts uploaded concurrently when splitting an archive.
 	UploadConcurrency int `json:"upload_concurrency"`
+
+	// Billing: comma-separated list of NowPayments currency codes offered at
+	// checkout (the "menu"). Empty means no filter (show all available coins).
+	CryptoCurrencies string `json:"crypto_currencies"`
 }
 
 var defaultPreferences = UserPreferences{
@@ -274,5 +278,6 @@ func defaultAppSettings() *AppSettings {
 		PagePreviewThreshold:      20,
 		UploadPartSizeMB:          100,
 		UploadConcurrency:         4,
+		CryptoCurrencies:          "btc,xrp,eth,usdttrc20,usdtsol,usdc,ltc,sol,xlm,pyusd",
 	}
 }

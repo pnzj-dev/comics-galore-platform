@@ -49,6 +49,10 @@ var secrets struct {
 
 	// Email (Resend)
 	ResendAPIKey string
+
+	// BootstrapSecret gates the one-time first-admin provisioning endpoint
+	// (/auth/bootstrap). Empty disables bootstrap entirely.
+	BootstrapSecret string
 }
 
 var npProvider *nowpayments.Provider

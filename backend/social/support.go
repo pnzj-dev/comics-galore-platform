@@ -134,10 +134,6 @@ func GetTicket(ctx context.Context, id string) (*TicketResponse, error) {
 func ReplyTicket(ctx context.Context, id string, p *ReplyTicketParams) (*SupportMessage, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
-	if err := turnstile.Verify(ctx, &turnstile.VerifyParams{Token: p.TurnstileToken, Action: "support_ticket"}); err != nil {
-		return nil, err
-	}
-
 	if p.Body == "" {
 		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "body is required"}
 	}
@@ -153,6 +149,13 @@ func ReplyTicket(ctx context.Context, id string, p *ReplyTicketParams) (*Support
 	isStaff := ad.Role == "admin" || ad.Role == "moderator"
 	if !isStaff && ownerID != ad.UserID {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "ticket not found"}
+	}
+
+	// Staff replies are trusted; only regular users must pass Turnstile.
+	if !isStaff {
+		if err := turnstile.Verify(ctx, &turnstile.VerifyParams{Token: p.TurnstileToken, Action: "support_ticket"}); err != nil {
+			return nil, err
+		}
 	}
 
 	var m SupportMessage
