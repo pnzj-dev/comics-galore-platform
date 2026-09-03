@@ -11,7 +11,7 @@ jobs:
     name: Backend (encore test)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Encore CLI
         run: |
           curl -L https://encore.dev/install.sh | bash
@@ -28,7 +28,7 @@ jobs:
       matrix:
         dir: [frontend-public, frontend-admin]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
