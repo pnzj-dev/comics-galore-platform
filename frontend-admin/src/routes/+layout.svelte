@@ -7,7 +7,7 @@
 	import { modal } from '$lib/stores/modal.svelte';
 	import LogoutConfirmationModal from '$lib/components/LogoutConfirmationModal.svelte';
 	import NowPaymentsLinkWizard from '$lib/components/NowPaymentsLinkWizard.svelte';
-	import { LayoutDashboard, Shield, Users, CreditCard, BookOpen, Trash2, Settings, LogOut, AlertTriangle, ArrowDownToLine, ReceiptText, LifeBuoy, Sparkles, Ticket, Activity, HardDrive } from 'lucide-svelte';
+	import { LayoutDashboard, Shield, Users, CreditCard, BookOpen, Trash2, Settings, LogOut, AlertTriangle, ArrowDownToLine, ReceiptText, LifeBuoy, Sparkles, Ticket, Activity, HardDrive, FlaskConical } from 'lucide-svelte';
 
 	let { data, children } = $props();
 	let planMatrixComplete = $state(true);
@@ -54,6 +54,7 @@
 				{ href: '/comics/recycle-bin', label: 'Recycle Bin', icon: Trash2 },
 				{ href: '/jobs', label: 'Background Jobs', icon: Activity },
 				{ href: '/storage', label: 'Storage', icon: HardDrive },
+				{ href: '/webhooks', label: 'Webhook Simulator', icon: FlaskConical },
 				{ href: '/settings', label: 'Settings', icon: Settings },
 			]
 			: [

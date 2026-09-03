@@ -7,7 +7,7 @@
 
 	interface Props {
 		mode?: 'modal' | 'page';
-		onSelect?: (planId: string, priceUsdCents: number) => void;
+		onSelect?: (selection: { planId: string; priceUsdCents: number; name: string; interval: string }) => void;
 	}
 
 	let { mode = 'modal', onSelect }: Props = $props();
@@ -141,7 +141,7 @@
 							</div>
 
 							{#if onSelect && !isFree}
-								<Button size="sm" onclick={() => onSelect(planIdFor(tier.id, selectedIntervals[tier.id] || 'monthly'), priceForInterval(tier.id, selectedIntervals[tier.id] || 'monthly'))}>{isModal ? 'Select' : 'Subscribe'}</Button>
+								<Button size="sm" onclick={() => onSelect({ planId: planIdFor(tier.id, selectedIntervals[tier.id] || 'monthly'), priceUsdCents: priceForInterval(tier.id, selectedIntervals[tier.id] || 'monthly'), name: tier.name, interval: selectedIntervals[tier.id] || 'monthly' })}>{isModal ? 'Select' : 'Subscribe'}</Button>
 							{/if}
 						</div>
 					</div>

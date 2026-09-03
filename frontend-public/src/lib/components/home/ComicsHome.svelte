@@ -26,6 +26,7 @@
 
 	export interface Series {
 		id: string;
+		slug: string;
 		title: string;
 		cover_url: string;
 		genre?: string;
@@ -170,7 +171,7 @@
 
 		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
 			{#each filteredDaily as item (item.id)}
-				<a href="/series/{item.id}" class="group flex flex-col gap-2" aria-label={item.title}>
+				<a href="/series/{item.slug}" class="group flex flex-col gap-2" aria-label={item.title}>
 					<div class="relative aspect-[3/4] overflow-hidden rounded-xl bg-muted transition group-hover:shadow-md">
 						<img
 							src={item.cover_url}

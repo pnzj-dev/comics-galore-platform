@@ -9,12 +9,12 @@
 
 	const user = $derived($currentUser);
 
-	function handleSelect(planId: string, priceUsdCents: number) {
+	function handleSelect(selection: { planId: string; priceUsdCents: number; name: string; interval: string }) {
 		if (!user) {
-			modal.open('register');
+			modal.open('login');
 			return;
 		}
-		setCheckoutPlan(planId, priceUsdCents);
+		setCheckoutPlan(selection.planId, selection.priceUsdCents, selection.name, selection.interval);
 		modal.open('checkout');
 	}
 </script>

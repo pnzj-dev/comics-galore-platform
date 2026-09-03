@@ -208,6 +208,12 @@ export namespace auth {
          * Upload: number of parts uploaded concurrently when splitting an archive.
          */
         "upload_concurrency": number
+
+        /**
+         * Billing: comma-separated list of NowPayments currency codes offered at
+         * checkout (the "menu"). Empty means no filter (show all available coins).
+         */
+        "crypto_currencies": string
     }
 
     export interface AuthParams {
@@ -850,6 +856,7 @@ export namespace billing {
         id: string
         "user_id": string
         "plan_id": string
+        "provider_subscription_id": string
         status: string
         active: boolean
         tier: string
@@ -912,6 +919,10 @@ export namespace billing {
         "pay_amount": number
         "pay_currency": string
         "plan_id": string
+        "payin_extra_id": string
+        network: string
+        "qr_data_url": string
+        "payment_uri": string
     }
 
     export interface CreateQuotaBoostParams {
@@ -924,6 +935,10 @@ export namespace billing {
         "pay_address": string
         "pay_amount": number
         "pay_currency": string
+        "payin_extra_id": string
+        network: string
+        "qr_data_url": string
+        "payment_uri": string
     }
 
     export interface CreateSubParams {
@@ -998,6 +1013,51 @@ export namespace billing {
         message: string
     }
 
+    export interface SimulateWebhookOutcome {
+        "subscription_active": boolean
+        "subscription_status": string
+        "deposit_completed": boolean
+        "boost_granted": boolean
+    }
+
+    export interface SimulateWebhookParams {
+        /**
+         * "deposit" | "subscription"
+         */
+        type: string
+
+        /**
+         * local deposit/subscription id
+         */
+        id: string
+
+        /**
+         * "finished" | "waiting" | "expired" | "failed" | "partially_paid" | ...
+         */
+        status: string
+
+        "dry_run": boolean
+    }
+
+    export interface SimulateWebhookRequestDetail {
+        method: string
+        path: string
+        query: { [key: string]: string[] }
+        signature: string
+        payload: JSONValue
+    }
+
+    export interface SimulateWebhookResponse {
+        request: SimulateWebhookRequestDetail
+        response: SimulateWebhookResponseDetail
+        outcome: SimulateWebhookOutcome
+    }
+
+    export interface SimulateWebhookResponseDetail {
+        "status_code": number
+        body: string
+    }
+
     export class ServiceClient {
         private baseClient: BaseClient
 
@@ -1025,6 +1085,7 @@ export namespace billing {
             this.PollDeposit = this.PollDeposit.bind(this)
             this.PollSubscription = this.PollSubscription.bind(this)
             this.RunWaitingPayExpiry = this.RunWaitingPayExpiry.bind(this)
+            this.SimulateWebhook = this.SimulateWebhook.bind(this)
             this.SubscriptionWebhook = this.SubscriptionWebhook.bind(this)
         }
 
@@ -1184,6 +1245,12 @@ export namespace billing {
          */
         public async RunWaitingPayExpiry(): Promise<void> {
             await this.baseClient.callTypedAPI("POST", `/admin/jobs/waiting-pay-expiry/run`)
+        }
+
+        public async SimulateWebhook(params: SimulateWebhookParams): Promise<SimulateWebhookResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/simulate-webhook`, JSON.stringify(params))
+            return await resp.json() as SimulateWebhookResponse
         }
 
         public async SubscriptionWebhook(method: "POST", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
@@ -1671,6 +1738,7 @@ export namespace comics {
 
     export interface SearchSeriesParams {
         Search: string
+        SearchField: string
         Category: string
         Page: number
         Limit: number
@@ -2073,9 +2141,9 @@ export namespace comics {
             return await resp.json() as PublicReadingListResponse
         }
 
-        public async GetSeries(id: string): Promise<Series> {
+        public async GetSeries(slug: string): Promise<Series> {
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/series/${encodeURIComponent(id)}`)
+            const resp = await this.baseClient.callTypedAPI("GET", `/series/${encodeURIComponent(slug)}`)
             return await resp.json() as Series
         }
 
@@ -2275,10 +2343,11 @@ export namespace comics {
         public async SearchSeries(params: SearchSeriesParams): Promise<ListSeriesResponse> {
             // Convert our params into the objects we need for the request
             const query = makeRecord<string, string | string[]>({
-                category: params.Category,
-                limit:    String(params.Limit),
-                page:     String(params.Page),
-                search:   params.Search,
+                category:       params.Category,
+                limit:          String(params.Limit),
+                page:           String(params.Page),
+                search:         params.Search,
+                "search_field": params.SearchField,
             })
 
             // Now make the actual call to the API

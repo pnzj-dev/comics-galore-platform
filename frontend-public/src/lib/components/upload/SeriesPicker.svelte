@@ -41,6 +41,7 @@
 		try {
 			const res = await encore.comics.SearchSeries({
 				Search: search || '',
+				SearchField: '',
 				Category: category || '',
 				Page: p,
 				Limit: 20,

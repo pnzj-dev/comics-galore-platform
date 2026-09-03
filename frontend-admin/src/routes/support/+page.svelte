@@ -36,7 +36,7 @@
 	async function sendReply() {
 		if (!reply.trim() || !activeId) return;
 		try {
-			const m = await encore.social.ReplyTicket(activeId, { body: reply });
+			const m = await encore.social.ReplyTicket(activeId, { body: reply, turnstile_token: '' });
 			thread = [...thread, m];
 			reply = '';
 		} catch (e) {

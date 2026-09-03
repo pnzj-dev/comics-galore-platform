@@ -9,6 +9,7 @@
 
 	interface Series {
 		id: string;
+		slug: string;
 		title: string;
 		cover_url: string;
 		genre?: string;
@@ -88,7 +89,7 @@
 					badge={item.badge}
 					overlay_title={item.overlay_title}
 					{size}
-					href="/series/{item.id}"
+					href="/series/{item.slug}"
 				/>
 			</div>
 		{/each}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { encore } from '$lib/api/encore';
 	import { modal } from '$lib/stores/modal.svelte';
 	import { checkoutPlan, clearCheckoutPlan } from '$lib/stores/checkout.svelte';
@@ -16,6 +17,8 @@
 	let screen = $state<Screen>('plans');
 	let selectedPlanId = $state('');
 	let selectedPriceUsdCents = $state(0);
+	let selectedPlanName = $state('');
+	let selectedInterval = $state('');
 	let selectedCrypto = $state('');
 	let subscriptionId = $state('');
 	let depositData = $state<any>(null);
@@ -31,9 +34,15 @@
 
 	$effect(() => {
 		if (!open) return;
-		if (checkoutPlan.planId) {
-			selectedPlanId = checkoutPlan.planId;
-			selectedPriceUsdCents = checkoutPlan.priceUsdCents;
+		const planId = untrack(() => checkoutPlan.planId);
+		const price = untrack(() => checkoutPlan.priceUsdCents);
+		const name = untrack(() => checkoutPlan.planName);
+		const interval = untrack(() => checkoutPlan.interval);
+		if (planId) {
+			selectedPlanId = planId;
+			selectedPriceUsdCents = price;
+			selectedPlanName = name;
+			selectedInterval = interval;
 			clearCheckoutPlan();
 			screen = 'crypto';
 		} else {
@@ -41,9 +50,11 @@
 		}
 	});
 
-	function goToCrypto(planId: string, priceUsdCents: number) {
-		selectedPlanId = planId;
-		selectedPriceUsdCents = priceUsdCents;
+	function goToCrypto(selection: { planId: string; priceUsdCents: number; name: string; interval: string }) {
+		selectedPlanId = selection.planId;
+		selectedPriceUsdCents = selection.priceUsdCents;
+		selectedPlanName = selection.name;
+		selectedInterval = selection.interval;
 		screen = 'crypto';
 	}
 
@@ -124,7 +135,7 @@
 				{#if screen === 'plans'}
 					<PlanGrid onSelect={goToCrypto} />
 				{:else if screen === 'crypto'}
-					<CryptoSelector planId={selectedPlanId} priceUsdCents={selectedPriceUsdCents} onBack={() => screen = 'plans'} onContinue={goToCheckout} />
+					<CryptoSelector planId={selectedPlanId} priceUsdCents={selectedPriceUsdCents} planName={selectedPlanName} interval={selectedInterval} onBack={() => screen = 'plans'} onContinue={goToCheckout} />
 				{:else if screen === 'processing'}
 					<ProcessingScreen subscriptionId={subscriptionId} onSuccess={onProcessingSuccess} onRetry={onRetryProcessing} />
 				{:else if screen === 'deposit'}
@@ -133,6 +144,9 @@
 						payAddress={depositData.pay_address}
 						payAmount={depositData.pay_amount}
 						payCurrency={depositData.pay_currency}
+						payinExtraId={depositData.payin_extra_id}
+						network={depositData.network}
+						qrDataUrl={depositData.qr_data_url}
 						planId={selectedPlanId}
 						crypto={selectedCrypto}
 						onSuccess={onDepositSuccess}
