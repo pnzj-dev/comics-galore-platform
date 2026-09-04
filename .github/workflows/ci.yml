@@ -23,7 +23,7 @@ jobs:
         run: encore test ./...
 
   frontend:
-    name: Frontend build
+    name: Frontend (unit tests + build)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -36,6 +36,9 @@ jobs:
           bun-version: latest
       - name: Install dependencies
         run: bun install
+      - name: Unit tests (${{ matrix.dir }})
+        working-directory: ${{ matrix.dir }}
+        run: bun run test:unit --run
       - name: Build (${{ matrix.dir }})
         working-directory: ${{ matrix.dir }}
         run: bun run build
