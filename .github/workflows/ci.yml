@@ -36,6 +36,9 @@ jobs:
           bun-version: latest
       - name: Install dependencies
         run: bun install
+      - name: Sync SvelteKit (${{ matrix.dir }})
+        working-directory: ${{ matrix.dir }}
+        run: bunx svelte-kit sync
       - name: Unit tests (${{ matrix.dir }})
         working-directory: ${{ matrix.dir }}
         run: bun run test:unit --run
