@@ -11,6 +11,7 @@ export const load: PageServerLoad = async ({ cookies, url }) => {
 	const [res, catsRes] = await Promise.all([
 		client.comics.SearchSeries({
 			Search: url.searchParams.get('search') || '',
+			SearchField: url.searchParams.get('search_field') || '',
 			Category: url.searchParams.get('category') || '',
 			Page: page,
 			Limit: limit,
@@ -25,6 +26,7 @@ export const load: PageServerLoad = async ({ cookies, url }) => {
 		page,
 		limit,
 		search: url.searchParams.get('search') || '',
+		searchField: url.searchParams.get('search_field') || '',
 		category: url.searchParams.get('category') || '',
 	};
 };

@@ -33,6 +33,7 @@
 		page_preview_threshold: 20,
 		upload_part_size_mb: 100,
 		upload_concurrency: 4,
+		crypto_currencies: 'btc,xrp,eth,usdttrc20,usdtsol,usdc,ltc,sol,xlm,pyusd',
 		// svelte-ignore state_referenced_locally
 		...(data.settings ?? {}),
 	});
@@ -235,6 +236,10 @@
 						<div class="flex items-start gap-2">
 							<span class="text-xs text-muted-foreground whitespace-nowrap pt-1.5">Meta</span>
 							<textarea bind:value={settings.default_meta_description} placeholder="SEO meta description..." class="flex-1 rounded-md border border-input bg-background px-2.5 py-1 text-xs resize-y" rows="2"></textarea>
+						</div>
+						<div class="flex items-start gap-2">
+							<span class="text-xs text-muted-foreground whitespace-nowrap pt-1.5">Currencies</span>
+							<input bind:value={settings.crypto_currencies} placeholder="btc,eth,usdttrc20,…" class="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs" />
 						</div>
 						<div class="flex items-center gap-2">
 							<span class="text-xs text-muted-foreground whitespace-nowrap">DL stream</span>

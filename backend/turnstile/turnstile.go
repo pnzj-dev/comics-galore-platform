@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"encore.dev"
 	"encore.dev/beta/errs"
 )
 
@@ -32,13 +33,16 @@ type VerifyParams struct {
 
 // Verify checks a Turnstile token via the Cloudflare siteverify endpoint.
 //
-// When TurnstileSecret is unset the check is inert (returns nil) so local
-// development works without Cloudflare configuration. Otherwise it fails
-// closed: the token must be present, redeem successfully, match the expected
-// action, and come from an allowed hostname.
+// When running as a unit test, or when TurnstileSecret is unset, the check is
+// inert (returns nil). Otherwise it fails closed: the token must be present,
+// redeem successfully, match the expected action, and come from an allowed
+// hostname.
 //
 //encore:api private method=POST path=/turnstile/verify
 func Verify(ctx context.Context, p *VerifyParams) error {
+	if encore.Meta().Environment.Type == encore.EnvTest {
+		return nil
+	}
 	if strings.TrimSpace(secrets.TurnstileSecret) == "" {
 		return nil
 	}

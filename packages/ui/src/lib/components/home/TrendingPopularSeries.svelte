@@ -25,6 +25,7 @@
 
 	interface SeriesItem {
 		id: string;
+		slug: string;
 		rank: number;
 		title: string;
 		genre: string;
@@ -180,7 +181,7 @@
 						genre={s.genre}
 						views_count={s.views_count}
 						hearts_count={s.hearts_count}
-						href="/series/{s.id}"
+						href="/series/{s.slug}"
 						size="md"
 					/>
 				</div>

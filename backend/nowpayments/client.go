@@ -189,20 +189,25 @@ func (p *Provider) EstimatePrice(ctx context.Context, req EstimateRequest) (*Est
 
 // ----- ListCurrencies (API key only) -----
 
-// ListCurrencies returns the cryptocurrencies the merchant has enabled for
-// payments (NowPayments "coins settings"), via GET /v1/merchant/coins.
+// ListCurrencies returns the cryptocurrencies the merchant accepts, preferring
+// the "checked" (enabled) coins and falling back to the full platform list.
 func (p *Provider) ListCurrencies(ctx context.Context) ([]string, error) {
-	resp, err := p.doRequest(ctx, "GET", npBaseURL+"/merchant/coins", nil)
-	if err != nil {
-		return nil, err
+	for _, path := range []string{"/merchant/coins", "/currencies"} {
+		resp, err := p.doRequest(ctx, "GET", npBaseURL+path, nil)
+		if err != nil {
+			return nil, err
+		}
+		var result struct {
+			Currencies []string `json:"currencies"`
+		}
+		if err := json.Unmarshal(resp, &result); err != nil {
+			return nil, err
+		}
+		if len(result.Currencies) > 0 {
+			return result.Currencies, nil
+		}
 	}
-	var result struct {
-		Currencies []string `json:"currencies"`
-	}
-	if err := json.Unmarshal(resp, &result); err != nil {
-		return nil, err
-	}
-	return result.Currencies, nil
+	return []string{}, nil
 }
 
 // ----- CheckBalance (API key only) -----
@@ -215,7 +220,11 @@ func (p *Provider) CheckBalance(ctx context.Context, subPartnerID string) (map[s
 		return nil, err
 	}
 
-	var raw struct {
+	result := make(map[string]BalanceEntry)
+
+	// Docs show `balances` as a map keyed by currency; the live API returns an
+	// array of {currency, amount, pendingAmount} objects. Handle both.
+	var obj struct {
 		Result struct {
 			Balances map[string]struct {
 				Amount        json.Number `json:"amount"`
@@ -223,15 +232,40 @@ func (p *Provider) CheckBalance(ctx context.Context, subPartnerID string) (map[s
 			} `json:"balances"`
 		} `json:"result"`
 	}
-	if err := json.Unmarshal(resp, &raw); err != nil {
-		return nil, err
+	if err := json.Unmarshal(resp, &obj); err == nil && len(obj.Result.Balances) > 0 {
+		for k, v := range obj.Result.Balances {
+			amt, _ := v.Amount.Float64()
+			pend, _ := v.PendingAmount.Float64()
+			result[strings.ToLower(k)] = BalanceEntry{Amount: amt, PendingAmount: pend}
+		}
+		return result, nil
 	}
 
-	result := make(map[string]BalanceEntry)
-	for k, v := range raw.Result.Balances {
+	var arr struct {
+		Result struct {
+			Balances []struct {
+				Currency      string      `json:"currency"`
+				CurrencyCode  string      `json:"currency_code"`
+				Amount        json.Number `json:"amount"`
+				PendingAmount json.Number `json:"pendingAmount"`
+			} `json:"balances"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &arr); err != nil {
+		return nil, err
+	}
+	for _, v := range arr.Result.Balances {
+		code := v.Currency
+		if code == "" {
+			code = v.CurrencyCode
+		}
+		code = strings.ToLower(strings.TrimSpace(code))
+		if code == "" {
+			continue
+		}
 		amt, _ := v.Amount.Float64()
 		pend, _ := v.PendingAmount.Float64()
-		result[k] = BalanceEntry{Amount: amt, PendingAmount: pend}
+		result[code] = BalanceEntry{Amount: amt, PendingAmount: pend}
 	}
 	return result, nil
 }
@@ -328,11 +362,10 @@ func (p *Provider) CreateSubscription(ctx context.Context, req SubscriptionReque
 // ----- CreateDeposit (JWT + API key) -----
 
 func (p *Provider) CreateDeposit(ctx context.Context, req DepositRequest) (*DepositResponse, error) {
-	subPartnerID, _ := strconv.Atoi(req.SubPartnerID)
 	body := map[string]interface{}{
 		"currency":            req.Crypto,
 		"amount":              req.AmountUSD,
-		"sub_partner_id":      subPartnerID,
+		"sub_partner_id":      req.SubPartnerID,
 		"ipn_callback_url":    req.IPNCallbackURL,
 		"is_fixed_rate":       false,
 		"is_fee_paid_by_user": false,
@@ -345,10 +378,13 @@ func (p *Provider) CreateDeposit(ctx context.Context, req DepositRequest) (*Depo
 
 	var result struct {
 		Result struct {
-			PaymentID   json.Number `json:"payment_id"`
-			PayAddress  string      `json:"pay_address"`
-			PayAmount   json.Number `json:"pay_amount"`
-			PayCurrency string      `json:"pay_currency"`
+			PaymentID        json.Number `json:"payment_id"`
+			PayAddress       string      `json:"pay_address"`
+			PayAmount        json.Number `json:"pay_amount"`
+			PayCurrency      string      `json:"pay_currency"`
+			PayinExtraID     string      `json:"payin_extra_id"`
+			Network          string      `json:"network"`
+			NetworkPrecision int         `json:"network_precision"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(resp, &result); err != nil {
@@ -357,10 +393,13 @@ func (p *Provider) CreateDeposit(ctx context.Context, req DepositRequest) (*Depo
 
 	payAmt, _ := result.Result.PayAmount.Float64()
 	return &DepositResponse{
-		PaymentID:   result.Result.PaymentID.String(),
-		PayAddress:  result.Result.PayAddress,
-		PayAmount:   payAmt,
-		PayCurrency: result.Result.PayCurrency,
+		PaymentID:       result.Result.PaymentID.String(),
+		PayAddress:      result.Result.PayAddress,
+		PayAmount:       payAmt,
+		PayCurrency:     result.Result.PayCurrency,
+		PayinExtraID:    result.Result.PayinExtraID,
+		Network:         result.Result.Network,
+		NetworkPrecision: result.Result.NetworkPrecision,
 	}, nil
 }
 

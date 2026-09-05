@@ -33,6 +33,14 @@ frontend/.svelte-kit
 frontend/build
 frontend/package
 
+# Frontend apps (public + admin)
+frontend-public/node_modules
+frontend-public/.svelte-kit
+frontend-public/build
+frontend-admin/node_modules
+frontend-admin/.svelte-kit
+frontend-admin/build
+
 # Desktop
 desktop/node_modules
 desktop/build

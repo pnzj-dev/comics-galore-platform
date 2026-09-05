@@ -5,12 +5,25 @@
 	import CoinIcon from '$lib/components/billing/CoinIcon.svelte';
 	import { isStablecoin, coinLabel } from '$lib/utils/crypto';
 
-	let { planId, priceUsdCents, onBack, onContinue }: {
+	let { planId, priceUsdCents, planName, interval, onBack, onContinue }: {
 		planId: string;
 		priceUsdCents: number;
+		planName?: string;
+		interval?: string;
 		onBack: () => void;
 		onContinue: (crypto: string) => void;
 	} = $props();
+
+	const intervalUnit: Record<string, string> = {
+		monthly: 'month',
+		quarterly: 'quarter',
+		semesterly: 'semester',
+		yearly: 'year',
+		lifetime: 'once'
+	};
+	const planLabel = $derived(planName ? planName : 'Selected plan');
+	const intervalLabel = $derived(interval ? interval.charAt(0).toUpperCase() + interval.slice(1) : '');
+	const unitLabel = $derived(interval && intervalUnit[interval] ? intervalUnit[interval] : '');
 
 	let cryptos = $state<string[]>([]);
 	let loading = $state(true);
@@ -19,11 +32,12 @@
 	let estimating = $state(false);
 	let stableSelected = $state(false);
 	let error = $state('');
+	let loadError = $state('');
 
 	let cachedCurrencies: string[] | null = null;
 
 	onMount(async () => {
-		if (cachedCurrencies) {
+		if (cachedCurrencies !== null) {
 			cryptos = cachedCurrencies;
 			loading = false;
 			return;
@@ -32,8 +46,10 @@
 			const res = await encore.billing.ListCurrencies();
 			cachedCurrencies = res.currencies || [];
 			cryptos = cachedCurrencies;
-		} catch {
+			loadError = '';
+		} catch (err) {
 			cryptos = [];
+			loadError = (err as Error).message || 'Could not load payment currencies.';
 		}
 		loading = false;
 	});
@@ -75,6 +91,17 @@
 		<button onclick={onBack} class="text-sm text-muted-foreground hover:text-foreground">&larr; Back to plans</button>
 	</div>
 
+	<div class="rounded-lg border border-border bg-muted/30 p-4 flex items-center justify-between gap-4">
+		<div>
+			<p class="text-xs text-muted-foreground">Selected plan</p>
+			<p class="text-base font-semibold">{planLabel}{intervalLabel ? ` · ${intervalLabel}` : ''}</p>
+		</div>
+		<div class="text-right">
+			<p class="text-2xl font-bold">${(priceUsdCents / 100).toFixed(2)}</p>
+			{#if unitLabel}<p class="text-xs text-muted-foreground">/ {unitLabel}</p>{/if}
+		</div>
+	</div>
+
 	<h3 class="text-lg font-semibold">Choose Payment Currency</h3>
 
 	{#if loading}
@@ -82,6 +109,8 @@
 			<svg class="animate-spin size-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
 			Loading currencies…
 		</div>
+	{:else if loadError}
+		<p class="text-sm text-destructive">Could not load payment currencies. Please try again.</p>
 	{:else if cryptos.length === 0}
 		<p class="text-sm text-muted-foreground">No payment currencies are currently available.</p>
 	{:else}

@@ -8,10 +8,8 @@ export const load: PageServerLoad = async ({ params, cookies, url }) => {
 	const prefs = await getUserPreferences(cookies);
 	const page = parseInt(url.searchParams.get('page') || '1');
 	const limit = prefs?.items_per_page || 20;
-	const [s, c] = await Promise.all([
-		client.comics.GetSeries(params.id),
-		client.comics.SeriesComics(params.id, { Page: page, Limit: limit }),
-	]);
+	const s = await client.comics.GetSeries(params.slug);
+	const c = await client.comics.SeriesComics(s.id, { Page: page, Limit: limit });
 	const comics = c.comics || [];
 
 	// Reading progress (only when authenticated).

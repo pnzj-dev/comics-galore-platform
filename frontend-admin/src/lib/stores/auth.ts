@@ -28,8 +28,8 @@ async function post(path: string, body: unknown): Promise<User> {
 	return user;
 }
 
-export async function login(email: string, password: string): Promise<User> {
-	return post('/auth/login', { email, password });
+export async function login(email: string, password: string, turnstileToken = ''): Promise<User> {
+	return post('/auth/login', { email, password, turnstile_token: turnstileToken });
 }
 
 export function logout(redirectTo?: string) {

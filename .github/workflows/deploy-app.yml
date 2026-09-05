@@ -1,0 +1,44 @@
+name: Deploy Frontend App
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+        description: "Environment slug used in the Fly app name and Vite build args"
+      backend_url:
+        required: true
+        type: string
+        description: "Base URL of the Encore backend environment (e.g. https://staging-3cxq6.encr.app)"
+    secrets:
+      FLY_API_TOKEN:
+        required: true
+      TURNSTILE_SITEKEY:
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy ${{ matrix.app }} (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: cg-public
+            dir: frontend-public
+          - app: cg-admin
+            dir: frontend-admin
+    steps:
+      - uses: actions/checkout@v5
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy
+        working-directory: ${{ matrix.dir }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          fly deploy \
+            --app "${{ matrix.app }}-${{ inputs.environment }}" \
+            --build-arg VITE_BACKEND_URL="${{ inputs.backend_url }}" \
+            --build-arg VITE_API_URL="${{ inputs.backend_url }}" \
+            --build-arg VITE_TURNSTILE_SITEKEY="${{ secrets.TURNSTILE_SITEKEY }}"

@@ -99,7 +99,44 @@ func ListCurrencies(ctx context.Context) (*ListCurrenciesResponse, error) {
 	if err != nil {
 		return nil, &errs.Error{Code: errs.Internal, Message: "failed to list currencies: " + err.Error()}
 	}
+
+	// Restrict to the checkout menu configured in app settings (when set).
+	if cfg, err := myauth.GetAppConfig(ctx); err == nil && strings.TrimSpace(cfg.CryptoCurrencies) != "" {
+		currencies = filterCurrencies(currencies, cfg.CryptoCurrencies)
+	}
+
 	return &ListCurrenciesResponse{Currencies: currencies}, nil
+}
+
+// filterCurrencies keeps only the configured codes, preserving the configured
+// order. Both sides are trimmed and lowercased.
+func filterCurrencies(available []string, configured string) []string {
+	allowed := make(map[string]bool)
+	var order []string
+	for _, c := range strings.Split(configured, ",") {
+		c = strings.ToLower(strings.TrimSpace(c))
+		if c == "" || allowed[c] {
+			continue
+		}
+		allowed[c] = true
+		order = append(order, c)
+	}
+
+	availableSet := make(map[string]bool, len(available))
+	for _, a := range available {
+		availableSet[strings.ToLower(strings.TrimSpace(a))] = true
+	}
+
+	var out []string
+	for _, c := range order {
+		if availableSet[c] {
+			out = append(out, c)
+		}
+	}
+	if out == nil {
+		out = []string{}
+	}
+	return out
 }
 
 // ----- Check Balance -----
@@ -217,11 +254,15 @@ type CreateDepositParams struct {
 }
 
 type CreateDepositResponse struct {
-	DepositID   string  `json:"deposit_id"`
-	PayAddress  string  `json:"pay_address"`
-	PayAmount   float64 `json:"pay_amount"`
-	PayCurrency string  `json:"pay_currency"`
-	PlanID      string  `json:"plan_id"`
+	DepositID    string  `json:"deposit_id"`
+	PayAddress   string  `json:"pay_address"`
+	PayAmount    float64 `json:"pay_amount"`
+	PayCurrency  string  `json:"pay_currency"`
+	PlanID       string  `json:"plan_id"`
+	PayinExtraID string  `json:"payin_extra_id,omitempty"`
+	Network      string  `json:"network,omitempty"`
+	QrDataURL    string  `json:"qr_data_url,omitempty"`
+	PaymentURI   string  `json:"payment_uri,omitempty"`
 }
 
 //encore:api auth method=POST path=/billing/create-deposit
@@ -270,12 +311,18 @@ func CreateDeposit(ctx context.Context, p *CreateDepositParams) (*CreateDepositR
 		WHERE id = $4
 	`, npResp.PaymentID, npResp.PayAddress, fmtNum(npResp.PayAmount), depositID)
 
+	qr, uri := buildDepositQR(npResp)
+
 	return &CreateDepositResponse{
-		DepositID:   depositID,
-		PayAddress:  npResp.PayAddress,
-		PayAmount:   npResp.PayAmount,
-		PayCurrency: npResp.PayCurrency,
-		PlanID:      p.PlanID,
+		DepositID:    depositID,
+		PayAddress:   npResp.PayAddress,
+		PayAmount:    npResp.PayAmount,
+		PayCurrency:  npResp.PayCurrency,
+		PlanID:       p.PlanID,
+		PayinExtraID: npResp.PayinExtraID,
+		Network:      npResp.Network,
+		QrDataURL:    qr,
+		PaymentURI:   uri,
 	}, nil
 }
 
@@ -309,10 +356,14 @@ type CreateQuotaBoostParams struct {
 }
 
 type CreateQuotaBoostResponse struct {
-	DepositID   string  `json:"deposit_id"`
-	PayAddress  string  `json:"pay_address"`
-	PayAmount   float64 `json:"pay_amount"`
-	PayCurrency string  `json:"pay_currency"`
+	DepositID    string  `json:"deposit_id"`
+	PayAddress   string  `json:"pay_address"`
+	PayAmount    float64 `json:"pay_amount"`
+	PayCurrency  string  `json:"pay_currency"`
+	PayinExtraID string  `json:"payin_extra_id,omitempty"`
+	Network      string  `json:"network,omitempty"`
+	QrDataURL    string  `json:"qr_data_url,omitempty"`
+	PaymentURI   string  `json:"payment_uri,omitempty"`
 }
 
 //encore:api auth method=POST path=/billing/create-quota-boost
@@ -370,11 +421,17 @@ func CreateQuotaBoost(ctx context.Context, p *CreateQuotaBoostParams) (*CreateQu
 		WHERE id = $4
 	`, npResp.PaymentID, npResp.PayAddress, fmtNum(npResp.PayAmount), depositID)
 
+	qr, uri := buildDepositQR(npResp)
+
 	return &CreateQuotaBoostResponse{
-		DepositID:   depositID,
-		PayAddress:  npResp.PayAddress,
-		PayAmount:   npResp.PayAmount,
-		PayCurrency: npResp.PayCurrency,
+		DepositID:    depositID,
+		PayAddress:   npResp.PayAddress,
+		PayAmount:    npResp.PayAmount,
+		PayCurrency:  npResp.PayCurrency,
+		PayinExtraID: npResp.PayinExtraID,
+		Network:      npResp.Network,
+		QrDataURL:    qr,
+		PaymentURI:   uri,
 	}, nil
 }
 
@@ -418,20 +475,13 @@ func PollDeposit(ctx context.Context, id string) (*PollDepositResponse, error) {
 
 // ----- Subscription Webhook -----
 
-//encore:api public raw path=/webhooks/nowpayments/subscription method=POST
-func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		http.Error(w, "cannot read body", http.StatusBadRequest)
-		return
-	}
-
-	ctx := req.Context()
-
-	sig := req.Header.Get("x-nowpayments-sig")
+// processSubscriptionWebhook runs the full subscription webhook processing
+// (signature verification included) and returns the HTTP status + body. Kept
+// separate from the raw handler so the webhook simulator can invoke the same
+// path in-process.
+func processSubscriptionWebhook(ctx context.Context, body []byte, sig string) (int, string) {
 	if sig == "" || !verifySignature(secrets.NowPaymentsIPNKey, body, sig) {
-		http.Error(w, "invalid signature", http.StatusUnauthorized)
-		return
+		return http.StatusUnauthorized, "invalid signature"
 	}
 
 	db.Exec(ctx, `
@@ -441,6 +491,7 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 
 	var event struct {
 		ID            json.Number `json:"id"`
+		Status        string      `json:"status"`
 		PaymentStatus string      `json:"payment_status"`
 		Amount        json.Number `json:"amount"`
 		Currency      string      `json:"currency"`
@@ -455,7 +506,7 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 		Tier   string
 		PlanID string
 	}
-	err = db.QueryRow(ctx, `
+	err := db.QueryRow(ctx, `
 		SELECT s.id, s.user_id, s.tier, s.plan_id
 		FROM subscriptions s
 		WHERE s.provider_subscription_id = $1
@@ -469,7 +520,10 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 		priceCents = plan.PriceUsdCents
 	}
 
-	status := strings.ToLower(event.PaymentStatus)
+	status := strings.ToLower(event.Status)
+	if status == "" {
+		status = strings.ToLower(event.PaymentStatus)
+	}
 	amtCrypto, _ := event.Amount.Float64()
 	amtUSD, _ := event.PriceAmount.Float64()
 
@@ -479,7 +533,7 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 		usdCents = priceCents
 	}
 
-		if err == nil && event.ID.String() != "" {
+	if err == nil && event.ID.String() != "" {
 		db.Exec(ctx, `
 			INSERT INTO payments
 				(provider, provider_payment_id, user_id, subscription_id, plan_id,
@@ -508,29 +562,32 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 	} else if err == nil {
 		// Persist non-terminal payment states (waiting, partially_paid, expired,
 		// failed…) on the subscription so the expiry job can act on them.
-		db.Exec(ctx, `UPDATE subscriptions SET status = $1, updated_at = now() WHERE provider_subscription_id = $2`, normalizeSubStatus(event.PaymentStatus), event.ID.String())
+		db.Exec(ctx, `UPDATE subscriptions SET status = $1, updated_at = now() WHERE provider_subscription_id = $2`, normalizeSubStatus(status), event.ID.String())
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"ok":true}`))
+	return http.StatusOK, `{"ok":true}`
 }
 
-// ----- Deposit Webhook -----
-
-//encore:api public raw path=/webhooks/nowpayments/deposit method=POST
-func DepositWebhook(w http.ResponseWriter, req *http.Request) {
+//encore:api public raw path=/webhooks/nowpayments/subscription method=POST
+func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		http.Error(w, "cannot read body", http.StatusBadRequest)
 		return
 	}
+	status, respBody := processSubscriptionWebhook(req.Context(), body, req.Header.Get("x-nowpayments-sig"))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write([]byte(respBody))
+}
 
-	ctx := req.Context()
+// ----- Deposit Webhook -----
 
-	sig := req.Header.Get("x-nowpayments-sig")
+// processDepositWebhook runs the full deposit webhook processing (signature
+// verification included) and returns the HTTP status + body.
+func processDepositWebhook(ctx context.Context, body []byte, sig, depositID string) (int, string) {
 	if sig == "" || !verifySignature(secrets.NowPaymentsIPNKey, body, sig) {
-		http.Error(w, "invalid signature", http.StatusUnauthorized)
-		return
+		return http.StatusUnauthorized, "invalid signature"
 	}
 
 	db.Exec(ctx, `
@@ -545,7 +602,6 @@ func DepositWebhook(w http.ResponseWriter, req *http.Request) {
 	json.Unmarshal(body, &event)
 
 	status := strings.ToLower(event.PaymentStatus)
-	depositID := req.URL.Query().Get("deposit_id")
 
 	// Always update deposit by deposit_id (exact match from callback URL)
 	if depositID != "" {
@@ -581,8 +637,20 @@ func DepositWebhook(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"ok":true}`))
+	return http.StatusOK, `{"ok":true}`
+}
+
+//encore:api public raw path=/webhooks/nowpayments/deposit method=POST
+func DepositWebhook(w http.ResponseWriter, req *http.Request) {
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		http.Error(w, "cannot read body", http.StatusBadRequest)
+		return
+	}
+	status, respBody := processDepositWebhook(req.Context(), body, req.Header.Get("x-nowpayments-sig"), req.URL.Query().Get("deposit_id"))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write([]byte(respBody))
 }
 
 // ----- Billing Stats -----
@@ -692,7 +760,7 @@ func AdminListSubscriptions(ctx context.Context, p *AdminListSubscriptionsParams
 	db.QueryRow(ctx, `SELECT COUNT(*) FROM subscriptions `+where, args...).Scan(&total)
 
 	query := fmt.Sprintf(`
-		SELECT id, user_id, plan_id, status, active, tier, activated_at, expires_at, created_at
+		SELECT id, user_id, plan_id, COALESCE(provider_subscription_id, ''), status, active, tier, activated_at, expires_at, created_at
 		FROM subscriptions %s ORDER BY %s %s LIMIT $%d OFFSET $%d
 	`, where, sortCol, sortDir, argIdx, argIdx+1)
 	args = append(args, limit, offset)
@@ -704,7 +772,7 @@ func AdminListSubscriptions(ctx context.Context, p *AdminListSubscriptionsParams
 	var subs []AdminSubscription
 	for rows.Next() {
 		var s AdminSubscription
-		if err := rows.Scan(&s.ID, &s.UserID, &s.PlanID, &s.Status,
+		if err := rows.Scan(&s.ID, &s.UserID, &s.PlanID, &s.ProviderSubscriptionID, &s.Status,
 			&s.Active, &s.Tier, timePtr(&s.ActivatedAt), timePtr(&s.ExpiresAt), &s.CreatedAt); err != nil {
 			return nil, err
 		}
@@ -880,15 +948,16 @@ type AdminSubList struct {
 }
 
 type AdminSubscription struct {
-	ID          string    `json:"id"`
-	UserID      string    `json:"user_id"`
-	PlanID      string    `json:"plan_id"`
-	Status      string    `json:"status"`
-	Active      bool      `json:"active"`
-	Tier        string    `json:"tier"`
-	ActivatedAt time.Time `json:"activated_at,omitempty"`
-	ExpiresAt   time.Time `json:"expires_at,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID                     string    `json:"id"`
+	UserID                 string    `json:"user_id"`
+	PlanID                 string    `json:"plan_id"`
+	ProviderSubscriptionID string    `json:"provider_subscription_id"`
+	Status                 string    `json:"status"`
+	Active                 bool      `json:"active"`
+	Tier                   string    `json:"tier"`
+	ActivatedAt            time.Time `json:"activated_at,omitempty"`
+	ExpiresAt              time.Time `json:"expires_at,omitempty"`
+	CreatedAt              time.Time `json:"created_at"`
 }
 
 type AdminDepositList struct {

@@ -1,0 +1,29 @@
+# Fly.io config for the Comics Galore admin panel.
+# CI overrides the app name per environment:
+#   dev      -> cg-admin-dev      (fly deploy --app cg-admin-dev)
+#   staging  -> cg-admin-staging
+#   prod     -> cg-admin-prod
+app = "cg-admin"
+
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+# Static runtime config. Environment-specific BACKEND_URL is set per-app with:
+#   fly secrets set BACKEND_URL=https://<env>-3cxq6.encr.app
+[env]
+  PORT = "3000"
+  HOST = "0.0.0.0"
+  NODE_ENV = "production"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

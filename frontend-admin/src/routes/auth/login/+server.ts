@@ -8,7 +8,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 	const client = getEncoreClient(undefined);
 
 	try {
-		const res = await client.auth.Login({ email: body.email, password: body.password });
+		const res = await client.auth.Login({ email: body.email, password: body.password, turnstile_token: body.turnstile_token || '' });
 		setSessionCookie(cookies, res.token);
 		return json(res.user);
 	} catch (e) {

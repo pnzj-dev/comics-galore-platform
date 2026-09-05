@@ -150,6 +150,9 @@
 						payAddress={depositData.pay_address}
 						payAmount={depositData.pay_amount}
 						payCurrency={depositData.pay_currency}
+						payinExtraId={depositData.payin_extra_id}
+						network={depositData.network}
+						qrDataUrl={depositData.qr_data_url}
 						planId={''}
 						crypto={selectedCrypto}
 						onSuccess={onDepositSuccess}
