@@ -36,6 +36,10 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: flyctl apps create "${{ matrix.app }}-${{ inputs.environment }}" -y || true
+      - name: Set backend URL
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl secrets set BACKEND_URL="${{ inputs.backend_url }}" --app "${{ matrix.app }}-${{ inputs.environment }}" --stage
       - name: Deploy
         working-directory: ${{ matrix.dir }}
         env:
