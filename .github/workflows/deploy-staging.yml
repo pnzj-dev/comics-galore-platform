@@ -9,7 +9,7 @@ jobs:
     uses: ./.github/workflows/deploy-app.yml
     with:
       environment: staging
-      backend_url: https://staging-3cxq6.encr.app
+      backend_url: https://staging-comics-galore-backend-v5k2.encr.app
     secrets:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       TURNSTILE_SITEKEY: ${{ secrets.TURNSTILE_SITEKEY }}

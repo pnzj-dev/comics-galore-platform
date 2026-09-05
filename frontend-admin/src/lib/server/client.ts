@@ -16,7 +16,7 @@ export const Local: BaseURL = "http://localhost:4000"
  * Environment returns a BaseURL for calling the cloud environment with the given name.
  */
 export function Environment(name: string): BaseURL {
-    return `https://${name}-3cxq6.encr.app`
+    return `https://${name}-comics-galore-backend-v5k2.encr.app`
 }
 
 /**
@@ -29,7 +29,7 @@ export function PreviewEnv(pr: number | string): BaseURL {
 const BROWSER = typeof globalThis === "object" && ("window" in globalThis);
 
 /**
- * Client is an API client for the 3cxq6 Encore application.
+ * Client is an API client for the comics-galore-backend-v5k2 Encore application.
  */
 export default class Client {
     public readonly auth: auth.ServiceClient
@@ -229,6 +229,16 @@ export namespace auth {
 
     export interface BanUserParams {
         reason: string
+    }
+
+    export interface BootstrapAdminParams {
+        token: string
+        email: string
+        password: string
+    }
+
+    export interface BootstrapAdminResponse {
+        user: User
     }
 
     export interface ConfirmTOTPParams {
@@ -458,6 +468,7 @@ export namespace auth {
             this.AdminUnbanUser = this.AdminUnbanUser.bind(this)
             this.AdminUnsuspendUser = this.AdminUnsuspendUser.bind(this)
             this.AdminUpdateUserRole = this.AdminUpdateUserRole.bind(this)
+            this.BootstrapAdmin = this.BootstrapAdmin.bind(this)
             this.ConfirmPasswordReset = this.ConfirmPasswordReset.bind(this)
             this.ConfirmTOTP = this.ConfirmTOTP.bind(this)
             this.DeletePasskey = this.DeletePasskey.bind(this)
@@ -544,6 +555,12 @@ export namespace auth {
 
         public async AdminUpdateUserRole(id: string, params: UpdateUserRoleParams): Promise<void> {
             await this.baseClient.callTypedAPI("POST", `/admin/users/${encodeURIComponent(id)}/role`, JSON.stringify(params))
+        }
+
+        public async BootstrapAdmin(params: BootstrapAdminParams): Promise<BootstrapAdminResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/auth/bootstrap`, JSON.stringify(params))
+            return await resp.json() as BootstrapAdminResponse
         }
 
         public async ConfirmPasswordReset(params: PasswordResetConfirm): Promise<void> {
@@ -3435,7 +3452,7 @@ class BaseClient {
         // Add User-Agent header if the script is running in the server
         // because browsers do not allow setting User-Agent headers to requests
         if (!BROWSER) {
-            this.headers["User-Agent"] = "3cxq6-Generated-TS-Client (Encore/v1.57.13)";
+            this.headers["User-Agent"] = "comics-galore-backend-v5k2-Generated-TS-Client (Encore/v1.57.13)";
         }
 
         this.requestInit = options.requestInit ?? {};

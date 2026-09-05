@@ -5,10 +5,10 @@ Production-grade deployment runbook for Comics Galore: Encore Cloud (Go backend)
 ## Architecture
 
 ```
-Encore Cloud (Go backend, app id "comics-galore-backend-v5k2", slug "3cxq6")
-  ├─ dev        → https://dev-3cxq6.encr.app
-  ├─ staging    → https://staging-3cxq6.encr.app
-  └─ production → https://production-3cxq6.encr.app   (confirm exact URL after first deploy)
+Encore Cloud (Go backend, app id "comics-galore-backend-v5k2")
+  ├─ dev        → https://dev-comics-galore-backend-v5k2.encr.app
+  ├─ staging    → https://staging-comics-galore-backend-v5k2.encr.app
+  └─ production → https://production-comics-galore-backend-v5k2.encr.app   (confirm exact URL after first deploy)
 
 Fly.io (Bun + adapter-node)
   ├─ cg-public-dev / cg-public-staging / cg-public-prod
@@ -31,9 +31,9 @@ feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
 
 | Env | Encore base URL | public Fly app | admin Fly app | Domain |
 |---|---|---|---|---|
-| dev | `https://dev-3cxq6.encr.app` | `cg-public-dev` | `cg-admin-dev` | `dev.comics-galore.com` + `dev-admin.comics-galore.com` |
-| staging | `https://staging-3cxq6.encr.app` | `cg-public-staging` | `cg-admin-staging` | `staging.comics-galore.com` + `staging-admin.comics-galore.com` |
-| prod | `https://production-3cxq6.encr.app` | `cg-public-prod` | `cg-admin-prod` | `comics-galore.com` + `admin.comics-galore.com` |
+| dev | `https://dev-comics-galore-backend-v5k2.encr.app` | `cg-public-dev` | `cg-admin-dev` | `dev.comics-galore.com` + `dev-admin.comics-galore.com` |
+| staging | `https://staging-comics-galore-backend-v5k2.encr.app` | `cg-public-staging` | `cg-admin-staging` | `staging.comics-galore.com` + `staging-admin.comics-galore.com` |
+| prod | `https://production-comics-galore-backend-v5k2.encr.app` | `cg-public-prod` | `cg-admin-prod` | `comics-galore.com` + `admin.comics-galore.com` |
 
 ---
 
@@ -95,12 +95,12 @@ One-time setup (Encore Cloud dashboard → your app → **Settings → Git / int
 
 The frontends deploy separately via GitHub Actions → Fly.io (§2), triggered by the same branch pushes.
 
-After each deploy, note the exact base URL (Encore Cloud shows it in the environment's settings). Update the `backend_url` in `deploy-*.yml` if it differs from `https://<env>-3cxq6.encr.app`.
+After each deploy, note the exact base URL (Encore Cloud shows it in the environment's settings). Update the `backend_url` in `deploy-*.yml` if it differs from `https://<env>-comics-galore-backend-v5k2.encr.app`.
 
 ### 1.4 Bootstrap the first admin (staging/prod)
 
 ```bash
-curl -X POST https://<env>-3cxq6.encr.app/auth/bootstrap \
+curl -X POST https://<env>-comics-galore-backend-v5k2.encr.app/auth/bootstrap \
   -H 'Content-Type: application/json' \
   -d '{"token":"<BootstrapSecret>","email":"admin@comics-galore.com","password":"<strong-password>"}'
 ```
@@ -120,7 +120,7 @@ For each of the 6 apps (`cg-public-dev`, `cg-public-staging`, `cg-public-prod`, 
 fly apps create <app> --org <your-org>
 
 # set the runtime backend URL (used by the /api proxy + server-side Encore client)
-fly secrets set BACKEND_URL="https://<env>-3cxq6.encr.app" --app <app>
+fly secrets set BACKEND_URL="https://<env>-comics-galore-backend-v5k2.encr.app" --app <app>
 ```
 
 `fly deploy` (run by CI) then applies the staged secret and deploys the image.

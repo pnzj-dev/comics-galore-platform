@@ -10,7 +10,7 @@ on:
       backend_url:
         required: true
         type: string
-        description: "Base URL of the Encore backend environment (e.g. https://staging-3cxq6.encr.app)"
+        description: "Base URL of the Encore backend environment (e.g. https://staging-comics-galore-backend-v5k2.encr.app)"
     secrets:
       FLY_API_TOKEN:
         required: true
