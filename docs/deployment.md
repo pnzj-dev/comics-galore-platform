@@ -23,8 +23,9 @@ feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
                  dev env      staging env    production
 ```
 
-- `ci.yml` runs checks on PRs (backend `encore test`, frontend `bun run build`).
-- `deploy-dev.yml` / `deploy-staging.yml` / `deploy-prod.yml` deploy on push to `dev` / `staging` / `main`.
+- `ci.yml` runs checks on PRs (backend `encore test`, frontend unit tests + `bun run build`).
+- **Frontends** deploy via GitHub Actions → Fly.io (`deploy-dev.yml` / `deploy-staging.yml` / `deploy-prod.yml`) on push to `dev` / `staging` / `main`.
+- **Backend** deploys via **Encore Cloud's git integration** (branch watching) on the same pushes — no GitHub Actions workflow needed.
 
 ## Environment matrix
 
@@ -38,14 +39,9 @@ feature/* ──PR──▶ dev ──PR──▶ staging ──PR──▶ main
 
 ## 1. Backend — Encore Cloud
 
-### 1.1 Link the app and create environments
+### 1.1 App link and environments
 
-```bash
-cd backend
-encore app link               # connect to the "comics-galore-backend-v5k2" app
-encore env create dev         # production exists by default
-encore env create staging
-```
+The app is already linked (`backend/encore.app` → `comics-galore-backend-v5k2`). The `dev`, `staging`, and `production` environments already exist — verify in the Encore Cloud dashboard (your app → **Environments**). If any is missing, create it there (or `encore env create <name>`).
 
 ### 1.2 Set secrets per environment
 
@@ -82,15 +78,24 @@ encore secret set --env <env> TurnstileSecret "<value>"
 encore secret set --env <env> TurnstileHostnames "dev.comics-galore.com,dev-admin.comics-galore.com"   # per env
 ```
 
-### 1.3 Deploy
+### 1.3 Deploy (automatic via git)
 
-```bash
-encore deploy --env dev
-encore deploy --env staging
-encore deploy --env production
-```
+The backend deploys automatically through **Encore Cloud's GitHub integration**: push to a watched branch and Encore builds, tests, and deploys to the matching environment. There is no `encore deploy` command to run and no GitHub Actions workflow for the backend.
 
-After each deploy, note the exact base URL (Encore prints it; `encore app env list` shows it too). Update the CI `backend_url` in the deploy workflows if it differs from `https://<env>-3cxq6.encr.app`.
+| Branch | Environment |
+|---|---|
+| `dev` | `dev` |
+| `staging` | `staging` |
+| `main` | `production` |
+
+One-time setup (Encore Cloud dashboard → your app → **Settings → Git / integrations**):
+
+1. Connect the GitHub repo, pointed at the `backend/` subdirectory (this is a monorepo; `encore.app` lives in `backend/`).
+2. Map each environment to its source branch: `dev` → `dev`, `staging` → `staging`, `main` → `production`. The `main` → production watch is the one piece that may still be missing — confirm it is configured.
+
+The frontends deploy separately via GitHub Actions → Fly.io (§2), triggered by the same branch pushes.
+
+After each deploy, note the exact base URL (Encore Cloud shows it in the environment's settings). Update the `backend_url` in `deploy-*.yml` if it differs from `https://<env>-3cxq6.encr.app`.
 
 ### 1.4 Bootstrap the first admin (staging/prod)
 
@@ -152,12 +157,14 @@ admin.comics-galore.com    CNAME cg-admin-prod.fly.dev
 |---|---|---|
 | `FLY_API_TOKEN` | Secret | Fly.io API token (`fly tokens create`) |
 | `TURNSTILE_SITEKEY` | Secret (or Variable) | Cloudflare Turnstile sitekey (public value) |
+| `ENCORE_AUTH_KEY` | Secret | Encore auth key (Encore Cloud → app → Settings → Auth Keys) — needed by `ci.yml` for `encore test` |
 
 ### 3.2 Workflows
 
-- `.github/workflows/ci.yml` — PR checks.
-- `.github/workflows/deploy-app.yml` — reusable deploy (build args + `fly deploy`).
-- `.github/workflows/deploy-dev.yml` / `deploy-staging.yml` / `deploy-prod.yml` — branch-triggered callers.
+- `.github/workflows/ci.yml` — PR checks (backend `encore test`, frontend unit tests + build).
+- `.github/workflows/deploy-app.yml` — reusable frontend deploy (build args + `fly deploy`).
+- `.github/workflows/deploy-dev.yml` / `deploy-staging.yml` / `deploy-prod.yml` — branch-triggered frontend deploys.
+- Backend deployment is **not** a GitHub Actions workflow — it's Encore Cloud's git integration (§1.3).
 
 ### 3.3 Build-time vs runtime config
 
