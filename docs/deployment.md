@@ -64,6 +64,7 @@ encore secret set --env <env> NowPaymentsAPIKey "<value>"
 encore secret set --env <env> NowPaymentsIPNKey "<value>"
 encore secret set --env <env> NowPaymentsEmail "<value>"
 encore secret set --env <env> NowPaymentsPassword "<value>"
+encore secret set --env <env> NgrokURL ""                         # local-only; set empty for dev/staging/prod
 
 # comics (AI moderation)
 encore secret set --env <env> AIModeratorAPIKey "<value>"
