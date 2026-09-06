@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	myauth "comics-galore/backend/auth"
+	"comics-galore/backend/tiers"
 
 	"encore.dev/beta/auth"
 	"encore.dev/et"
@@ -104,6 +105,23 @@ func setMockProvider(t *testing.T, mp *mockProvider) {
 	provider = mp
 }
 
+// setMockDeps overrides the cross-service dependencies (tiers.GetPlan and
+// auth.EnsureSubPartnerID) with deterministic stubs, restoring the originals
+// after the test.
+func setMockDeps(t *testing.T, plan *tiers.PlanDetail, subPartnerID string) {
+	t.Helper()
+	ogPlan, ogEnsure := getPlan, ensureSubPartnerID
+	getPlan = func(ctx context.Context, id string) (*tiers.PlanDetail, error) {
+		return plan, nil
+	}
+	ensureSubPartnerID = func(ctx context.Context, p *myauth.EnsureSubPartnerIDParams) (*myauth.SubPartnerIDResponse, error) {
+		return &myauth.SubPartnerIDResponse{SubPartnerID: subPartnerID}, nil
+	}
+	t.Cleanup(func() {
+		getPlan, ensureSubPartnerID = ogPlan, ogEnsure
+	})
+}
+
 func authCtx(userID string) context.Context {
 	ctx := context.Background()
 	return auth.WithContext(ctx, auth.UID(userID), &myauth.AuthData{
@@ -146,6 +164,7 @@ func TestEstimatePrice(t *testing.T) {
 			}, nil
 		},
 	}
+	setMockDeps(t, &tiers.PlanDetail{ID: planID, PriceUsdCents: 500}, "partner-1")
 	setMockProvider(t, mp)
 
 	ctx := authCtx("550e8400-e29b-41d4-a716-446655440030")
@@ -203,6 +222,7 @@ func TestCreateSubscription_Valid(t *testing.T) {
 			}, nil
 		},
 	}
+	setMockDeps(t, &tiers.PlanDetail{ID: planID, TierName: "Bronze", Interval: "monthly", PriceUsdCents: 500, ProviderPlanID: "12345"}, "partner-1")
 	setMockProvider(t, mp)
 
 	ctx := authCtx(userID)
@@ -286,6 +306,7 @@ func TestCreateDeposit(t *testing.T) {
 			}, nil
 		},
 	}
+	setMockDeps(t, &tiers.PlanDetail{ID: planID, PriceUsdCents: 1000}, "partner-1")
 	setMockProvider(t, mp)
 
 	ctx := authCtx(userID)

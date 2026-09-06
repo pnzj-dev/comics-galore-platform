@@ -38,6 +38,17 @@ var secrets struct {
 
 var provider nowpayments.PaymentsProvider
 
+// Cross-service dependencies, overridable in tests. Encore API functions
+// can't be referenced directly, so each is wrapped in a closure.
+var (
+	getPlan = func(ctx context.Context, id string) (*tiers.PlanDetail, error) {
+		return tiers.GetPlan(ctx, id)
+	}
+	ensureSubPartnerID = func(ctx context.Context, p *myauth.EnsureSubPartnerIDParams) (*myauth.SubPartnerIDResponse, error) {
+		return myauth.EnsureSubPartnerID(ctx, p)
+	}
+)
+
 func init() {
 	provider = nowpayments.NewProvider(secrets.NowPaymentsAPIKey, secrets.NowPaymentsIPNKey,
 		secrets.NowPaymentsEmail, secrets.NowPaymentsPassword)
@@ -75,7 +86,7 @@ type EstimatePriceParams struct {
 
 //encore:api auth method=POST path=/billing/estimate-price
 func EstimatePrice(ctx context.Context, p *EstimatePriceParams) (*nowpayments.EstimateResponse, error) {
-	plan, err := tiers.GetPlan(ctx, p.PlanID)
+	plan, err := getPlan(ctx, p.PlanID)
 	if err != nil {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found"}
 	}
@@ -149,7 +160,7 @@ type CheckBalanceResponse struct {
 func CheckBalance(ctx context.Context) (*CheckBalanceResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
-	subResp, err := myauth.EnsureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
+	subResp, err := ensureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
 	if err != nil {
 		return nil, err
 	}
@@ -180,13 +191,13 @@ type CreateSubResponse struct {
 func CreateSubscription(ctx context.Context, p *CreateSubParams) (*CreateSubResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
-	subResp, err := myauth.EnsureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
+	subResp, err := ensureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
 	if err != nil {
 		return nil, &errs.Error{Code: errs.Internal, Message: "ensure sub_partner_id failed: " + err.Error()}
 	}
 	subPartnerID := subResp.SubPartnerID
 
-	plan, err := tiers.GetPlan(ctx, p.PlanID)
+	plan, err := getPlan(ctx, p.PlanID)
 	if err != nil {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
 	}
@@ -269,13 +280,13 @@ type CreateDepositResponse struct {
 func CreateDeposit(ctx context.Context, p *CreateDepositParams) (*CreateDepositResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
-	subResp, err := myauth.EnsureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
+	subResp, err := ensureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
 	if err != nil {
 		return nil, &errs.Error{Code: errs.Internal, Message: "ensure sub_partner_id failed: " + err.Error()}
 	}
 	subPartnerID := subResp.SubPartnerID
 
-	plan, err := tiers.GetPlan(ctx, p.PlanID)
+	plan, err := getPlan(ctx, p.PlanID)
 	if err != nil {
 		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
 	}
@@ -387,7 +398,7 @@ func CreateQuotaBoost(ctx context.Context, p *CreateQuotaBoostParams) (*CreateQu
 		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "invalid boost quantity"}
 	}
 
-	subResp, err := myauth.EnsureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
+	subResp, err := ensureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
 	if err != nil {
 		return nil, &errs.Error{Code: errs.Internal, Message: "ensure sub_partner_id failed: " + err.Error()}
 	}
@@ -515,7 +526,7 @@ func processSubscriptionWebhook(ctx context.Context, body []byte, sig string) (i
 
 	interval := "monthly"
 	priceCents := 0
-	if plan, perr := tiers.GetPlan(ctx, sub.PlanID); perr == nil {
+	if plan, perr := getPlan(ctx, sub.PlanID); perr == nil {
 		interval = plan.Interval
 		priceCents = plan.PriceUsdCents
 	}
