@@ -79,6 +79,37 @@ encore secret set --env <env> TurnstileSecret "<value>"
 encore secret set --env <env> TurnstileHostnames "dev.comics-galore.com,dev-admin.comics-galore.com"   # per env
 ```
 
+#### Environment type vs named environment
+
+Secrets set with `--env dev` / `--env staging` apply only to those named environments. The `dev` and `staging` environments are both `persistent` (development-type), so they **inherit** secrets set at the `development` type level (verify with `encore secret list` — the `Development` column). `BootstrapSecret` and `NgrokURL` were the only two not covered by that type, so they were set per-environment.
+
+#### Production checklist (before the first `main` deploy)
+
+The production environment does **not** inherit development secrets. Every secret currently shows `✗` under `Production`, so set **all** of them for production first (repeat the §1.2 commands with `--env production`):
+
+```bash
+encore secret set --env production JWTSecret "<value>"
+encore secret set --env production NowPaymentsAPIKey "<value>"
+encore secret set --env production NowPaymentsIPNKey "<value>"
+encore secret set --env production NowPaymentsEmail "<value>"
+encore secret set --env production NowPaymentsPassword "<value>"
+encore secret set --env production NgrokURL ""                    # local-only; empty in prod
+encore secret set --env production BootstrapSecret "<value>"      # first-admin bootstrap token
+encore secret set --env production FrontendURL "https://comics-galore.com"
+encore secret set --env production WebAuthnRPID "comics-galore.com"
+encore secret set --env production WebAuthnOrigins "https://comics-galore.com"
+encore secret set --env production ResendAPIKey "<value>"
+encore secret set --env production GoogleClientID "<value>"
+encore secret set --env production GoogleClientSecret "<value>"
+# ... Facebook/Twitter/Apple OAuth as configured
+encore secret set --env production AIModeratorAPIKey "<value>"
+encore secret set --env production CloudflareAccountID "<value>"
+encore secret set --env production CloudflareAPIToken "<value>"
+encore secret set --env production CloudflareImagesHash "<value>"
+encore secret set --env production TurnstileSecret "<value>"
+encore secret set --env production TurnstileHostnames "comics-galore.com,admin.comics-galore.com"
+```
+
 ### 1.3 Deploy (automatic via git)
 
 The backend deploys automatically through **Encore Cloud's GitHub integration**: push to a watched branch and Encore builds, tests, and deploys to the matching environment. There is no `encore deploy` command to run and no GitHub Actions workflow for the backend.
