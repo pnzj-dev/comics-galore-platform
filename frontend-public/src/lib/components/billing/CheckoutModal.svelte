@@ -119,7 +119,7 @@
 </script>
 
 {#if open}
-	<div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onclick={close} onkeydown={handleKeydown} role="dialog" tabindex="-1">
+	<div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onkeydown={handleKeydown} role="dialog" tabindex="-1">
 		<div class="bg-background rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" onclick={(e) => e.stopPropagation()} role="presentation">
 
 			<div class="flex items-center justify-between p-4 border-b">
