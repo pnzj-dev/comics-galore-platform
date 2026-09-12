@@ -7,6 +7,7 @@ require (
 	github.com/cloudflare/cloudflare-go/v4 v4.6.0
 	github.com/go-webauthn/webauthn v0.17.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/google/uuid v1.6.0
 	github.com/nwaples/rardecode/v2 v2.3.0
 	github.com/pdfcpu/pdfcpu v0.15.0
 	github.com/pquerna/otp v1.5.0
@@ -28,7 +29,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0 // indirect
 	github.com/hhrutter/tiff v1.0.6 // indirect

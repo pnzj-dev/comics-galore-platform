@@ -93,3 +93,59 @@ func waitingPayTimeout(ctx context.Context) time.Duration {
 	}
 	return time.Duration(hours) * time.Hour
 }
+
+// ----- Combined SubscribeWorkflow (fund → subscribe → activate) -----
+
+const (
+	subscribeWorkflowName      = "SubscribeWorkflow"
+	depositPaidSignalName      = "deposit_paid"
+	subscriptionPaidSignalName = "subscription_paid"
+)
+
+type subscribeWorkflowInput struct {
+	UserID              string        `json:"user_id"`
+	PlanID              string        `json:"plan_id"`
+	Crypto              string        `json:"crypto"`
+	CheckoutID          string        `json:"checkout_id"`
+	SubscriptionTimeout time.Duration `json:"subscription_timeout"`
+}
+
+var (
+	startSubscribeWorkflow      = defaultStartSubscribeWorkflow
+	signalSubscribeDeposit      = defaultSignalSubscribeDeposit
+	signalSubscribeSubscription = defaultSignalSubscribeSubscription
+)
+
+func defaultStartSubscribeWorkflow(ctx context.Context, checkoutID, userID, planID, crypto string, subscriptionTimeout time.Duration) error {
+	c, err := getTemporalClient()
+	if err != nil {
+		return err
+	}
+	_, err = c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        checkoutID,
+		TaskQueue: temporalTaskQueue,
+	}, subscribeWorkflowName, subscribeWorkflowInput{
+		UserID:              userID,
+		PlanID:              planID,
+		Crypto:              crypto,
+		CheckoutID:          checkoutID,
+		SubscriptionTimeout: subscriptionTimeout,
+	})
+	return err
+}
+
+func defaultSignalSubscribeDeposit(ctx context.Context, checkoutID, status string) error {
+	c, err := getTemporalClient()
+	if err != nil {
+		return err
+	}
+	return c.SignalWorkflow(ctx, checkoutID, "", depositPaidSignalName, paymentSignal{Status: status})
+}
+
+func defaultSignalSubscribeSubscription(ctx context.Context, checkoutID, status string) error {
+	c, err := getTemporalClient()
+	if err != nil {
+		return err
+	}
+	return c.SignalWorkflow(ctx, checkoutID, "", subscriptionPaidSignalName, paymentSignal{Status: status})
+}

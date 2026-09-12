@@ -42,13 +42,14 @@ type DepositRequest struct {
 }
 
 type DepositResponse struct {
-	PaymentID       string  `json:"payment_id"`
-	PayAddress      string  `json:"pay_address"`
-	PayAmount       float64 `json:"pay_amount"`
-	PayCurrency     string  `json:"pay_currency"`
-	PayinExtraID    string  `json:"payin_extra_id,omitempty"`
-	Network         string  `json:"network,omitempty"`
-	NetworkPrecision int    `json:"network_precision,omitempty"`
+	PaymentID        string  `json:"payment_id"`
+	PayAddress       string  `json:"pay_address"`
+	PayAmount        float64 `json:"pay_amount"`
+	PayCurrency      string  `json:"pay_currency"`
+	PayinExtraID     string  `json:"payin_extra_id,omitempty"`
+	Network          string  `json:"network,omitempty"`
+	NetworkPrecision int     `json:"network_precision,omitempty"`
+	TimeLimit        string  `json:"time_limit,omitempty"`
 }
 
 type CreatePlanRequest struct {

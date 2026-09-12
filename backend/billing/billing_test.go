@@ -128,14 +128,25 @@ func setMockDeps(t *testing.T, plan *tiers.PlanDetail, subPartnerID string) {
 func setMockTemporal(t *testing.T) {
 	t.Helper()
 	ogStart, ogSignal := startSubscriptionWorkflow, signalSubscriptionWorkflow
+	ogStartSub, ogSignalDep, ogSignalSub := startSubscribeWorkflow, signalSubscribeDeposit, signalSubscribeSubscription
 	startSubscriptionWorkflow = func(ctx context.Context, subscriptionID string, timeout time.Duration) error {
 		return nil
 	}
 	signalSubscriptionWorkflow = func(ctx context.Context, subscriptionID, status string) error {
 		return nil
 	}
+	startSubscribeWorkflow = func(ctx context.Context, checkoutID, userID, planID, crypto string, timeout time.Duration) error {
+		return nil
+	}
+	signalSubscribeDeposit = func(ctx context.Context, checkoutID, status string) error {
+		return nil
+	}
+	signalSubscribeSubscription = func(ctx context.Context, checkoutID, status string) error {
+		return nil
+	}
 	t.Cleanup(func() {
 		startSubscriptionWorkflow, signalSubscriptionWorkflow = ogStart, ogSignal
+		startSubscribeWorkflow, signalSubscribeDeposit, signalSubscribeSubscription = ogStartSub, ogSignalDep, ogSignalSub
 	})
 }
 

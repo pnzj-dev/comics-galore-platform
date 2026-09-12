@@ -11,24 +11,16 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// Signal and activity names form the contract between the Encore backend
-// (Temporal client) and this worker. Keep them stable across deployments.
-const (
-	PaymentSignalName    = "payment_received"
-	ActivateActivityName = "ActivateSubscription"
-	ExpireActivityName   = "ExpireSubscription"
-	TaskQueue            = "subscription"
-)
-
 // SubscriptionWorkflowInput is the input to SubscriptionWorkflow.
 type SubscriptionWorkflowInput struct {
 	SubscriptionID string        `json:"subscription_id"`
 	PaymentTimeout time.Duration `json:"payment_timeout"`
 }
 
-// PaymentSignal is the payload of the "payment_received" signal.
+// PaymentSignal is the payload of the "payment_received" / "deposit_paid" /
+// "subscription_paid" signals.
 type PaymentSignal struct {
-	Status string `json:"status"` // "finished", "waiting_pay", "expired", "failed", "cancelled", ...
+	Status string `json:"status"`
 }
 
 // ActivateInput is the input to the ActivateSubscription activity.
@@ -78,7 +70,7 @@ func SubscriptionWorkflow(ctx workflow.Context, input SubscriptionWorkflowInput)
 		}).Get(ctx, nil)
 	}
 
-	return workflow.ExecuteActivity(ctx, ExpireActivityName, ExpireInput{
+	return workflow.ExecuteActivity(ctx, ExpireSubscriptionActivityName, ExpireInput{
 		SubscriptionID: input.SubscriptionID,
 	}).Get(ctx, nil)
 }

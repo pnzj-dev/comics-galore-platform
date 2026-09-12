@@ -36,6 +36,7 @@ func main() {
 
 	w := worker.New(c, workflows.TaskQueue, worker.Options{})
 	w.RegisterWorkflow(workflows.SubscriptionWorkflow)
+	w.RegisterWorkflow(workflows.SubscribeWorkflow)
 	w.RegisterActivity(&activities.Activities{BackendURL: backendURL})
 
 	log.Printf("temporal worker started: address=%s namespace=%s backend=%s", address, namespace, backendURL)

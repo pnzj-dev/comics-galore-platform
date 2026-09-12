@@ -385,6 +385,7 @@ func (p *Provider) CreateDeposit(ctx context.Context, req DepositRequest) (*Depo
 			PayinExtraID     string      `json:"payin_extra_id"`
 			Network          string      `json:"network"`
 			NetworkPrecision int         `json:"network_precision"`
+			TimeLimit        string      `json:"time_limit"`
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(resp, &result); err != nil {
@@ -393,13 +394,14 @@ func (p *Provider) CreateDeposit(ctx context.Context, req DepositRequest) (*Depo
 
 	payAmt, _ := result.Result.PayAmount.Float64()
 	return &DepositResponse{
-		PaymentID:       result.Result.PaymentID.String(),
-		PayAddress:      result.Result.PayAddress,
-		PayAmount:       payAmt,
-		PayCurrency:     result.Result.PayCurrency,
-		PayinExtraID:    result.Result.PayinExtraID,
-		Network:         result.Result.Network,
+		PaymentID:        result.Result.PaymentID.String(),
+		PayAddress:       result.Result.PayAddress,
+		PayAmount:        payAmt,
+		PayCurrency:      result.Result.PayCurrency,
+		PayinExtraID:     result.Result.PayinExtraID,
+		Network:          result.Result.Network,
 		NetworkPrecision: result.Result.NetworkPrecision,
+		TimeLimit:        result.Result.TimeLimit,
 	}, nil
 }
 

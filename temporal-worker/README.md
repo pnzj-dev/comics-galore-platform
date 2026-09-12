@@ -1,20 +1,32 @@
 # Temporal Worker — Comics Galore
 
-Standalone Go program that hosts the subscription payment workflow. It is a
+Standalone Go program that hosts the subscription payment workflows. It is a
 separate module (outside `backend/`, which Encore scans) because Temporal
 workers are long-running processes and must not live inside an Encore service.
+
+## Workflows
+
+- **`SubscribeWorkflow`** (combined checkout) — funds the account via a deposit
+  when the user has no balance, then creates the subscription and activates it.
+- **`SubscriptionWorkflow`** (legacy) — orchestrates a single subscription's
+  initial payment; kept for backward compatibility during the rollout.
 
 ## Contract with the Encore backend
 
 The worker and `backend/billing/temporal.go` share a contract (duplicated JSON
-shapes, since they are separate Go modules):
+shapes, since they are separate Go modules). Task queue: `subscription`.
 
-- Workflow: `SubscriptionWorkflow`, task queue `subscription`.
-- Workflow ID: the local subscription UUID.
-- Signal: `payment_received` with payload `{ "status": string }`.
-- Activities call Encore private endpoints:
-  - `POST /billing/subscriptions/:id/activate`
-  - `POST /billing/subscriptions/:id/expire`
+| Workflow | ID | Signals |
+|---|---|---|
+| `SubscribeWorkflow` | checkout UUID | `deposit_paid`, `subscription_paid` |
+| `SubscriptionWorkflow` | subscription UUID | `payment_received` |
+
+Activities call Encore private endpoints:
+- `POST /billing/internal/check-balance`
+- `POST /billing/internal/create-deposit`
+- `POST /billing/internal/create-subscription`
+- `POST /billing/subscriptions/:id/activate` / `expire`
+- `POST /billing/deposits/:id/complete` / `expire`
 
 ## Local runbook
 
