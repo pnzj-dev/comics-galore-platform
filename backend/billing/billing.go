@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strconv"
@@ -251,6 +252,12 @@ func CreateSubscription(ctx context.Context, p *CreateSubParams) (*CreateSubResp
 		return nil, err
 	}
 
+	// Best-effort: start the durable subscription workflow that waits for the
+	// payment confirmation (or timeout) and then activates/expires the sub.
+	if wfErr := startSubscriptionWorkflow(ctx, subID, waitingPayTimeout(ctx)); wfErr != nil {
+		log.Printf("start subscription workflow (best-effort): %v", wfErr)
+	}
+
 	return &CreateSubResponse{
 		SubscriptionID: subID,
 		Status:         npResp.Status,
@@ -305,12 +312,12 @@ func CreateDeposit(ctx context.Context, p *CreateDepositParams) (*CreateDepositR
 		return nil, err
 	}
 
-	callbackURL := buildCallbackURL("/webhooks/nowpayments/deposit?deposit_id="+depositID)
+	callbackURL := buildCallbackURL("/webhooks/nowpayments/deposit?deposit_id=" + depositID)
 
 	npResp, err := provider.CreateDeposit(ctx, DepositRequest{
-		Crypto:        p.Crypto,
-		AmountUSD:     float64(priceCents) / 100,
-		SubPartnerID:  subPartnerID,
+		Crypto:         p.Crypto,
+		AmountUSD:      float64(priceCents) / 100,
+		SubPartnerID:   subPartnerID,
 		IPNCallbackURL: callbackURL,
 	})
 	if err != nil {
@@ -415,7 +422,7 @@ func CreateQuotaBoost(ctx context.Context, p *CreateQuotaBoostParams) (*CreateQu
 		return nil, err
 	}
 
-	callbackURL := buildCallbackURL("/webhooks/nowpayments/deposit?deposit_id="+depositID)
+	callbackURL := buildCallbackURL("/webhooks/nowpayments/deposit?deposit_id=" + depositID)
 
 	npResp, err := provider.CreateDeposit(ctx, DepositRequest{
 		Crypto:         p.Crypto,
@@ -565,15 +572,13 @@ func processSubscriptionWebhook(ctx context.Context, body []byte, sig string) (i
 			status, string(body))
 	}
 
-	if status == "finished" {
-		if err == nil {
-			db.Exec(ctx, `UPDATE subscriptions SET active = true, status = 'active', updated_at = now() WHERE provider_subscription_id = $1`, event.ID.String())
-			myauth.SetUserTier(ctx, &myauth.SetUserTierParams{UserID: sub.UserID, Tier: sub.Tier})
+	// Signal the durable workflow (best-effort). It activates the subscription
+	// on "finished" and expires it on timeout or a non-finished status; signals
+	// for already-completed workflows (renewals of an active sub) are no-ops.
+	if err == nil && sub.SubID != "" {
+		if wfErr := signalSubscriptionWorkflow(ctx, sub.SubID, status); wfErr != nil {
+			log.Printf("signal subscription workflow (best-effort): %v", wfErr)
 		}
-	} else if err == nil {
-		// Persist non-terminal payment states (waiting, partially_paid, expired,
-		// failed…) on the subscription so the expiry job can act on them.
-		db.Exec(ctx, `UPDATE subscriptions SET status = $1, updated_at = now() WHERE provider_subscription_id = $2`, normalizeSubStatus(status), event.ID.String())
 	}
 
 	return http.StatusOK, `{"ok":true}`
@@ -590,6 +595,43 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	w.Write([]byte(respBody))
+}
+
+// ActivateSubscription marks a subscription active and promotes the user's
+// tier. Called by the Temporal worker's activity; idempotent.
+//
+//encore:api private method=POST path=/billing/subscriptions/:id/activate
+func ActivateSubscription(ctx context.Context, id string) error {
+	var userID, tier string
+	if err := db.QueryRow(ctx, `SELECT user_id, tier FROM subscriptions WHERE id = $1`, id).Scan(&userID, &tier); err != nil {
+		if isNoRows(err) {
+			return &errs.Error{Code: errs.NotFound, Message: "subscription not found"}
+		}
+		return err
+	}
+
+	db.Exec(ctx, `UPDATE subscriptions SET active = true, status = 'active', activated_at = now(), updated_at = now() WHERE id = $1`, id)
+	return myauth.SetUserTier(ctx, &myauth.SetUserTierParams{UserID: userID, Tier: tier})
+}
+
+// ExpireSubscription expires a subscription and downgrades the user to the
+// free tier. Called by the Temporal worker's activity; idempotent.
+//
+//encore:api private method=POST path=/billing/subscriptions/:id/expire
+func ExpireSubscription(ctx context.Context, id string) error {
+	var userID string
+	if err := db.QueryRow(ctx, `SELECT user_id FROM subscriptions WHERE id = $1`, id).Scan(&userID); err != nil {
+		if isNoRows(err) {
+			return &errs.Error{Code: errs.NotFound, Message: "subscription not found"}
+		}
+		return err
+	}
+
+	if err := myauth.SetUserTier(ctx, &myauth.SetUserTierParams{UserID: userID, Tier: "free"}); err != nil {
+		return err
+	}
+	db.Exec(ctx, `UPDATE subscriptions SET status = 'expired', active = false, updated_at = now() WHERE id = $1`, id)
+	return nil
 }
 
 // ----- Deposit Webhook -----
@@ -672,13 +714,13 @@ type RevenueByTier struct {
 }
 
 type BillingStats struct {
-	TotalRevenue      int             `json:"total_revenue"`
-	ActiveRevenue     int             `json:"active_revenue"`
-	RecentRevenue     int             `json:"recent_revenue"`
-	TotalDeposits     int             `json:"total_deposits"`
-	TotalPayments     int             `json:"total_payments"`
-	ActiveSubs        int             `json:"active_subscriptions"`
-	RevenueByTier     []RevenueByTier `json:"revenue_by_tier"`
+	TotalRevenue  int             `json:"total_revenue"`
+	ActiveRevenue int             `json:"active_revenue"`
+	RecentRevenue int             `json:"recent_revenue"`
+	TotalDeposits int             `json:"total_deposits"`
+	TotalPayments int             `json:"total_payments"`
+	ActiveSubs    int             `json:"active_subscriptions"`
+	RevenueByTier []RevenueByTier `json:"revenue_by_tier"`
 }
 
 //encore:api private
@@ -730,22 +772,34 @@ func AdminListSubscriptions(ctx context.Context, p *AdminListSubscriptionsParams
 	}
 
 	page := p.Page
-	if page <= 0 { page = 1 }
+	if page <= 0 {
+		page = 1
+	}
 	limit := p.Limit
-	if limit <= 0 { limit = 20 }
-	if limit > 100 { limit = 100 }
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
 	offset := (page - 1) * limit
 
 	search := "%" + p.Search + "%"
 	sortCol := "created_at"
 	sortDir := "DESC"
 	switch p.Sort {
-	case "created_at": sortCol = "created_at"
-	case "status": sortCol = "status"
-	case "tier": sortCol = "tier"
-	case "expires_at": sortCol = "expires_at"
+	case "created_at":
+		sortCol = "created_at"
+	case "status":
+		sortCol = "status"
+	case "tier":
+		sortCol = "tier"
+	case "expires_at":
+		sortCol = "expires_at"
 	}
-	if strings.ToLower(p.SortDir) == "asc" { sortDir = "ASC" }
+	if strings.ToLower(p.SortDir) == "asc" {
+		sortDir = "ASC"
+	}
 
 	where := "WHERE tier <> 'free' AND (user_id::text ILIKE $1 OR plan_id::text ILIKE $1)"
 	args := []interface{}{search}
@@ -777,7 +831,9 @@ func AdminListSubscriptions(ctx context.Context, p *AdminListSubscriptionsParams
 	args = append(args, limit, offset)
 
 	rows, err := db.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var subs []AdminSubscription
@@ -812,22 +868,34 @@ func AdminListDeposits(ctx context.Context, p *AdminListDepositsParams) (*AdminD
 	}
 
 	page := p.Page
-	if page <= 0 { page = 1 }
+	if page <= 0 {
+		page = 1
+	}
 	limit := p.Limit
-	if limit <= 0 { limit = 20 }
-	if limit > 100 { limit = 100 }
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
 	offset := (page - 1) * limit
 
 	search := "%" + p.Search + "%"
 	sortCol := "created_at"
 	sortDir := "DESC"
 	switch p.Sort {
-	case "created_at": sortCol = "created_at"
-	case "status": sortCol = "status"
-	case "amount_usd_cents": sortCol = "amount_usd_cents"
-	case "completed_at": sortCol = "completed_at"
+	case "created_at":
+		sortCol = "created_at"
+	case "status":
+		sortCol = "status"
+	case "amount_usd_cents":
+		sortCol = "amount_usd_cents"
+	case "completed_at":
+		sortCol = "completed_at"
 	}
-	if strings.ToLower(p.SortDir) == "asc" { sortDir = "ASC" }
+	if strings.ToLower(p.SortDir) == "asc" {
+		sortDir = "ASC"
+	}
 
 	where := "WHERE (user_id::text ILIKE $1 OR pay_address ILIKE $1 OR provider_deposit_id ILIKE $1)"
 	args := []interface{}{search}
@@ -851,7 +919,9 @@ func AdminListDeposits(ctx context.Context, p *AdminListDepositsParams) (*AdminD
 	args = append(args, limit, offset)
 
 	rows, err := db.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var deps []AdminDeposit
@@ -888,22 +958,34 @@ func AdminListPayments(ctx context.Context, p *AdminListPaymentsParams) (*AdminP
 	}
 
 	page := p.Page
-	if page <= 0 { page = 1 }
+	if page <= 0 {
+		page = 1
+	}
 	limit := p.Limit
-	if limit <= 0 { limit = 20 }
-	if limit > 100 { limit = 100 }
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
 	offset := (page - 1) * limit
 
 	search := "%" + p.Search + "%"
 	sortCol := "created_at"
 	sortDir := "DESC"
 	switch p.Sort {
-	case "created_at": sortCol = "created_at"
-	case "status": sortCol = "status"
-	case "tier": sortCol = "tier"
-	case "amount_usd_cents": sortCol = "amount_usd_cents"
+	case "created_at":
+		sortCol = "created_at"
+	case "status":
+		sortCol = "status"
+	case "tier":
+		sortCol = "tier"
+	case "amount_usd_cents":
+		sortCol = "amount_usd_cents"
 	}
-	if strings.ToLower(p.SortDir) == "asc" { sortDir = "ASC" }
+	if strings.ToLower(p.SortDir) == "asc" {
+		sortDir = "ASC"
+	}
 
 	where := "WHERE (user_id::text ILIKE $1 OR provider_payment_id ILIKE $1)"
 	args := []interface{}{search}
@@ -932,7 +1014,9 @@ func AdminListPayments(ctx context.Context, p *AdminListPaymentsParams) (*AdminP
 	args = append(args, limit, offset)
 
 	rows, err := db.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var pays []AdminPayment

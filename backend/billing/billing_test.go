@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	myauth "comics-galore/backend/auth"
 	"comics-galore/backend/tiers"
@@ -122,6 +123,22 @@ func setMockDeps(t *testing.T, plan *tiers.PlanDetail, subPartnerID string) {
 	})
 }
 
+// setMockTemporal neutralizes the Temporal workflow start/signal calls so
+// tests don't attempt to dial a real Temporal server.
+func setMockTemporal(t *testing.T) {
+	t.Helper()
+	ogStart, ogSignal := startSubscriptionWorkflow, signalSubscriptionWorkflow
+	startSubscriptionWorkflow = func(ctx context.Context, subscriptionID string, timeout time.Duration) error {
+		return nil
+	}
+	signalSubscriptionWorkflow = func(ctx context.Context, subscriptionID, status string) error {
+		return nil
+	}
+	t.Cleanup(func() {
+		startSubscriptionWorkflow, signalSubscriptionWorkflow = ogStart, ogSignal
+	})
+}
+
 func authCtx(userID string) context.Context {
 	ctx := context.Background()
 	return auth.WithContext(ctx, auth.UID(userID), &myauth.AuthData{
@@ -224,6 +241,7 @@ func TestCreateSubscription_Valid(t *testing.T) {
 	}
 	setMockDeps(t, &tiers.PlanDetail{ID: planID, TierName: "Bronze", Interval: "monthly", PriceUsdCents: 500, ProviderPlanID: "12345"}, "partner-1")
 	setMockProvider(t, mp)
+	setMockTemporal(t)
 
 	ctx := authCtx(userID)
 	resp, err := CreateSubscription(ctx, &CreateSubParams{PlanID: planID})
