@@ -39,10 +39,11 @@ var secrets struct {
 	// worker-facing endpoints. Empty = disabled (local dev).
 	WorkerSecret string
 
-	// Temporal connection (Temporal Cloud uses mTLS cert/key; local dev uses
-	// the address/namespace only, defaulting to localhost).
+	// Temporal connection (Temporal Cloud uses mTLS cert/key OR an API key;
+	// local dev uses the address/namespace only, defaulting to localhost).
 	TemporalAddress   string
 	TemporalNamespace string
+	TemporalAPIKey    string
 	TemporalCert      string
 	TemporalKey       string
 }

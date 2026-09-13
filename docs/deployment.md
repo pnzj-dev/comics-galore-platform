@@ -82,8 +82,10 @@ encore secret set --env <env> TurnstileHostnames "dev.comics-galore.com,dev-admi
 encore secret set --env <env> WorkerSecret "<value>"              # shared secret the worker sends as X-Worker-Token
 encore secret set --env <env> TemporalAddress "<namespace>.tmprl.cloud:7233"
 encore secret set --env <env> TemporalNamespace "<namespace>"
-encore secret set --env <env> TemporalCert "<client-cert-pem>"    # Temporal Cloud mTLS
-encore secret set --env <env> TemporalKey "<client-key-pem>"      # Temporal Cloud mTLS
+encore secret set --env <env> TemporalAPIKey "<api-key>"           # Temporal Cloud API key (preferred)
+# ...or mTLS instead of the API key:
+encore secret set --env <env> TemporalCert "<client-cert-pem>"     # Temporal Cloud mTLS
+encore secret set --env <env> TemporalKey "<client-key-pem>"       # Temporal Cloud mTLS
 ```
 
 #### Environment type vs named environment
@@ -221,11 +223,14 @@ The worker is a separate always-on Go app (`temporal-worker/`), deployed per env
 ```bash
 fly secrets set TEMPORAL_ADDRESS="<namespace>.tmprl.cloud:7233" \
   TEMPORAL_NAMESPACE="<namespace>" \
-  TEMPORAL_CERT="$(cat client.pem)" TEMPORAL_KEY="$(cat client.key)" \
+  TEMPORAL_API_KEY="<api-key>" \
   ENCORE_BACKEND_URL="https://<env>-comics-galore-backend-v5k2.encr.app" \
   WORKER_SECRET="<shared-secret>" \
   --app cg-worker-<env>
 ```
+
+Use **either** `TEMPORAL_API_KEY` **or** the mTLS pair (`TEMPORAL_CERT` +
+`TEMPORAL_KEY`); the API key takes precedence when both are set.
 
 `WORKER_SECRET` must match the Encore `WorkerSecret` (§1.2); the worker sends it as
 `X-Worker-Token` on every activity call.

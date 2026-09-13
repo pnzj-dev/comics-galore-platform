@@ -28,13 +28,18 @@ func main() {
 	workerSecret := os.Getenv("WORKER_SECRET")
 
 	opts := client.Options{HostPort: address, Namespace: namespace}
-	if certPEM, keyPEM := os.Getenv("TEMPORAL_CERT"), os.Getenv("TEMPORAL_KEY"); certPEM != "" && keyPEM != "" {
-		cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
-		if err != nil {
-			log.Fatalf("temporal tls: %v", err)
-		}
-		opts.ConnectionOptions = client.ConnectionOptions{
-			TLS: &tls.Config{Certificates: []tls.Certificate{cert}},
+	switch {
+	case os.Getenv("TEMPORAL_API_KEY") != "":
+		opts.Credentials = client.NewAPIKeyStaticCredentials(os.Getenv("TEMPORAL_API_KEY"))
+	default:
+		if certPEM, keyPEM := os.Getenv("TEMPORAL_CERT"), os.Getenv("TEMPORAL_KEY"); certPEM != "" && keyPEM != "" {
+			cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+			if err != nil {
+				log.Fatalf("temporal tls: %v", err)
+			}
+			opts.ConnectionOptions = client.ConnectionOptions{
+				TLS: &tls.Config{Certificates: []tls.Certificate{cert}},
+			}
 		}
 	}
 

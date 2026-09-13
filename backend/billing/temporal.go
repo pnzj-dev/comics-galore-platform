@@ -39,11 +39,15 @@ func getTemporalClient() (client.Client, error) {
 	temporalOnce.Do(func() {
 		address := firstNonEmpty(secrets.TemporalAddress, os.Getenv("TEMPORAL_ADDRESS"), "localhost:7233")
 		namespace := firstNonEmpty(secrets.TemporalNamespace, os.Getenv("TEMPORAL_NAMESPACE"), "default")
+		apiKey := firstNonEmpty(secrets.TemporalAPIKey, os.Getenv("TEMPORAL_API_KEY"))
 		certPEM := firstNonEmpty(secrets.TemporalCert, os.Getenv("TEMPORAL_CERT"))
 		keyPEM := firstNonEmpty(secrets.TemporalKey, os.Getenv("TEMPORAL_KEY"))
 
 		opts := client.Options{HostPort: address, Namespace: namespace}
-		if certPEM != "" && keyPEM != "" {
+		switch {
+		case apiKey != "":
+			opts.Credentials = client.NewAPIKeyStaticCredentials(apiKey)
+		case certPEM != "" && keyPEM != "":
 			cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
 			if err != nil {
 				temporalErr = err

@@ -37,18 +37,26 @@ cd temporal-worker && go run ./worker  # 3. worker
 |---|---|---|
 | `TEMPORAL_ADDRESS` | `localhost:7233` | Temporal frontend address |
 | `TEMPORAL_NAMESPACE` | `default` | Temporal namespace |
-| `TEMPORAL_CERT` / `TEMPORAL_KEY` | — | mTLS (Temporal Cloud) |
+| `TEMPORAL_API_KEY` | — | Temporal Cloud API key (preferred; auto-enables TLS) |
+| `TEMPORAL_CERT` / `TEMPORAL_KEY` | — | mTLS client cert + private key (used only when no API key) |
 | `ENCORE_BACKEND_URL` | `http://localhost:4000` | Encore base URL for activity callbacks |
 | `WORKER_SECRET` | — | shared secret sent as `X-Worker-Token` |
 
 ## Deployment (Fly.io)
 
 Deployed via `.github/workflows/deploy-worker.yml` (one always-on app per env:
-`cg-worker-dev`, `cg-worker-staging`, `cg-worker-prod`). Set per-app Fly secrets:
+`cg-worker-dev`, `cg-worker-staging`, `cg-worker-prod`). Set per-app Fly secrets
+(use **either** the API key **or** the mTLS cert/key):
 
-```
+```bash
+# API key auth (preferred)
 fly secrets set TEMPORAL_ADDRESS=... TEMPORAL_NAMESPACE=... \
-  TEMPORAL_CERT="$(cat client.pem)" TEMPORAL_KEY="$(cat client.key)" \
+  TEMPORAL_API_KEY=... \
   ENCORE_BACKEND_URL=https://<env>-comics-galore-backend-v5k2.encr.app \
   WORKER_SECRET=... --app cg-worker-<env>
+
+# or mTLS auth
+fly secrets set TEMPORAL_ADDRESS=... TEMPORAL_NAMESPACE=... \
+  TEMPORAL_CERT="$(cat client.pem)" TEMPORAL_KEY="$(cat client.key)" \
+  ENCORE_BACKEND_URL=... WORKER_SECRET=... --app cg-worker-<env>
 ```
