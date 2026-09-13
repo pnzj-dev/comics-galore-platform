@@ -54,7 +54,7 @@
 
 	async function poll() {
 		try {
-			const s = await encore.billing.GetSubscriptionState(checkoutId);
+			const s = await encore.billing.GetCheckoutState(checkoutId);
 			checkout = {
 				step: s.step,
 				pay_address: s.pay_address,

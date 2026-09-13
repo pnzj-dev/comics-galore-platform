@@ -9,19 +9,17 @@ package workflows
 const (
 	TaskQueue = "subscription"
 
-	// Legacy (Phase-1) subscription workflow signal.
-	PaymentSignalName = "payment_received"
-
-	// Combined SubscribeWorkflow signals.
+	// Signals (SubscribeWorkflow + BoostWorkflow).
 	DepositPaidSignalName      = "deposit_paid"
 	SubscriptionPaidSignalName = "subscription_paid"
 
-	// Activity names (shared by both workflows).
+	// Activity names.
 	ActivateActivityName           = "ActivateSubscription"
 	ExpireSubscriptionActivityName = "ExpireSubscription"
 	CheckBalanceActivityName       = "CheckBalance"
 	CreateDepositActivityName      = "CreateDeposit"
 	CreateSubscriptionActivityName = "CreateSubscription"
+	CreateBoostDepositActivityName = "CreateBoostDeposit"
 	CompleteDepositActivityName    = "CompleteDeposit"
 	ExpireDepositActivityName      = "ExpireDeposit"
 )

@@ -77,6 +77,13 @@ encore secret set --env <env> CloudflareImagesHash "<value>"
 # turnstile
 encore secret set --env <env> TurnstileSecret "<value>"
 encore secret set --env <env> TurnstileHostnames "dev.comics-galore.com,dev-admin.comics-galore.com"   # per env
+
+# Temporal worker auth + connection (see §5)
+encore secret set --env <env> WorkerSecret "<value>"              # shared secret the worker sends as X-Worker-Token
+encore secret set --env <env> TemporalAddress "<namespace>.tmprl.cloud:7233"
+encore secret set --env <env> TemporalNamespace "<namespace>"
+encore secret set --env <env> TemporalCert "<client-cert-pem>"    # Temporal Cloud mTLS
+encore secret set --env <env> TemporalKey "<client-key-pem>"      # Temporal Cloud mTLS
 ```
 
 #### Environment type vs named environment
@@ -195,7 +202,8 @@ admin.comics-galore.com    CNAME cg-admin-prod.fly.dev
 
 - `.github/workflows/ci.yml` — PR checks (backend `encore test`, frontend unit tests + build).
 - `.github/workflows/deploy-app.yml` — reusable frontend deploy (build args + `fly deploy`).
-- `.github/workflows/deploy-dev.yml` / `deploy-staging.yml` / `deploy-prod.yml` — branch-triggered frontend deploys.
+- `.github/workflows/deploy-worker.yml` — reusable Temporal worker deploy (`fly deploy` in `temporal-worker/`).
+- `.github/workflows/deploy-dev.yml` / `deploy-staging.yml` / `deploy-prod.yml` — branch-triggered frontends **+ worker**.
 - Backend deployment is **not** a GitHub Actions workflow — it's Encore Cloud's git integration (§1.3).
 
 ### 3.3 Build-time vs runtime config
@@ -205,7 +213,26 @@ admin.comics-galore.com    CNAME cg-admin-prod.fly.dev
 
 ---
 
-## 4. Verification
+## 4. Temporal worker (Fly)
+
+The worker is a separate always-on Go app (`temporal-worker/`), deployed per env as
+`cg-worker-{dev,staging,prod}` via `deploy-worker.yml`. Per-app Fly secrets:
+
+```bash
+fly secrets set TEMPORAL_ADDRESS="<namespace>.tmprl.cloud:7233" \
+  TEMPORAL_NAMESPACE="<namespace>" \
+  TEMPORAL_CERT="$(cat client.pem)" TEMPORAL_KEY="$(cat client.key)" \
+  ENCORE_BACKEND_URL="https://<env>-comics-galore-backend-v5k2.encr.app" \
+  WORKER_SECRET="<shared-secret>" \
+  --app cg-worker-<env>
+```
+
+`WORKER_SECRET` must match the Encore `WorkerSecret` (§1.2); the worker sends it as
+`X-Worker-Token` on every activity call.
+
+---
+
+## 5. Verification
 
 1. Bootstrap admin in each env (§1.4), then sign in on the matching admin domain.
 2. `encore test ./...` green; both frontends `bun run build` green (CI runs these).

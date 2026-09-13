@@ -18,6 +18,8 @@ import (
 type Activities struct {
 	// BackendURL is the base URL of the Encore backend (e.g. http://localhost:4000).
 	BackendURL string
+	// WorkerSecret is the shared secret sent as X-Worker-Token (empty = unset).
+	WorkerSecret string
 }
 
 // ActivateSubscription marks a subscription active and promotes the tier.
@@ -73,6 +75,18 @@ func (a *Activities) CreateSubscription(ctx context.Context, input workflows.Cre
 	return out, err
 }
 
+// CreateBoostDeposit creates a quota-boost deposit and returns its id + timeout.
+func (a *Activities) CreateBoostDeposit(ctx context.Context, input workflows.CreateBoostDepositInput) (workflows.CreateBoostDepositResult, error) {
+	var out workflows.CreateBoostDepositResult
+	err := a.postJSON(ctx, "/billing/internal/create-boost-deposit", map[string]any{
+		"user_id":     input.UserID,
+		"downloads":   input.Downloads,
+		"crypto":      input.Crypto,
+		"checkout_id": input.CheckoutID,
+	}, &out)
+	return out, err
+}
+
 func (a *Activities) post(ctx context.Context, path string) error {
 	return a.postJSON(ctx, path, nil, nil)
 }
@@ -90,6 +104,9 @@ func (a *Activities) postJSON(ctx context.Context, path string, body any, out an
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if a.WorkerSecret != "" {
+		req.Header.Set("X-Worker-Token", a.WorkerSecret)
+	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)

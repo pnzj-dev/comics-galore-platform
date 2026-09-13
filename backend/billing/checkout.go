@@ -136,11 +136,48 @@ func createDepositForUser(ctx context.Context, userID, planID, crypto, checkoutI
 		return nil, &errs.Error{Code: errs.NotFound, Message: "plan not found or no sub_partner_id"}
 	}
 
+	return createDeposit(ctx, userID, crypto, priceCents, 0, checkoutID, subPartnerID)
+}
+
+// createBoostDepositForUser creates a NowPayments deposit for a quota boost and
+// stores the local row, optionally linked to a checkout workflow.
+func createBoostDepositForUser(ctx context.Context, userID string, downloads int, crypto, checkoutID string) (*CreateDepositResponse, error) {
+	cfg, err := myauth.GetBoostConfig(ctx)
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "quota config unavailable"}
+	}
+
+	priceCents := 0
+	switch downloads {
+	case cfg.Boost1Downloads:
+		priceCents = int(cfg.Boost1Price * 100)
+	case cfg.Boost2Downloads:
+		priceCents = int(cfg.Boost2Price * 100)
+	case cfg.Boost3Downloads:
+		priceCents = int(cfg.Boost3Price * 100)
+	default:
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "invalid boost quantity"}
+	}
+
+	subResp, err := ensureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: userID})
+	if err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "ensure sub_partner_id failed: " + err.Error()}
+	}
+	if subResp.SubPartnerID == "" {
+		return nil, &errs.Error{Code: errs.NotFound, Message: "no sub_partner_id"}
+	}
+
+	return createDeposit(ctx, userID, crypto, priceCents, downloads, checkoutID, subResp.SubPartnerID)
+}
+
+// createDeposit is the shared NowPayments deposit creation used by the
+// subscription (boostDownloads=0) and quota-boost flows.
+func createDeposit(ctx context.Context, userID, crypto string, priceCents, boostDownloads int, checkoutID, subPartnerID string) (*CreateDepositResponse, error) {
 	var depositID string
-	err = db.QueryRow(ctx, `
-		INSERT INTO deposits (user_id, currency_crypto, amount_usd_cents, checkout_id)
-		VALUES ($1, $2, $3, NULLIF($4, '')) RETURNING id
-	`, userID, crypto, priceCents, checkoutID).Scan(&depositID)
+	err := db.QueryRow(ctx, `
+		INSERT INTO deposits (user_id, currency_crypto, amount_usd_cents, boost_downloads, checkout_id)
+		VALUES ($1, $2, $3, $4, NULLIF($5, '')) RETURNING id
+	`, userID, crypto, priceCents, boostDownloads, checkoutID).Scan(&depositID)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +208,6 @@ func createDepositForUser(ctx context.Context, userID, planID, crypto, checkoutI
 		PayAddress:   npResp.PayAddress,
 		PayAmount:    npResp.PayAmount,
 		PayCurrency:  npResp.PayCurrency,
-		PlanID:       planID,
 		PayinExtraID: npResp.PayinExtraID,
 		Network:      npResp.Network,
 		QrDataURL:    qr,
@@ -179,7 +215,7 @@ func createDepositForUser(ctx context.Context, userID, planID, crypto, checkoutI
 	}, nil
 }
 
-// ----- Internal (worker-facing) private endpoints -----
+// ----- Worker-facing endpoints (public + shared-secret auth) -----
 
 type InternalCheckBalanceParams struct {
 	UserID string `json:"user_id"`
@@ -190,8 +226,11 @@ type InternalCheckBalanceResponse struct {
 	HasBalance bool `json:"has_balance"`
 }
 
-//encore:api private method=POST path=/billing/internal/check-balance
+//encore:api public method=POST path=/billing/internal/check-balance
 func InternalCheckBalance(ctx context.Context, p *InternalCheckBalanceParams) (*InternalCheckBalanceResponse, error) {
+	if err := requireWorker(); err != nil {
+		return nil, err
+	}
 	balances, err := checkBalanceForUser(ctx, p.UserID)
 	if err != nil {
 		return nil, err
@@ -217,8 +256,11 @@ type InternalCreateDepositResponse struct {
 	TimeoutSeconds int    `json:"timeout_seconds"`
 }
 
-//encore:api private method=POST path=/billing/internal/create-deposit
+//encore:api public method=POST path=/billing/internal/create-deposit
 func InternalCreateDeposit(ctx context.Context, p *InternalCreateDepositParams) (*InternalCreateDepositResponse, error) {
+	if err := requireWorker(); err != nil {
+		return nil, err
+	}
 	res, err := createDepositForUser(ctx, p.UserID, p.PlanID, p.Crypto, p.CheckoutID)
 	if err != nil {
 		return nil, err
@@ -240,8 +282,11 @@ type InternalCreateSubscriptionResponse struct {
 	Status         string `json:"status"`
 }
 
-//encore:api private method=POST path=/billing/internal/create-subscription
+//encore:api public method=POST path=/billing/internal/create-subscription
 func InternalCreateSubscription(ctx context.Context, p *InternalCreateSubscriptionParams) (*InternalCreateSubscriptionResponse, error) {
+	if err := requireWorker(); err != nil {
+		return nil, err
+	}
 	res, err := createSubscriptionForUser(ctx, p.UserID, p.PlanID, p.CheckoutID)
 	if err != nil {
 		return nil, err
@@ -249,10 +294,35 @@ func InternalCreateSubscription(ctx context.Context, p *InternalCreateSubscripti
 	return &InternalCreateSubscriptionResponse{SubscriptionID: res.SubscriptionID, Status: res.Status}, nil
 }
 
+type InternalCreateBoostDepositParams struct {
+	UserID     string `json:"user_id"`
+	Downloads  int    `json:"downloads"`
+	Crypto     string `json:"crypto"`
+	CheckoutID string `json:"checkout_id"`
+}
+
+//encore:api public method=POST path=/billing/internal/create-boost-deposit
+func InternalCreateBoostDeposit(ctx context.Context, p *InternalCreateBoostDepositParams) (*InternalCreateDepositResponse, error) {
+	if err := requireWorker(); err != nil {
+		return nil, err
+	}
+	res, err := createBoostDepositForUser(ctx, p.UserID, p.Downloads, p.Crypto, p.CheckoutID)
+	if err != nil {
+		return nil, err
+	}
+	return &InternalCreateDepositResponse{
+		DepositID:      res.DepositID,
+		TimeoutSeconds: depositTimeoutSeconds(ctx, res.DepositID),
+	}, nil
+}
+
 // ExpireDeposit marks a deposit expired. Called by the worker; idempotent.
 //
-//encore:api private method=POST path=/billing/deposits/:id/expire
+//encore:api public method=POST path=/billing/deposits/:id/expire
 func ExpireDeposit(ctx context.Context, id string) error {
+	if err := requireWorker(); err != nil {
+		return err
+	}
 	db.Exec(ctx, `UPDATE deposits SET status = 'expired', updated_at = now() WHERE id = $1`, id)
 	return nil
 }
@@ -260,8 +330,11 @@ func ExpireDeposit(ctx context.Context, id string) error {
 // CompleteDeposit marks a deposit completed and grants its quota boost (if any)
 // exactly once. Called by the worker; idempotent.
 //
-//encore:api private method=POST path=/billing/deposits/:id/complete
+//encore:api public method=POST path=/billing/deposits/:id/complete
 func CompleteDeposit(ctx context.Context, id string) error {
+	if err := requireWorker(); err != nil {
+		return err
+	}
 	return completeDeposit(ctx, id)
 }
 
@@ -300,22 +373,38 @@ type StartSubscriptionParams struct {
 	Crypto string `json:"crypto"`
 }
 
-type StartSubscriptionResponse struct {
+type StartBoostParams struct {
+	Downloads int    `json:"downloads"`
+	Crypto    string `json:"crypto"`
+}
+
+type StartCheckoutResponse struct {
 	CheckoutID string `json:"checkout_id"`
 }
 
 //encore:api auth method=POST path=/billing/start-subscription
-func StartSubscription(ctx context.Context, p *StartSubscriptionParams) (*StartSubscriptionResponse, error) {
+func StartSubscription(ctx context.Context, p *StartSubscriptionParams) (*StartCheckoutResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 	checkoutID := uuid.NewString()
 
 	if err := startSubscribeWorkflow(ctx, checkoutID, ad.UserID, p.PlanID, p.Crypto, waitingPayTimeout(ctx)); err != nil {
 		return nil, &errs.Error{Code: errs.Internal, Message: "failed to start checkout: " + err.Error()}
 	}
-	return &StartSubscriptionResponse{CheckoutID: checkoutID}, nil
+	return &StartCheckoutResponse{CheckoutID: checkoutID}, nil
 }
 
-type SubscriptionStateResponse struct {
+//encore:api auth method=POST path=/billing/start-boost
+func StartBoost(ctx context.Context, p *StartBoostParams) (*StartCheckoutResponse, error) {
+	ad := auth.Data().(*myauth.AuthData)
+	checkoutID := uuid.NewString()
+
+	if err := startBoostWorkflow(ctx, checkoutID, ad.UserID, p.Downloads, p.Crypto); err != nil {
+		return nil, &errs.Error{Code: errs.Internal, Message: "failed to start boost: " + err.Error()}
+	}
+	return &StartCheckoutResponse{CheckoutID: checkoutID}, nil
+}
+
+type CheckoutStateResponse struct {
 	Step           string `json:"step"`
 	PayAddress     string `json:"pay_address,omitempty"`
 	PayAmount      string `json:"pay_amount,omitempty"`
@@ -328,7 +417,7 @@ type SubscriptionStateResponse struct {
 }
 
 //encore:api auth method=GET path=/billing/checkout/:id
-func GetSubscriptionState(ctx context.Context, id string) (*SubscriptionStateResponse, error) {
+func GetCheckoutState(ctx context.Context, id string) (*CheckoutStateResponse, error) {
 	ad := auth.Data().(*myauth.AuthData)
 
 	// Latest subscription for this checkout.
@@ -345,13 +434,13 @@ func GetSubscriptionState(ctx context.Context, id string) (*SubscriptionStateRes
 	if subErr == nil {
 		switch {
 		case sub.Active || sub.Status == "active":
-			return &SubscriptionStateResponse{Step: "active", SubscriptionID: sub.SubID}, nil
+			return &CheckoutStateResponse{Step: "active", SubscriptionID: sub.SubID}, nil
 		case sub.Status == "expired":
-			return &SubscriptionStateResponse{Step: "expired", SubscriptionID: sub.SubID}, nil
+			return &CheckoutStateResponse{Step: "expired", SubscriptionID: sub.SubID}, nil
 		case sub.Status == "failed" || sub.Status == "cancelled":
-			return &SubscriptionStateResponse{Step: "failed", SubscriptionID: sub.SubID}, nil
+			return &CheckoutStateResponse{Step: "failed", SubscriptionID: sub.SubID}, nil
 		default:
-			return &SubscriptionStateResponse{Step: "awaiting_subscription", SubscriptionID: sub.SubID}, nil
+			return &CheckoutStateResponse{Step: "awaiting_subscription", SubscriptionID: sub.SubID}, nil
 		}
 	}
 
@@ -378,11 +467,12 @@ func GetSubscriptionState(ctx context.Context, id string) (*SubscriptionStateRes
 	if depErr == nil {
 		switch dep.Status {
 		case "expired", "failed":
-			return &SubscriptionStateResponse{Step: "expired"}, nil
+			return &CheckoutStateResponse{Step: "expired"}, nil
 		case "completed":
-			return &SubscriptionStateResponse{Step: "awaiting_subscription"}, nil
+			// A completed deposit with no subscription means a boost finished.
+			return &CheckoutStateResponse{Step: "active"}, nil
 		default:
-			return &SubscriptionStateResponse{
+			return &CheckoutStateResponse{
 				Step:         "awaiting_deposit",
 				PayAddress:   dep.PayAddress,
 				PayAmount:    dep.AmountCrypto,
@@ -395,5 +485,5 @@ func GetSubscriptionState(ctx context.Context, id string) (*SubscriptionStateRes
 		}
 	}
 
-	return &SubscriptionStateResponse{Step: "checking"}, nil
+	return &CheckoutStateResponse{Step: "checking"}, nil
 }

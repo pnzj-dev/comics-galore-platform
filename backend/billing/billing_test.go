@@ -127,14 +127,8 @@ func setMockDeps(t *testing.T, plan *tiers.PlanDetail, subPartnerID string) {
 // tests don't attempt to dial a real Temporal server.
 func setMockTemporal(t *testing.T) {
 	t.Helper()
-	ogStart, ogSignal := startSubscriptionWorkflow, signalSubscriptionWorkflow
 	ogStartSub, ogSignalDep, ogSignalSub := startSubscribeWorkflow, signalSubscribeDeposit, signalSubscribeSubscription
-	startSubscriptionWorkflow = func(ctx context.Context, subscriptionID string, timeout time.Duration) error {
-		return nil
-	}
-	signalSubscriptionWorkflow = func(ctx context.Context, subscriptionID, status string) error {
-		return nil
-	}
+	ogStartBoost := startBoostWorkflow
 	startSubscribeWorkflow = func(ctx context.Context, checkoutID, userID, planID, crypto string, timeout time.Duration) error {
 		return nil
 	}
@@ -144,9 +138,12 @@ func setMockTemporal(t *testing.T) {
 	signalSubscribeSubscription = func(ctx context.Context, checkoutID, status string) error {
 		return nil
 	}
+	startBoostWorkflow = func(ctx context.Context, checkoutID, userID string, downloads int, crypto string) error {
+		return nil
+	}
 	t.Cleanup(func() {
-		startSubscriptionWorkflow, signalSubscriptionWorkflow = ogStart, ogSignal
 		startSubscribeWorkflow, signalSubscribeDeposit, signalSubscribeSubscription = ogStartSub, ogSignalDep, ogSignalSub
+		startBoostWorkflow = ogStartBoost
 	})
 }
 
@@ -254,8 +251,7 @@ func TestCreateSubscription_Valid(t *testing.T) {
 	setMockProvider(t, mp)
 	setMockTemporal(t)
 
-	ctx := authCtx(userID)
-	resp, err := CreateSubscription(ctx, &CreateSubParams{PlanID: planID})
+	resp, err := createSubscriptionForUser(context.Background(), userID, planID, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -264,38 +260,6 @@ func TestCreateSubscription_Valid(t *testing.T) {
 	}
 	if resp.Status != "active" {
 		t.Errorf("expected status active, got %s", resp.Status)
-	}
-}
-
-func TestPollSubscription_ReturnsActiveStatus(t *testing.T) {
-	_, _ = et.NewTestDatabase(context.Background(), "billingdb")
-
-	subID := "550e8400-e29b-41d4-a716-446655440040"
-	_, err := db.Exec(context.Background(), `
-		INSERT INTO subscriptions (id, user_id, plan_id, active, tier, provider_subscription_id)
-		VALUES ($1, '550e8400-e29b-41d4-a716-446655440001', '550e8400-e29b-41d4-a716-446655440002', true, 'bronze', 'np-sub-001')
-	`, subID)
-	if err != nil {
-		t.Fatalf("insert subscription error: %v", err)
-	}
-
-	ctx := authCtx("550e8400-e29b-41d4-a716-446655440050")
-	resp, err := PollSubscription(ctx, subID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !resp.Active {
-		t.Error("expected active=true, got false")
-	}
-}
-
-func TestPollSubscription_NotFound(t *testing.T) {
-	_, _ = et.NewTestDatabase(context.Background(), "billingdb")
-
-	ctx := authCtx("550e8400-e29b-41d4-a716-446655440050")
-	_, err := PollSubscription(ctx, "00000000-0000-0000-0000-000000000000")
-	if err == nil {
-		t.Fatal("expected error, got nil")
 	}
 }
 
@@ -338,11 +302,7 @@ func TestCreateDeposit(t *testing.T) {
 	setMockDeps(t, &tiers.PlanDetail{ID: planID, PriceUsdCents: 1000}, "partner-1")
 	setMockProvider(t, mp)
 
-	ctx := authCtx(userID)
-	resp, err := CreateDeposit(ctx, &CreateDepositParams{
-		PlanID: planID,
-		Crypto: "eth",
-	})
+	resp, err := createDepositForUser(context.Background(), userID, planID, "eth", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -354,60 +314,6 @@ func TestCreateDeposit(t *testing.T) {
 	}
 	if resp.PayCurrency != "eth" {
 		t.Errorf("expected pay currency eth, got %s", resp.PayCurrency)
-	}
-}
-
-func TestPollDeposit(t *testing.T) {
-	_, _ = et.NewTestDatabase(context.Background(), "billingdb")
-
-	depID := "550e8400-e29b-41d4-a716-446655440060"
-	_, err := db.Exec(context.Background(), `
-		INSERT INTO deposits (id, user_id, currency_crypto, status)
-		VALUES ($1, '550e8400-e29b-41d4-a716-446655440001', 'btc', 'completed')
-	`, depID)
-	if err != nil {
-		t.Fatalf("insert deposit error: %v", err)
-	}
-
-	ctx := authCtx("550e8400-e29b-41d4-a716-446655440050")
-	resp, err := PollDeposit(ctx, depID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !resp.Completed {
-		t.Error("expected completed=true, got false")
-	}
-}
-
-func TestPollDeposit_Pending(t *testing.T) {
-	_, _ = et.NewTestDatabase(context.Background(), "billingdb")
-
-	depID := "550e8400-e29b-41d4-a716-446655440061"
-	_, err := db.Exec(context.Background(), `
-		INSERT INTO deposits (id, user_id, currency_crypto, status)
-		VALUES ($1, '550e8400-e29b-41d4-a716-446655440001', 'btc', 'pending')
-	`, depID)
-	if err != nil {
-		t.Fatalf("insert deposit error: %v", err)
-	}
-
-	ctx := authCtx("550e8400-e29b-41d4-a716-446655440050")
-	resp, err := PollDeposit(ctx, depID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.Completed {
-		t.Error("expected completed=false for pending deposit")
-	}
-}
-
-func TestPollDeposit_NotFound(t *testing.T) {
-	_, _ = et.NewTestDatabase(context.Background(), "billingdb")
-
-	ctx := authCtx("550e8400-e29b-41d4-a716-446655440050")
-	_, err := PollDeposit(ctx, "00000000-0000-0000-0000-000000000000")
-	if err == nil {
-		t.Fatal("expected error, got nil")
 	}
 }
 

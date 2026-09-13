@@ -1,0 +1,17 @@
+# Fly.io config for the Comics Galore Temporal worker (always-on process).
+# CI overrides the app name per environment (e.g. cg-worker-dev, cg-worker-prod).
+app = "cg-worker"
+
+primary_region = "ord"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Worker has no HTTP service. Runtime env (Temporal + Encore + secret) is set
+# per app via `fly secrets set`:
+#   TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE, TEMPORAL_CERT, TEMPORAL_KEY,
+#   ENCORE_BACKEND_URL, WORKER_SECRET
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

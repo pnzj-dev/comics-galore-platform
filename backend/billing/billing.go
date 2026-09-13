@@ -34,6 +34,17 @@ var secrets struct {
 	NowPaymentsEmail    string
 	NowPaymentsPassword string
 	NgrokURL            string
+
+	// WorkerSecret authenticates the Temporal worker when it calls the
+	// worker-facing endpoints. Empty = disabled (local dev).
+	WorkerSecret string
+
+	// Temporal connection (Temporal Cloud uses mTLS cert/key; local dev uses
+	// the address/namespace only, defaulting to localhost).
+	TemporalAddress   string
+	TemporalNamespace string
+	TemporalCert      string
+	TemporalKey       string
 }
 
 var provider nowpayments.PaymentsProvider
@@ -171,46 +182,9 @@ type CheckBalanceResponse struct {
 	Balances map[string]BalanceEntry `json:"balances"`
 }
 
-//encore:api auth method=GET path=/billing/check-balance
-func CheckBalance(ctx context.Context) (*CheckBalanceResponse, error) {
-	ad := auth.Data().(*myauth.AuthData)
-	return checkBalanceForUser(ctx, ad.UserID)
-}
-
-// ----- Create Subscription (atomic, Step 4A) -----
-
-type CreateSubParams struct {
-	PlanID string `json:"plan_id"`
-}
-
 type CreateSubResponse struct {
 	SubscriptionID string `json:"subscription_id"`
 	Status         string `json:"status"`
-}
-
-//encore:api auth method=POST path=/billing/create-subscription
-func CreateSubscription(ctx context.Context, p *CreateSubParams) (*CreateSubResponse, error) {
-	ad := auth.Data().(*myauth.AuthData)
-
-	res, err := createSubscriptionForUser(ctx, ad.UserID, p.PlanID, "")
-	if err != nil {
-		return nil, err
-	}
-
-	// Best-effort: start the durable subscription workflow that waits for the
-	// payment confirmation (or timeout) and then activates/expires the sub.
-	if wfErr := startSubscriptionWorkflow(ctx, res.SubscriptionID, waitingPayTimeout(ctx)); wfErr != nil {
-		log.Printf("start subscription workflow (best-effort): %v", wfErr)
-	}
-
-	return res, nil
-}
-
-// ----- Create Deposit (Step 4B) -----
-
-type CreateDepositParams struct {
-	PlanID string `json:"plan_id"`
-	Crypto string `json:"crypto"`
 }
 
 type CreateDepositResponse struct {
@@ -218,17 +192,10 @@ type CreateDepositResponse struct {
 	PayAddress   string  `json:"pay_address"`
 	PayAmount    float64 `json:"pay_amount"`
 	PayCurrency  string  `json:"pay_currency"`
-	PlanID       string  `json:"plan_id"`
 	PayinExtraID string  `json:"payin_extra_id,omitempty"`
 	Network      string  `json:"network,omitempty"`
 	QrDataURL    string  `json:"qr_data_url,omitempty"`
 	PaymentURI   string  `json:"payment_uri,omitempty"`
-}
-
-//encore:api auth method=POST path=/billing/create-deposit
-func CreateDeposit(ctx context.Context, p *CreateDepositParams) (*CreateDepositResponse, error) {
-	ad := auth.Data().(*myauth.AuthData)
-	return createDepositForUser(ctx, ad.UserID, p.PlanID, p.Crypto, "")
 }
 
 // ----- Quota Boost -----
@@ -253,129 +220,6 @@ func GetBoostOptions(ctx context.Context) (*BoostOptionsResponse, error) {
 		{Downloads: cfg.Boost2Downloads, PriceUSD: cfg.Boost2Price},
 		{Downloads: cfg.Boost3Downloads, PriceUSD: cfg.Boost3Price},
 	}}, nil
-}
-
-type CreateQuotaBoostParams struct {
-	Downloads int    `json:"downloads"`
-	Crypto    string `json:"crypto"`
-}
-
-type CreateQuotaBoostResponse struct {
-	DepositID    string  `json:"deposit_id"`
-	PayAddress   string  `json:"pay_address"`
-	PayAmount    float64 `json:"pay_amount"`
-	PayCurrency  string  `json:"pay_currency"`
-	PayinExtraID string  `json:"payin_extra_id,omitempty"`
-	Network      string  `json:"network,omitempty"`
-	QrDataURL    string  `json:"qr_data_url,omitempty"`
-	PaymentURI   string  `json:"payment_uri,omitempty"`
-}
-
-//encore:api auth method=POST path=/billing/create-quota-boost
-func CreateQuotaBoost(ctx context.Context, p *CreateQuotaBoostParams) (*CreateQuotaBoostResponse, error) {
-	ad := auth.Data().(*myauth.AuthData)
-
-	cfg, err := myauth.GetBoostConfig(ctx)
-	if err != nil {
-		return nil, &errs.Error{Code: errs.Internal, Message: "quota config unavailable"}
-	}
-
-	priceCents := 0
-	switch p.Downloads {
-	case cfg.Boost1Downloads:
-		priceCents = int(cfg.Boost1Price * 100)
-	case cfg.Boost2Downloads:
-		priceCents = int(cfg.Boost2Price * 100)
-	case cfg.Boost3Downloads:
-		priceCents = int(cfg.Boost3Price * 100)
-	default:
-		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "invalid boost quantity"}
-	}
-
-	subResp, err := ensureSubPartnerID(ctx, &myauth.EnsureSubPartnerIDParams{UserID: ad.UserID})
-	if err != nil {
-		return nil, &errs.Error{Code: errs.Internal, Message: "ensure sub_partner_id failed: " + err.Error()}
-	}
-	if subResp.SubPartnerID == "" {
-		return nil, &errs.Error{Code: errs.NotFound, Message: "no sub_partner_id"}
-	}
-
-	var depositID string
-	err = db.QueryRow(ctx, `
-		INSERT INTO deposits (user_id, currency_crypto, amount_usd_cents, boost_downloads)
-		VALUES ($1, $2, $3, $4) RETURNING id
-	`, ad.UserID, p.Crypto, priceCents, p.Downloads).Scan(&depositID)
-	if err != nil {
-		return nil, err
-	}
-
-	callbackURL := buildCallbackURL("/webhooks/nowpayments/deposit?deposit_id=" + depositID)
-
-	npResp, err := provider.CreateDeposit(ctx, DepositRequest{
-		Crypto:         p.Crypto,
-		AmountUSD:      float64(priceCents) / 100,
-		SubPartnerID:   subResp.SubPartnerID,
-		IPNCallbackURL: callbackURL,
-	})
-	if err != nil {
-		return nil, &errs.Error{Code: errs.Internal, Message: "nowpayments deposit creation failed: " + err.Error()}
-	}
-
-	db.Exec(ctx, `
-		UPDATE deposits SET provider_deposit_id = $1, pay_address = $2, amount_crypto = $3
-		WHERE id = $4
-	`, npResp.PaymentID, npResp.PayAddress, fmtNum(npResp.PayAmount), depositID)
-
-	qr, uri := buildDepositQR(npResp)
-
-	return &CreateQuotaBoostResponse{
-		DepositID:    depositID,
-		PayAddress:   npResp.PayAddress,
-		PayAmount:    npResp.PayAmount,
-		PayCurrency:  npResp.PayCurrency,
-		PayinExtraID: npResp.PayinExtraID,
-		Network:      npResp.Network,
-		QrDataURL:    qr,
-		PaymentURI:   uri,
-	}, nil
-}
-
-// ----- Poll Subscription -----
-
-type PollSubResponse struct {
-	Active bool `json:"active"`
-}
-
-//encore:api auth method=GET path=/billing/subscription/:id/poll
-func PollSubscription(ctx context.Context, id string) (*PollSubResponse, error) {
-	var active bool
-	err := db.QueryRow(ctx, `SELECT active FROM subscriptions WHERE id = $1`, id).Scan(&active)
-	if err != nil {
-		if isNoRows(err) {
-			return nil, &errs.Error{Code: errs.NotFound, Message: "subscription not found"}
-		}
-		return nil, err
-	}
-	return &PollSubResponse{Active: active}, nil
-}
-
-// ----- Poll Deposit -----
-
-type PollDepositResponse struct {
-	Completed bool `json:"completed"`
-}
-
-//encore:api auth method=GET path=/billing/deposit/:id/poll
-func PollDeposit(ctx context.Context, id string) (*PollDepositResponse, error) {
-	var status string
-	err := db.QueryRow(ctx, `SELECT status FROM deposits WHERE id = $1`, id).Scan(&status)
-	if err != nil {
-		if isNoRows(err) {
-			return nil, &errs.Error{Code: errs.NotFound, Message: "deposit not found"}
-		}
-		return nil, err
-	}
-	return &PollDepositResponse{Completed: status == "completed"}, nil
 }
 
 // ----- Subscription Webhook -----
@@ -460,18 +304,11 @@ func processSubscriptionWebhook(ctx context.Context, body []byte, sig string) (i
 			status, string(body))
 	}
 
-	// Signal the durable workflow (best-effort). The combined SubscribeWorkflow
-	// activates on "finished" and expires on timeout/non-finished; the legacy
-	// SubscriptionWorkflow does the same for checkouts without a workflow link.
-	if err == nil {
-		if sub.CheckoutID != "" {
-			if wfErr := signalSubscribeSubscription(ctx, sub.CheckoutID, status); wfErr != nil {
-				log.Printf("signal subscribe workflow (best-effort): %v", wfErr)
-			}
-		} else if sub.SubID != "" {
-			if wfErr := signalSubscriptionWorkflow(ctx, sub.SubID, status); wfErr != nil {
-				log.Printf("signal subscription workflow (best-effort): %v", wfErr)
-			}
+	// Signal the durable SubscribeWorkflow (best-effort). It activates on
+	// "finished" and expires on timeout or a non-finished status.
+	if err == nil && sub.CheckoutID != "" {
+		if wfErr := signalSubscribeSubscription(ctx, sub.CheckoutID, status); wfErr != nil {
+			log.Printf("signal subscribe workflow (best-effort): %v", wfErr)
 		}
 	}
 
@@ -494,8 +331,11 @@ func SubscriptionWebhook(w http.ResponseWriter, req *http.Request) {
 // ActivateSubscription marks a subscription active and promotes the user's
 // tier. Called by the Temporal worker's activity; idempotent.
 //
-//encore:api private method=POST path=/billing/subscriptions/:id/activate
+//encore:api public method=POST path=/billing/subscriptions/:id/activate
 func ActivateSubscription(ctx context.Context, id string) error {
+	if err := requireWorker(); err != nil {
+		return err
+	}
 	var userID, tier string
 	if err := db.QueryRow(ctx, `SELECT user_id, tier FROM subscriptions WHERE id = $1`, id).Scan(&userID, &tier); err != nil {
 		if isNoRows(err) {
@@ -511,8 +351,11 @@ func ActivateSubscription(ctx context.Context, id string) error {
 // ExpireSubscription expires a subscription and downgrades the user to the
 // free tier. Called by the Temporal worker's activity; idempotent.
 //
-//encore:api private method=POST path=/billing/subscriptions/:id/expire
+//encore:api public method=POST path=/billing/subscriptions/:id/expire
 func ExpireSubscription(ctx context.Context, id string) error {
+	if err := requireWorker(); err != nil {
+		return err
+	}
 	var userID string
 	if err := db.QueryRow(ctx, `SELECT user_id FROM subscriptions WHERE id = $1`, id).Scan(&userID); err != nil {
 		if isNoRows(err) {
@@ -565,19 +408,10 @@ func processDepositWebhook(ctx context.Context, body []byte, sig, depositID stri
 		db.Exec(ctx, `UPDATE deposits SET raw_payload = $1, updated_at = now() WHERE id = $2`, string(body), actualID)
 	}
 
-	// Combined checkout: signal the workflow; it completes/expires via activities.
+	// Signal the durable workflow; it completes/expires via activities.
 	if checkoutID != "" {
 		if wfErr := signalSubscribeDeposit(ctx, checkoutID, status); wfErr != nil {
 			log.Printf("signal subscribe deposit (best-effort): %v", wfErr)
-		}
-		return http.StatusOK, `{"ok":true}`
-	}
-
-	// Legacy path (no checkout): update status directly and complete/boost.
-	if actualID != "" {
-		db.Exec(ctx, `UPDATE deposits SET status = $1, updated_at = now() WHERE id = $2`, status, actualID)
-		if status == "completed" {
-			_ = completeDeposit(ctx, actualID)
 		}
 	}
 

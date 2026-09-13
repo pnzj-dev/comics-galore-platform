@@ -47,10 +47,6 @@ type CreateSubscriptionResult struct {
 	SubscriptionID string `json:"subscription_id"`
 }
 
-type DepositInput struct {
-	DepositID string `json:"deposit_id"`
-}
-
 func SubscribeWorkflow(ctx workflow.Context, input SubscribeWorkflowInput) error {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,

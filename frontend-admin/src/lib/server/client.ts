@@ -882,8 +882,6 @@ export namespace billing {
         "created_at": string
     }
 
-    export type BalanceEntry = nowpayments.BalanceEntry
-
     export interface BillingStats {
         "total_revenue": number
         "active_revenue": number
@@ -903,8 +901,16 @@ export namespace billing {
         boosts: BoostOption[]
     }
 
-    export interface CheckBalanceResponse {
-        balances: { [key: string]: BalanceEntry }
+    export interface CheckoutStateResponse {
+        step: string
+        "pay_address": string
+        "pay_amount": string
+        "pay_currency": string
+        "payin_extra_id": string
+        network: string
+        "qr_data_url": string
+        "expires_at": string
+        "subscription_id": string
     }
 
     export interface Coupon {
@@ -925,48 +931,6 @@ export namespace billing {
         "max_uses": number
     }
 
-    export interface CreateDepositParams {
-        "plan_id": string
-        crypto: string
-    }
-
-    export interface CreateDepositResponse {
-        "deposit_id": string
-        "pay_address": string
-        "pay_amount": number
-        "pay_currency": string
-        "plan_id": string
-        "payin_extra_id": string
-        network: string
-        "qr_data_url": string
-        "payment_uri": string
-    }
-
-    export interface CreateQuotaBoostParams {
-        downloads: number
-        crypto: string
-    }
-
-    export interface CreateQuotaBoostResponse {
-        "deposit_id": string
-        "pay_address": string
-        "pay_amount": number
-        "pay_currency": string
-        "payin_extra_id": string
-        network: string
-        "qr_data_url": string
-        "payment_uri": string
-    }
-
-    export interface CreateSubParams {
-        "plan_id": string
-    }
-
-    export interface CreateSubResponse {
-        "subscription_id": string
-        status: string
-    }
-
     export interface EstimatePriceParams {
         "plan_id": string
         crypto: string
@@ -976,6 +940,45 @@ export namespace billing {
         "user_id": string
         tier: string
         "duration_days": number
+    }
+
+    export interface InternalCheckBalanceParams {
+        "user_id": string
+        crypto: string
+    }
+
+    export interface InternalCheckBalanceResponse {
+        "has_balance": boolean
+    }
+
+    export interface InternalCreateBoostDepositParams {
+        "user_id": string
+        downloads: number
+        crypto: string
+        "checkout_id": string
+    }
+
+    export interface InternalCreateDepositParams {
+        "user_id": string
+        "plan_id": string
+        crypto: string
+        "checkout_id": string
+    }
+
+    export interface InternalCreateDepositResponse {
+        "deposit_id": string
+        "timeout_seconds": number
+    }
+
+    export interface InternalCreateSubscriptionParams {
+        "user_id": string
+        "plan_id": string
+        "checkout_id": string
+    }
+
+    export interface InternalCreateSubscriptionResponse {
+        "subscription_id": string
+        status: string
     }
 
     export interface ListCouponsResponse {
@@ -1005,14 +1008,6 @@ export namespace billing {
         "amount_usd_cents": number
         status: string
         "created_at": string
-    }
-
-    export interface PollDepositResponse {
-        completed: boolean
-    }
-
-    export interface PollSubResponse {
-        active: boolean
     }
 
     export interface RevenueByTier {
@@ -1075,25 +1070,18 @@ export namespace billing {
         body: string
     }
 
-    export interface StartSubscriptionParams {
-        "plan_id": string
+    export interface StartBoostParams {
+        downloads: number
         crypto: string
     }
 
-    export interface StartSubscriptionResponse {
+    export interface StartCheckoutResponse {
         "checkout_id": string
     }
 
-    export interface SubscriptionStateResponse {
-        step: string
-        "pay_address": string
-        "pay_amount": string
-        "pay_currency": string
-        "payin_extra_id": string
-        network: string
-        "qr_data_url": string
-        "expires_at": string
-        "subscription_id": string
+    export interface StartSubscriptionParams {
+        "plan_id": string
+        crypto: string
     }
 
     export class ServiceClient {
@@ -1101,6 +1089,7 @@ export namespace billing {
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
+            this.ActivateSubscription = this.ActivateSubscription.bind(this)
             this.AdminCreateCoupon = this.AdminCreateCoupon.bind(this)
             this.AdminGrantSubscription = this.AdminGrantSubscription.bind(this)
             this.AdminListCoupons = this.AdminListCoupons.bind(this)
@@ -1110,23 +1099,33 @@ export namespace billing {
             this.AdminPastDuePayments = this.AdminPastDuePayments.bind(this)
             this.AdminRevokeSubscription = this.AdminRevokeSubscription.bind(this)
             this.CancelMySubscription = this.CancelMySubscription.bind(this)
-            this.CheckBalance = this.CheckBalance.bind(this)
-            this.CreateDeposit = this.CreateDeposit.bind(this)
-            this.CreateQuotaBoost = this.CreateQuotaBoost.bind(this)
-            this.CreateSubscription = this.CreateSubscription.bind(this)
+            this.CompleteDeposit = this.CompleteDeposit.bind(this)
             this.DepositWebhook = this.DepositWebhook.bind(this)
             this.DevSeedBilling = this.DevSeedBilling.bind(this)
             this.EstimatePrice = this.EstimatePrice.bind(this)
+            this.ExpireDeposit = this.ExpireDeposit.bind(this)
+            this.ExpireSubscription = this.ExpireSubscription.bind(this)
             this.GetBoostOptions = this.GetBoostOptions.bind(this)
+            this.GetCheckoutState = this.GetCheckoutState.bind(this)
             this.GetMySubscription = this.GetMySubscription.bind(this)
-            this.GetSubscriptionState = this.GetSubscriptionState.bind(this)
+            this.InternalCheckBalance = this.InternalCheckBalance.bind(this)
+            this.InternalCreateBoostDeposit = this.InternalCreateBoostDeposit.bind(this)
+            this.InternalCreateDeposit = this.InternalCreateDeposit.bind(this)
+            this.InternalCreateSubscription = this.InternalCreateSubscription.bind(this)
             this.ListCurrencies = this.ListCurrencies.bind(this)
-            this.PollDeposit = this.PollDeposit.bind(this)
-            this.PollSubscription = this.PollSubscription.bind(this)
             this.RunWaitingPayExpiry = this.RunWaitingPayExpiry.bind(this)
             this.SimulateWebhook = this.SimulateWebhook.bind(this)
+            this.StartBoost = this.StartBoost.bind(this)
             this.StartSubscription = this.StartSubscription.bind(this)
             this.SubscriptionWebhook = this.SubscriptionWebhook.bind(this)
+        }
+
+        /**
+         * ActivateSubscription marks a subscription active and promotes the user's
+         * tier. Called by the Temporal worker's activity; idempotent.
+         */
+        public async ActivateSubscription(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/billing/subscriptions/${encodeURIComponent(id)}/activate`)
         }
 
         public async AdminCreateCoupon(params: CreateCouponParams): Promise<Coupon> {
@@ -1210,28 +1209,12 @@ export namespace billing {
             await this.baseClient.callTypedAPI("POST", `/billing/cancel-subscription`)
         }
 
-        public async CheckBalance(): Promise<CheckBalanceResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/billing/check-balance`)
-            return await resp.json() as CheckBalanceResponse
-        }
-
-        public async CreateDeposit(params: CreateDepositParams): Promise<CreateDepositResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/billing/create-deposit`, JSON.stringify(params))
-            return await resp.json() as CreateDepositResponse
-        }
-
-        public async CreateQuotaBoost(params: CreateQuotaBoostParams): Promise<CreateQuotaBoostResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/billing/create-quota-boost`, JSON.stringify(params))
-            return await resp.json() as CreateQuotaBoostResponse
-        }
-
-        public async CreateSubscription(params: CreateSubParams): Promise<CreateSubResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/billing/create-subscription`, JSON.stringify(params))
-            return await resp.json() as CreateSubResponse
+        /**
+         * CompleteDeposit marks a deposit completed and grants its quota boost (if any)
+         * exactly once. Called by the worker; idempotent.
+         */
+        public async CompleteDeposit(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/billing/deposits/${encodeURIComponent(id)}/complete`)
         }
 
         public async DepositWebhook(method: "POST", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
@@ -1250,10 +1233,31 @@ export namespace billing {
             return await resp.json() as nowpayments.EstimateResponse
         }
 
+        /**
+         * ExpireDeposit marks a deposit expired. Called by the worker; idempotent.
+         */
+        public async ExpireDeposit(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/billing/deposits/${encodeURIComponent(id)}/expire`)
+        }
+
+        /**
+         * ExpireSubscription expires a subscription and downgrades the user to the
+         * free tier. Called by the Temporal worker's activity; idempotent.
+         */
+        public async ExpireSubscription(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/billing/subscriptions/${encodeURIComponent(id)}/expire`)
+        }
+
         public async GetBoostOptions(): Promise<BoostOptionsResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/billing/quota-boosts`)
             return await resp.json() as BoostOptionsResponse
+        }
+
+        public async GetCheckoutState(id: string): Promise<CheckoutStateResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/billing/checkout/${encodeURIComponent(id)}`)
+            return await resp.json() as CheckoutStateResponse
         }
 
         public async GetMySubscription(): Promise<MySubscription> {
@@ -1262,28 +1266,34 @@ export namespace billing {
             return await resp.json() as MySubscription
         }
 
-        public async GetSubscriptionState(id: string): Promise<SubscriptionStateResponse> {
+        public async InternalCheckBalance(params: InternalCheckBalanceParams): Promise<InternalCheckBalanceResponse> {
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/billing/checkout/${encodeURIComponent(id)}`)
-            return await resp.json() as SubscriptionStateResponse
+            const resp = await this.baseClient.callTypedAPI("POST", `/billing/internal/check-balance`, JSON.stringify(params))
+            return await resp.json() as InternalCheckBalanceResponse
+        }
+
+        public async InternalCreateBoostDeposit(params: InternalCreateBoostDepositParams): Promise<InternalCreateDepositResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/billing/internal/create-boost-deposit`, JSON.stringify(params))
+            return await resp.json() as InternalCreateDepositResponse
+        }
+
+        public async InternalCreateDeposit(params: InternalCreateDepositParams): Promise<InternalCreateDepositResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/billing/internal/create-deposit`, JSON.stringify(params))
+            return await resp.json() as InternalCreateDepositResponse
+        }
+
+        public async InternalCreateSubscription(params: InternalCreateSubscriptionParams): Promise<InternalCreateSubscriptionResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/billing/internal/create-subscription`, JSON.stringify(params))
+            return await resp.json() as InternalCreateSubscriptionResponse
         }
 
         public async ListCurrencies(): Promise<ListCurrenciesResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/billing/currencies`)
             return await resp.json() as ListCurrenciesResponse
-        }
-
-        public async PollDeposit(id: string): Promise<PollDepositResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/billing/deposit/${encodeURIComponent(id)}/poll`)
-            return await resp.json() as PollDepositResponse
-        }
-
-        public async PollSubscription(id: string): Promise<PollSubResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/billing/subscription/${encodeURIComponent(id)}/poll`)
-            return await resp.json() as PollSubResponse
         }
 
         /**
@@ -1299,10 +1309,16 @@ export namespace billing {
             return await resp.json() as SimulateWebhookResponse
         }
 
-        public async StartSubscription(params: StartSubscriptionParams): Promise<StartSubscriptionResponse> {
+        public async StartBoost(params: StartBoostParams): Promise<StartCheckoutResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/billing/start-boost`, JSON.stringify(params))
+            return await resp.json() as StartCheckoutResponse
+        }
+
+        public async StartSubscription(params: StartSubscriptionParams): Promise<StartCheckoutResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/billing/start-subscription`, JSON.stringify(params))
-            return await resp.json() as StartSubscriptionResponse
+            return await resp.json() as StartCheckoutResponse
         }
 
         public async SubscriptionWebhook(method: "POST", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
@@ -3244,11 +3260,6 @@ export namespace upload {
 }
 
 export namespace nowpayments {
-    export interface BalanceEntry {
-        amount: number
-        "pending_amount": number
-    }
-
     export interface EstimateResponse {
         "estimated_amount": number
         "from_currency": string

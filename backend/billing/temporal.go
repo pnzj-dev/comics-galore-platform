@@ -2,7 +2,9 @@ package billing
 
 import (
 	"context"
+	"crypto/tls"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,30 +14,20 @@ import (
 )
 
 // Contract shared with the temporal-worker module (see temporal-worker/):
-// workflow "SubscriptionWorkflow", task queue "subscription", signal
-// "payment_received". The struct shapes below must match the worker's
-// definitions field-for-field (JSON tags are the wire format).
+// task queue "subscription", workflows "SubscribeWorkflow" and "BoostWorkflow",
+// signals "deposit_paid" and "subscription_paid". The struct shapes below must
+// match the worker's definitions field-for-field (JSON tags are the wire format).
 const (
-	temporalTaskQueue        = "subscription"
-	subscriptionWorkflowName = "SubscriptionWorkflow"
-	paymentSignalName        = "payment_received"
+	temporalTaskQueue          = "subscription"
+	subscribeWorkflowName      = "SubscribeWorkflow"
+	boostWorkflowName          = "BoostWorkflow"
+	depositPaidSignalName      = "deposit_paid"
+	subscriptionPaidSignalName = "subscription_paid"
 )
-
-type subscriptionWorkflowInput struct {
-	SubscriptionID string        `json:"subscription_id"`
-	PaymentTimeout time.Duration `json:"payment_timeout"`
-}
 
 type paymentSignal struct {
 	Status string `json:"status"`
 }
-
-// startSubscriptionWorkflow and signalSubscriptionWorkflow are overridable in
-// tests. The defaults are best-effort: callers log errors rather than fail.
-var (
-	startSubscriptionWorkflow  = defaultStartSubscriptionWorkflow
-	signalSubscriptionWorkflow = defaultSignalSubscriptionWorkflow
-)
 
 var (
 	temporalOnce   sync.Once
@@ -45,43 +37,34 @@ var (
 
 func getTemporalClient() (client.Client, error) {
 	temporalOnce.Do(func() {
-		address := os.Getenv("TEMPORAL_ADDRESS")
-		if address == "" {
-			address = "localhost:7233"
+		address := firstNonEmpty(secrets.TemporalAddress, os.Getenv("TEMPORAL_ADDRESS"), "localhost:7233")
+		namespace := firstNonEmpty(secrets.TemporalNamespace, os.Getenv("TEMPORAL_NAMESPACE"), "default")
+		certPEM := firstNonEmpty(secrets.TemporalCert, os.Getenv("TEMPORAL_CERT"))
+		keyPEM := firstNonEmpty(secrets.TemporalKey, os.Getenv("TEMPORAL_KEY"))
+
+		opts := client.Options{HostPort: address, Namespace: namespace}
+		if certPEM != "" && keyPEM != "" {
+			cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+			if err != nil {
+				temporalErr = err
+				return
+			}
+			opts.ConnectionOptions = client.ConnectionOptions{
+				TLS: &tls.Config{Certificates: []tls.Certificate{cert}},
+			}
 		}
-		namespace := os.Getenv("TEMPORAL_NAMESPACE")
-		if namespace == "" {
-			namespace = "default"
-		}
-		temporalClient, temporalErr = client.Dial(client.Options{
-			HostPort:  address,
-			Namespace: namespace,
-		})
+		temporalClient, temporalErr = client.Dial(opts)
 	})
 	return temporalClient, temporalErr
 }
 
-func defaultStartSubscriptionWorkflow(ctx context.Context, subscriptionID string, timeout time.Duration) error {
-	c, err := getTemporalClient()
-	if err != nil {
-		return err
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
 	}
-	_, err = c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		ID:        subscriptionID,
-		TaskQueue: temporalTaskQueue,
-	}, subscriptionWorkflowName, subscriptionWorkflowInput{
-		SubscriptionID: subscriptionID,
-		PaymentTimeout: timeout,
-	})
-	return err
-}
-
-func defaultSignalSubscriptionWorkflow(ctx context.Context, subscriptionID, status string) error {
-	c, err := getTemporalClient()
-	if err != nil {
-		return err
-	}
-	return c.SignalWorkflow(ctx, subscriptionID, "", paymentSignalName, paymentSignal{Status: status})
+	return ""
 }
 
 // waitingPayTimeout returns the configured WAITING_PAY expiry (default 24h),
@@ -94,13 +77,7 @@ func waitingPayTimeout(ctx context.Context) time.Duration {
 	return time.Duration(hours) * time.Hour
 }
 
-// ----- Combined SubscribeWorkflow (fund → subscribe → activate) -----
-
-const (
-	subscribeWorkflowName      = "SubscribeWorkflow"
-	depositPaidSignalName      = "deposit_paid"
-	subscriptionPaidSignalName = "subscription_paid"
-)
+// ----- SubscribeWorkflow (fund → subscribe → activate) -----
 
 type subscribeWorkflowInput struct {
 	UserID              string        `json:"user_id"`
@@ -148,4 +125,32 @@ func defaultSignalSubscribeSubscription(ctx context.Context, checkoutID, status 
 		return err
 	}
 	return c.SignalWorkflow(ctx, checkoutID, "", subscriptionPaidSignalName, paymentSignal{Status: status})
+}
+
+// ----- BoostWorkflow (create boost deposit → wait → grant boost) -----
+
+type boostWorkflowInput struct {
+	UserID     string `json:"user_id"`
+	Downloads  int    `json:"downloads"`
+	Crypto     string `json:"crypto"`
+	CheckoutID string `json:"checkout_id"`
+}
+
+var startBoostWorkflow = defaultStartBoostWorkflow
+
+func defaultStartBoostWorkflow(ctx context.Context, checkoutID, userID string, downloads int, crypto string) error {
+	c, err := getTemporalClient()
+	if err != nil {
+		return err
+	}
+	_, err = c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        checkoutID,
+		TaskQueue: temporalTaskQueue,
+	}, boostWorkflowName, boostWorkflowInput{
+		UserID:     userID,
+		Downloads:  downloads,
+		Crypto:     crypto,
+		CheckoutID: checkoutID,
+	})
+	return err
 }

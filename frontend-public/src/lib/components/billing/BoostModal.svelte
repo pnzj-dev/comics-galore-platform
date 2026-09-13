@@ -4,13 +4,13 @@
 	import { quotaRefresh } from '$lib/stores/quota.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import CoinIcon from '$lib/components/billing/CoinIcon.svelte';
-	import DepositScreen from '$lib/components/billing/DepositScreen.svelte';
+	import CheckoutStatus from '$lib/components/billing/CheckoutStatus.svelte';
 
 	let { onBoosted }: { onBoosted?: () => void } = $props();
 
 	const open = $derived(modal.isOpen('boost'));
 
-	type Screen = 'select' | 'deposit';
+	type Screen = 'select' | 'checkout';
 
 	const cryptos = [
 		{ code: 'btc', label: 'BTC' },
@@ -26,7 +26,7 @@
 	let selectedCrypto = $state('');
 	let paying = $state(false);
 	let error = $state('');
-	let depositData = $state<any>(null);
+	let checkoutId = $state('');
 
 	$effect(() => {
 		if (open) loadBoosts();
@@ -36,7 +36,7 @@
 		loadingBoosts = true;
 		error = '';
 		screen = 'select';
-		depositData = null;
+		checkoutId = '';
 		try {
 			const res = await encore.billing.GetBoostOptions();
 			boosts = res.boosts || [];
@@ -59,25 +59,25 @@
 		paying = true;
 		error = '';
 		try {
-			const res: any = await encore.billing.CreateQuotaBoost({
+			const res = await encore.billing.StartBoost({
 				downloads: selectedDownloads,
 				crypto: selectedCrypto,
 			});
-			depositData = res;
-			screen = 'deposit';
+			checkoutId = res.checkout_id;
+			screen = 'checkout';
 		} catch (e) {
 			error = (e as Error).message || 'Failed to start boost payment';
 		}
 		paying = false;
 	}
 
-	function onDepositSuccess() {
+	function onBoostSuccess() {
 		quotaRefresh.bump();
 		onBoosted?.();
 		close();
 	}
 
-	function onRetry() {
+	function onBoostRetry() {
 		pay();
 	}
 </script>
@@ -144,21 +144,8 @@
 					<Button class="w-full" disabled={!selectedDownloads || !selectedCrypto || paying} onclick={pay}>
 						{paying ? 'Preparing payment…' : 'Continue to payment'}
 					</Button>
-				{:else if screen === 'deposit' && depositData}
-					<DepositScreen
-						depositId={depositData.deposit_id}
-						payAddress={depositData.pay_address}
-						payAmount={depositData.pay_amount}
-						payCurrency={depositData.pay_currency}
-						payinExtraId={depositData.payin_extra_id}
-						network={depositData.network}
-						qrDataUrl={depositData.qr_data_url}
-						planId={''}
-						crypto={selectedCrypto}
-						onSuccess={onDepositSuccess}
-						onTimeout={onRetry}
-						onRetry={onRetry}
-					/>
+				{:else if screen === 'checkout'}
+					<CheckoutStatus checkoutId={checkoutId} onSuccess={onBoostSuccess} onRetry={onBoostRetry} />
 				{/if}
 			</div>
 		</div>
