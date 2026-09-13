@@ -1075,6 +1075,27 @@ export namespace billing {
         body: string
     }
 
+    export interface StartSubscriptionParams {
+        "plan_id": string
+        crypto: string
+    }
+
+    export interface StartSubscriptionResponse {
+        "checkout_id": string
+    }
+
+    export interface SubscriptionStateResponse {
+        step: string
+        "pay_address": string
+        "pay_amount": string
+        "pay_currency": string
+        "payin_extra_id": string
+        network: string
+        "qr_data_url": string
+        "expires_at": string
+        "subscription_id": string
+    }
+
     export class ServiceClient {
         private baseClient: BaseClient
 
@@ -1098,11 +1119,13 @@ export namespace billing {
             this.EstimatePrice = this.EstimatePrice.bind(this)
             this.GetBoostOptions = this.GetBoostOptions.bind(this)
             this.GetMySubscription = this.GetMySubscription.bind(this)
+            this.GetSubscriptionState = this.GetSubscriptionState.bind(this)
             this.ListCurrencies = this.ListCurrencies.bind(this)
             this.PollDeposit = this.PollDeposit.bind(this)
             this.PollSubscription = this.PollSubscription.bind(this)
             this.RunWaitingPayExpiry = this.RunWaitingPayExpiry.bind(this)
             this.SimulateWebhook = this.SimulateWebhook.bind(this)
+            this.StartSubscription = this.StartSubscription.bind(this)
             this.SubscriptionWebhook = this.SubscriptionWebhook.bind(this)
         }
 
@@ -1239,6 +1262,12 @@ export namespace billing {
             return await resp.json() as MySubscription
         }
 
+        public async GetSubscriptionState(id: string): Promise<SubscriptionStateResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/billing/checkout/${encodeURIComponent(id)}`)
+            return await resp.json() as SubscriptionStateResponse
+        }
+
         public async ListCurrencies(): Promise<ListCurrenciesResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/billing/currencies`)
@@ -1268,6 +1297,12 @@ export namespace billing {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/admin/simulate-webhook`, JSON.stringify(params))
             return await resp.json() as SimulateWebhookResponse
+        }
+
+        public async StartSubscription(params: StartSubscriptionParams): Promise<StartSubscriptionResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/billing/start-subscription`, JSON.stringify(params))
+            return await resp.json() as StartSubscriptionResponse
         }
 
         public async SubscriptionWebhook(method: "POST", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {

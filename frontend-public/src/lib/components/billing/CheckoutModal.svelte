@@ -5,14 +5,13 @@
 	import { checkoutPlan, clearCheckoutPlan } from '$lib/stores/checkout.svelte';
 	import PlanGrid from '$lib/components/billing/PlanGrid.svelte';
 	import CryptoSelector from '$lib/components/billing/CryptoSelector.svelte';
-	import ProcessingScreen from '$lib/components/billing/ProcessingScreen.svelte';
-	import DepositScreen from '$lib/components/billing/DepositScreen.svelte';
+	import CheckoutStatus from '$lib/components/billing/CheckoutStatus.svelte';
 
 	let { onClose }: { onClose?: () => void } = $props();
 
 	const open = $derived(modal.isOpen('checkout'));
 
-	type Screen = 'plans' | 'crypto' | 'processing' | 'deposit';
+	type Screen = 'plans' | 'crypto' | 'checkout';
 
 	let screen = $state<Screen>('plans');
 	let selectedPlanId = $state('');
@@ -20,8 +19,7 @@
 	let selectedPlanName = $state('');
 	let selectedInterval = $state('');
 	let selectedCrypto = $state('');
-	let subscriptionId = $state('');
-	let depositData = $state<any>(null);
+	let checkoutId = $state('');
 
 	function close() {
 		modal.close('checkout');
@@ -58,63 +56,23 @@
 		screen = 'crypto';
 	}
 
-	async function goToCheckout(crypto: string) {
+	async function startCheckout(crypto: string) {
 		selectedCrypto = crypto;
 		try {
-			const res = await encore.billing.CheckBalance();
-			const balances = res.balances || {};
-			const balance = balances[crypto] || balances[crypto.toUpperCase()];
-			const hasBalance = (balance?.amount || 0) > 0;
-
-			if (hasBalance) {
-				await fundSubscription();
-			} else {
-				await createDeposit();
-			}
-		} catch {
-			// If balance check fails, try subscription anyway
-			await fundSubscription();
-		}
-	}
-
-	async function fundSubscription() {
-		try {
-			const subRes = await encore.billing.CreateSubscription({ plan_id: selectedPlanId });
-			subscriptionId = subRes.subscription_id;
-			screen = 'processing';
-		} catch {
-			await createDeposit();
-		}
-	}
-
-	async function createDeposit() {
-		try {
-			const res: any = await encore.billing.CreateDeposit({
-				plan_id: selectedPlanId,
-				crypto: selectedCrypto
-			});
-			depositData = res;
-			screen = 'deposit';
+			const res = await encore.billing.StartSubscription({ plan_id: selectedPlanId, crypto });
+			checkoutId = res.checkout_id;
+			screen = 'checkout';
 		} catch (err) {
 			alert((err as Error).message);
-			close();
 		}
 	}
 
-	function onProcessingSuccess() {
+	function onCheckoutSuccess() {
 		window.location.reload();
 	}
 
-	function onDepositSuccess() {
-		fundSubscription();
-	}
-
-	function onRetryProcessing() {
-		fundSubscription();
-	}
-
-	function onRetryDeposit() {
-		createDeposit();
+	function onCheckoutRetry() {
+		startCheckout(selectedCrypto);
 	}
 </script>
 
@@ -124,7 +82,7 @@
 
 			<div class="flex items-center justify-between p-4 border-b">
 				<h2 class="text-lg font-semibold">
-					{#if screen === 'plans'}Choose a Plan{:else if screen === 'crypto'}Pay with Crypto{:else if screen === 'processing'}Processing{:else}Send Payment{/if}
+					{#if screen === 'plans'}Choose a Plan{:else if screen === 'crypto'}Pay with Crypto{:else}Checkout{/if}
 				</h2>
 				<button onclick={close} class="p-1 hover:bg-muted rounded-lg" aria-label="Close">
 					<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/></svg>
@@ -135,24 +93,9 @@
 				{#if screen === 'plans'}
 					<PlanGrid onSelect={goToCrypto} />
 				{:else if screen === 'crypto'}
-					<CryptoSelector planId={selectedPlanId} priceUsdCents={selectedPriceUsdCents} planName={selectedPlanName} interval={selectedInterval} onBack={() => screen = 'plans'} onContinue={goToCheckout} />
-				{:else if screen === 'processing'}
-					<ProcessingScreen subscriptionId={subscriptionId} onSuccess={onProcessingSuccess} onRetry={onRetryProcessing} />
-				{:else if screen === 'deposit'}
-					<DepositScreen
-						depositId={depositData.deposit_id}
-						payAddress={depositData.pay_address}
-						payAmount={depositData.pay_amount}
-						payCurrency={depositData.pay_currency}
-						payinExtraId={depositData.payin_extra_id}
-						network={depositData.network}
-						qrDataUrl={depositData.qr_data_url}
-						planId={selectedPlanId}
-						crypto={selectedCrypto}
-						onSuccess={onDepositSuccess}
-						onTimeout={onRetryDeposit}
-						onRetry={onRetryDeposit}
-					/>
+					<CryptoSelector planId={selectedPlanId} priceUsdCents={selectedPriceUsdCents} planName={selectedPlanName} interval={selectedInterval} onBack={() => screen = 'plans'} onContinue={startCheckout} />
+				{:else if screen === 'checkout'}
+					<CheckoutStatus checkoutId={checkoutId} onSuccess={onCheckoutSuccess} onRetry={onCheckoutRetry} />
 				{/if}
 			</div>
 		</div>
