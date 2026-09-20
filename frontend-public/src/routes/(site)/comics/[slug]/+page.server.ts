@@ -1,9 +1,10 @@
 import { getEncoreClient } from '$lib/server/encore';
+import { getSessionToken } from '$lib/server/session';
 import type { PageServerLoad } from './$types';
 import type { Comment } from '$lib/components/social/CommentList.svelte';
 
-export const load: PageServerLoad = async ({ params, cookies }) => {
-	const token = cookies.get('token');
+export const load: PageServerLoad = async ({ locals, params, cookies }) => {
+	const token = await getSessionToken(locals);
 	const client = getEncoreClient(token);
 
 	const comic = await client.comics.GetComic(params.slug);

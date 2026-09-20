@@ -1,31 +1,21 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { SESSION_COOKIE } from '$lib/server/session';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000';
 
-export const GET: RequestHandler = ({ request, params, cookies, fetch }) =>
-	forward(request, params.path, cookies, fetch);
+export const GET: RequestHandler = (e) => forward(e);
+export const POST: RequestHandler = (e) => forward(e);
+export const PUT: RequestHandler = (e) => forward(e);
+export const PATCH: RequestHandler = (e) => forward(e);
+export const DELETE: RequestHandler = (e) => forward(e);
 
-export const POST: RequestHandler = ({ request, params, cookies, fetch }) =>
-	forward(request, params.path, cookies, fetch);
+async function forward(event: import('./$types').RequestEvent): Promise<Response> {
+	const { request, params, locals, fetch } = event;
+	const path = params.path;
 
-export const PUT: RequestHandler = ({ request, params, cookies, fetch }) =>
-	forward(request, params.path, cookies, fetch);
+	const ctx = await locals.logtoClient.getContext();
+	const token = ctx.isAuthenticated ? await locals.logtoClient.getIdToken() : undefined;
 
-export const PATCH: RequestHandler = ({ request, params, cookies, fetch }) =>
-	forward(request, params.path, cookies, fetch);
-
-export const DELETE: RequestHandler = ({ request, params, cookies, fetch }) =>
-	forward(request, params.path, cookies, fetch);
-
-async function forward(
-	request: Request,
-	path: string,
-	cookies: import('@sveltejs/kit').Cookies,
-	fetch: typeof globalThis.fetch,
-): Promise<Response> {
-	const token = cookies.get(SESSION_COOKIE);
 	const url = `${BACKEND_URL}/${path}${new URL(request.url).search}`;
 
 	const headers = new Headers(request.headers);

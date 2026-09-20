@@ -183,7 +183,7 @@ When the user has the `uploader` role, a dedicated **New Comic** area is availab
 
 ## Bootstrap Rule
 
-System refuses to start if no admin user exists (clear log message).
+The first admin is created via the one-time `/auth/bootstrap` endpoint.
 
 
 ## Desktop Application Features (Wails only)

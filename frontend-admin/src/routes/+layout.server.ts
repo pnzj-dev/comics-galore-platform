@@ -2,8 +2,8 @@ import { redirect } from '@sveltejs/kit';
 import { resolveUser } from '$lib/server/session';
 import type { LayoutServerLoad } from './$types';
 
-export const load: LayoutServerLoad = async ({ cookies, url }) => {
-	const user = await resolveUser(cookies);
+export const load: LayoutServerLoad = async ({ locals, url }) => {
+	const user = await resolveUser(locals);
 
 	if (!user) {
 		if (url.pathname === '/login') return {};
@@ -11,7 +11,6 @@ export const load: LayoutServerLoad = async ({ cookies, url }) => {
 	}
 
 	if (user.role !== 'admin' && user.role !== 'moderator') {
-		cookies.delete('token', { path: '/' });
 		throw redirect(302, '/login');
 	}
 

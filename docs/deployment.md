@@ -13,6 +13,17 @@ Encore Cloud (Go backend, app id "comics-galore-backend-v5k2")
 Fly.io (Bun + adapter-node)
   ├─ cg-public-dev / cg-public-staging / cg-public-prod
   └─ cg-admin-dev  / cg-admin-staging  / cg-admin-prod
+
+Fly.io (Temporal worker, always-on)
+  └─ cg-worker-dev / cg-worker-staging / cg-worker-prod
+
+Cloudflare Workers (MCP protocol layer)
+  └─ cg-mcp-dev / cg-mcp-staging / cg-mcp-prod
+
+Logto (OIDC identity) — one tenant per env
+  ├─ dev     → https://37bvfu.logto.app/
+  ├─ staging → https://kbkixu.logto.app/
+  └─ prod    → https://g0f9pc.logto.app/
 ```
 
 ## Branch → environment
@@ -48,16 +59,12 @@ The app is already linked (`backend/encore.app` → `comics-galore-backend-v5k2`
 Repeat for `--env dev`, `--env staging`, and `--env production` (use sandbox/test keys for dev+staging, real keys for prod):
 
 ```bash
-# auth
-encore secret set --env <env> JWTSecret "<value>"
+# auth (Logto — passwords/passkeys/social/MFA live in Logto, not here)
+encore secret set --env <env> LogtoIssuer "https://<tenant>.logto.app/oidc"
+encore secret set --env <env> LogtoJWKSURI "https://<tenant>.logto.app/oidc/jwks"
+# encore secret set --env <env> LogtoAudience "<api-resource>"    # optional; enforces aud when set
 encore secret set --env <env> BootstrapSecret "<value>"          # first-admin bootstrap token
-encore secret set --env <env> FrontendURL "https://<public-domain>"
-encore secret set --env <env> WebAuthnRPID "<domain>"
-encore secret set --env <env> WebAuthnOrigins "https://<public-domain>"
-encore secret set --env <env> ResendAPIKey "<value>"
-encore secret set --env <env> GoogleClientID "<value>"
-encore secret set --env <env> GoogleClientSecret "<value>"
-# ... Facebook/Twitter/Apple OAuth as configured
+encore secret set --env <env> ResendAPIKey "<value>"             # transactional email
 
 # NowPayments (auth + billing + tiers)
 encore secret set --env <env> NowPaymentsAPIKey "<value>"
@@ -97,20 +104,15 @@ Secrets set with `--env dev` / `--env staging` apply only to those named environ
 The production environment does **not** inherit development secrets. Every secret currently shows `✗` under `Production`, so set **all** of them for production first (repeat the §1.2 commands with `--env production`):
 
 ```bash
-encore secret set --env production JWTSecret "<value>"
+encore secret set --env production LogtoIssuer "https://<prod-tenant>.logto.app/oidc"
+encore secret set --env production LogtoJWKSURI "https://<prod-tenant>.logto.app/oidc/jwks"
 encore secret set --env production NowPaymentsAPIKey "<value>"
 encore secret set --env production NowPaymentsIPNKey "<value>"
 encore secret set --env production NowPaymentsEmail "<value>"
 encore secret set --env production NowPaymentsPassword "<value>"
 encore secret set --env production NgrokURL ""                    # local-only; empty in prod
 encore secret set --env production BootstrapSecret "<value>"      # first-admin bootstrap token
-encore secret set --env production FrontendURL "https://comics-galore.com"
-encore secret set --env production WebAuthnRPID "comics-galore.com"
-encore secret set --env production WebAuthnOrigins "https://comics-galore.com"
 encore secret set --env production ResendAPIKey "<value>"
-encore secret set --env production GoogleClientID "<value>"
-encore secret set --env production GoogleClientSecret "<value>"
-# ... Facebook/Twitter/Apple OAuth as configured
 encore secret set --env production AIModeratorAPIKey "<value>"
 encore secret set --env production CloudflareAccountID "<value>"
 encore secret set --env production CloudflareAPIToken "<value>"
@@ -143,10 +145,10 @@ After each deploy, note the exact base URL (Encore Cloud shows it in the environ
 ```bash
 curl -X POST https://<env>-comics-galore-backend-v5k2.encr.app/auth/bootstrap \
   -H 'Content-Type: application/json' \
-  -d '{"token":"<BootstrapSecret>","email":"admin@comics-galore.com","password":"<strong-password>"}'
+  -d '{"token":"<BootstrapSecret>","email":"admin@comics-galore.com"}'
 ```
 
-Returns the created admin (role `admin`, tier `platinum`). One-time only — a second call is rejected.
+Creates the app-level `admin` row (role `admin`, tier `platinum`). Credentials live in Logto, so the admin's Logto identity is linked to this row by email on first sign-in. One-time only — a second call is rejected.
 
 ---
 
@@ -164,7 +166,12 @@ fly apps create <app> --org <your-org>
 fly secrets set BACKEND_URL="https://<env>-comics-galore-backend-v5k2.encr.app" --app <app>
 ```
 
-`fly deploy` (run by CI) then applies the staged secret and deploys the image.
+`fly deploy` (run by CI) then applies the staged secrets and deploys the image.
+
+CI also stages the **Logto** runtime secrets per app (public vs admin get different
+`LOGTO_APP_ID`/`LOGTO_APP_SECRET`; see §3.1) — `LOGTO_ENDPOINT`, `LOGTO_APP_ID`,
+`LOGTO_APP_SECRET`, `LOGTO_COOKIE_ENCRYPTION_KEY`. These are read at runtime by
+`hooks.server.ts` (`@logto/sveltekit`), not baked into the client bundle.
 
 ### 2.2 Cloudflare DNS + certificates
 
@@ -199,19 +206,45 @@ admin.comics-galore.com    CNAME cg-admin-prod.fly.dev
 | `FLY_API_TOKEN` | Secret | Fly.io API token (`fly tokens create`) |
 | `TURNSTILE_SITEKEY` | Secret (or Variable) | Cloudflare Turnstile sitekey (public value) |
 | `ENCORE_AUTH_KEY` | Secret | Encore auth key (Encore Cloud → app → Settings → Auth Keys) — needed by `ci.yml` for `encore test` |
+| `CLOUDFLARE_API_TOKEN` | Secret | Cloudflare API token with Workers "Edit" scope — for `deploy-mcp.yml` |
+| `CLOUDFLARE_ACCOUNT_ID` | Secret (or Variable) | Cloudflare account ID (`b879240179ed3d643bf783745c93b100`) |
+
+#### GitHub Environments (per-env Logto)
+
+Create three environments — `dev`, `staging`, `prod` — each with the following
+**variables** (non-secret) and **secrets**:
+
+| Name | Kind | Value |
+|---|---|---|
+| `LOGTO_ENDPOINT` | Variable | `https://<tenant>.logto.app/` |
+| `LOGTO_PUBLIC_APP_ID` | Variable | public web app ID |
+| `LOGTO_ADMIN_APP_ID` | Variable | admin web app ID |
+| `LOGTO_PUBLIC_APP_SECRET` | Secret | public web app secret (long-lived) |
+| `LOGTO_ADMIN_APP_SECRET` | Secret | admin web app secret (long-lived) |
+| `LOGTO_COOKIE_ENCRYPTION_KEY` | Secret | random 64-hex string |
+
+The tenants/app IDs:
+
+| Env | Tenant | Endpoint | public app | admin app |
+|---|---|---|---|---|
+| dev | `comics-galore-dev` (`37bvfu`) | `https://37bvfu.logto.app/` | `69j3uu7m990jznu2686br` | `1f9owrg4e5v6aelmkg98x` |
+| staging | `comics-galore-staging` (`kbkixu`) | `https://kbkixu.logto.app/` | `ay893ezhvvifejz1d04kx` | `r0rd1vnpnauzl3pun39ip` |
+| prod | `comics-galore-prod` (`g0f9pc`) | `https://g0f9pc.logto.app/` | `jwtdx17294seavse34bet` | `6a0376d2rbu3z22d5vowv` |
 
 ### 3.2 Workflows
 
-- `.github/workflows/ci.yml` — PR checks (backend `encore test`, frontend unit tests + build).
-- `.github/workflows/deploy-app.yml` — reusable frontend deploy (build args + `fly deploy`).
+- `.github/workflows/ci.yml` — PR checks (backend `encore test`, frontend unit tests + build, MCP worker typecheck).
+- `.github/workflows/deploy-app.yml` — reusable frontend deploy (build args + `fly deploy`, plus Logto runtime secrets).
 - `.github/workflows/deploy-worker.yml` — reusable Temporal worker deploy (`fly deploy` in `temporal-worker/`).
-- `.github/workflows/deploy-dev.yml` / `deploy-staging.yml` / `deploy-prod.yml` — branch-triggered frontends **+ worker**.
+- `.github/workflows/deploy-mcp.yml` — reusable MCP worker deploy (`wrangler deploy` in `mcp-worker/`).
+- `.github/workflows/deploy-dev.yml` / `deploy-staging.yml` / `deploy-prod.yml` — branch-triggered frontends **+ worker + MCP**.
 - Backend deployment is **not** a GitHub Actions workflow — it's Encore Cloud's git integration (§1.3).
 
 ### 3.3 Build-time vs runtime config
 
 - **Build args** (`--build-arg`, baked into the client bundle): `VITE_BACKEND_URL`, `VITE_API_URL`, `VITE_TURNSTILE_SITEKEY` — set per env by the workflow from `inputs.backend_url` + `TURNSTILE_SITEKEY`.
 - **Runtime env** (Fly secret): `BACKEND_URL` — the Encore env base URL; read by the `/api/[...path]` proxy and the server-side Encore client. Defaults to `http://localhost:4000` (local dev).
+- **Runtime env** (Fly secret): `LOGTO_ENDPOINT`, `LOGTO_APP_ID`, `LOGTO_APP_SECRET`, `LOGTO_COOKIE_ENCRYPTION_KEY` — read by `hooks.server.ts` (`@logto/sveltekit`); staged by CI from the environment's Logto variables/secrets (§3.1).
 
 ---
 
@@ -234,6 +267,28 @@ Use **either** `TEMPORAL_API_KEY` **or** the mTLS pair (`TEMPORAL_CERT` +
 
 `WORKER_SECRET` must match the Encore `WorkerSecret` (§1.2); the worker sends it as
 `X-Worker-Token` on every activity call.
+
+---
+
+## 4b. MCP worker (Cloudflare Workers)
+
+The MCP protocol layer (`mcp-worker/`) is a Cloudflare Worker, deployed per env as
+`cg-mcp-{dev,staging,prod}` via `deploy-mcp.yml` (`wrangler deploy`). It fronts the
+Encore backend's key-gated `/mcp/*` endpoints.
+
+- `BACKEND_URL` is set per deploy via `wrangler deploy --var BACKEND_URL=...` (§3.2).
+- The MCP client authenticates with a bearer **MCP key** that the Worker forwards to
+  Encore. Keys live (hashed) in the backend `mcpdb.mcp_keys` table, bound to a real
+  user + role.
+
+MCP keys are created and managed in the **admin panel** (`Admin → MCP Keys`):
+- `POST /admin/mcp/keys` issues a key and returns the **full key once**; the
+  bound user defaults to the creating admin (optionally any user).
+- `GET /admin/mcp/keys` lists keys as a masked `…abcd` suffix (never the full key).
+- `DELETE /admin/mcp/keys/:id` revokes a key.
+
+Connect an MCP client to `https://cg-mcp-<env>.<account>.workers.dev/mcp` with
+`Authorization: Bearer <mcp-key>`.
 
 ---
 

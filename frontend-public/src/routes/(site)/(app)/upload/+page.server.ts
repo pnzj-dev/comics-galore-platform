@@ -1,13 +1,14 @@
 import { redirect } from '@sveltejs/kit';
 import { resolveUser } from '$lib/server/session';
 import { getEncoreClient } from '$lib/server/encore';
+import { getSessionToken } from '$lib/server/session';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ cookies, url }) => {
-	const token = cookies.get('token');
+export const load: PageServerLoad = async ({ locals, cookies, url }) => {
+	const token = await getSessionToken(locals);
 	if (!token) throw redirect(302, '/login');
 
-	const user = await resolveUser(cookies);
+	const user = await resolveUser(locals);
 	if (!user || (user.role !== 'uploader' && user.role !== 'admin')) throw redirect(302, '/');
 
 	const rawTab = url.searchParams.get('tab') ?? 'list';

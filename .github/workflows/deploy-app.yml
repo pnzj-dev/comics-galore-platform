@@ -11,10 +11,28 @@ on:
         required: true
         type: string
         description: "Base URL of the Encore backend environment (e.g. https://staging-comics-galore-backend-v5k2.encr.app)"
+      logto_endpoint:
+        required: true
+        type: string
+        description: "Logto tenant endpoint (e.g. https://<tenant>.logto.app/)"
+      logto_public_app_id:
+        required: true
+        type: string
+        description: "Logto public web app ID"
+      logto_admin_app_id:
+        required: true
+        type: string
+        description: "Logto admin web app ID"
     secrets:
       FLY_API_TOKEN:
         required: true
       TURNSTILE_SITEKEY:
+        required: true
+      LOGTO_PUBLIC_APP_SECRET:
+        required: true
+      LOGTO_ADMIN_APP_SECRET:
+        required: true
+      LOGTO_COOKIE_ENCRYPTION_KEY:
         required: true
 
 jobs:
@@ -40,6 +58,26 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: flyctl secrets set BACKEND_URL="${{ inputs.backend_url }}" --app "${{ matrix.app }}-${{ inputs.environment }}" --stage
+      - name: Set Logto runtime secrets
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          PUBLIC_ID: ${{ inputs.logto_public_app_id }}
+          PUBLIC_SECRET: ${{ secrets.LOGTO_PUBLIC_APP_SECRET }}
+          ADMIN_ID: ${{ inputs.logto_admin_app_id }}
+          ADMIN_SECRET: ${{ secrets.LOGTO_ADMIN_APP_SECRET }}
+          ENC_KEY: ${{ secrets.LOGTO_COOKIE_ENCRYPTION_KEY }}
+        run: |
+          if [ "${{ matrix.app }}" = "cg-public" ]; then
+            LOGTO_APP_ID="$PUBLIC_ID"; LOGTO_APP_SECRET="$PUBLIC_SECRET"
+          else
+            LOGTO_APP_ID="$ADMIN_ID"; LOGTO_APP_SECRET="$ADMIN_SECRET"
+          fi
+          flyctl secrets set \
+            LOGTO_ENDPOINT="${{ inputs.logto_endpoint }}" \
+            LOGTO_APP_ID="$LOGTO_APP_ID" \
+            LOGTO_APP_SECRET="$LOGTO_APP_SECRET" \
+            LOGTO_COOKIE_ENCRYPTION_KEY="$ENC_KEY" \
+            --app "${{ matrix.app }}-${{ inputs.environment }}" --stage
       - name: Deploy
         working-directory: ${{ matrix.dir }}
         env:

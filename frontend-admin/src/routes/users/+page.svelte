@@ -58,14 +58,6 @@
 	async function unbanUser(userId: string) { await encore.auth.AdminUnbanUser(userId); await goto(page.url.pathname + page.url.search); }
 	async function suspendUser(userId: string) { await encore.auth.AdminSuspendUser(userId, { reason: '' }); await goto(page.url.pathname + page.url.search); }
 	async function unsuspendUser(userId: string) { await encore.auth.AdminUnsuspendUser(userId); await goto(page.url.pathname + page.url.search); }
-	async function impersonate(userId: string) {
-		await fetch('/auth/impersonate', {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ user_id: userId }),
-		});
-		window.location.href = '/';
-	}
 
 	async function exportCSV() {
 		try {
@@ -134,7 +126,6 @@
 			{:else if st === 'suspended'}
 				<Button size="sm" variant="outline" onclick={() => unsuspendUser(row.id as string)}>Unsuspend</Button>
 			{:else}
-				<Button size="sm" variant="outline" onclick={() => impersonate(row.id as string)}>Impersonate</Button>
 				<Button size="sm" variant="outline" onclick={() => suspendUser(row.id as string)}>Suspend</Button>
 				<Button size="sm" variant="destructive" onclick={() => banUser(row.id as string)}>Ban</Button>
 			{/if}

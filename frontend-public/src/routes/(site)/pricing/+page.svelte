@@ -1,6 +1,6 @@
 <script lang="ts">
 	import PlanGrid from '$lib/components/billing/PlanGrid.svelte';
-	import { currentUser } from '$lib/stores/auth';
+	import { currentUser, login } from '$lib/stores/auth';
 	import { modal } from '$lib/stores/modal.svelte';
 	import { setCheckoutPlan } from '$lib/stores/checkout.svelte';
 	import { Construction } from 'lucide-svelte';
@@ -11,7 +11,7 @@
 
 	function handleSelect(selection: { planId: string; priceUsdCents: number; name: string; interval: string }) {
 		if (!user) {
-			modal.open('login');
+			login();
 			return;
 		}
 		setCheckoutPlan(selection.planId, selection.priceUsdCents, selection.name, selection.interval);

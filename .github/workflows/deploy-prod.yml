@@ -7,12 +7,19 @@ on:
 jobs:
   deploy:
     uses: ./.github/workflows/deploy-app.yml
+    environment: prod
     with:
       environment: prod
       backend_url: https://production-comics-galore-backend-v5k2.encr.app
+      logto_endpoint: ${{ vars.LOGTO_ENDPOINT }}
+      logto_public_app_id: ${{ vars.LOGTO_PUBLIC_APP_ID }}
+      logto_admin_app_id: ${{ vars.LOGTO_ADMIN_APP_ID }}
     secrets:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       TURNSTILE_SITEKEY: ${{ secrets.TURNSTILE_SITEKEY }}
+      LOGTO_PUBLIC_APP_SECRET: ${{ secrets.LOGTO_PUBLIC_APP_SECRET }}
+      LOGTO_ADMIN_APP_SECRET: ${{ secrets.LOGTO_ADMIN_APP_SECRET }}
+      LOGTO_COOKIE_ENCRYPTION_KEY: ${{ secrets.LOGTO_COOKIE_ENCRYPTION_KEY }}
 
   worker:
     uses: ./.github/workflows/deploy-worker.yml
@@ -20,3 +27,12 @@ jobs:
       environment: prod
     secrets:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  mcp:
+    uses: ./.github/workflows/deploy-mcp.yml
+    with:
+      environment: prod
+      backend_url: https://production-comics-galore-backend-v5k2.encr.app
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

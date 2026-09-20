@@ -1,33 +1,21 @@
 import { getEncoreClient } from './encore';
 
-// The session cookie name is intentionally kept `token` for compatibility
-// with existing server route guards; it now holds an opaque session id
-// instead of a JWT. HttpOnly means browser JS can no longer read it.
-export const SESSION_COOKIE = 'token';
+// Logto owns authentication and manages its own encrypted HttpOnly session
+// cookie. The SvelteKit server resolves the user by asking Encore to validate
+// the Logto ID token and map it to the internal user.
 
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
-
-function sessionCookieOptions() {
-	return {
-		path: '/',
-		httpOnly: true,
-		sameSite: 'lax' as const,
-		secure: process.env.NODE_ENV === 'production',
-		maxAge: COOKIE_MAX_AGE,
-	};
+// getSessionToken returns the Logto ID token for the current session, or
+// undefined when signed out. Server load functions forward it as a Bearer
+// token to the Encore backend.
+export async function getSessionToken(locals: App.Locals): Promise<string | undefined> {
+	const ctx = await locals.logtoClient.getContext();
+	if (!ctx.isAuthenticated) return undefined;
+	const token = await locals.logtoClient.getIdToken();
+	return token ?? undefined;
 }
 
-export function setSessionCookie(cookies: import('@sveltejs/kit').Cookies, token: string) {
-	cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
-}
-
-export function clearSessionCookie(cookies: import('@sveltejs/kit').Cookies) {
-	cookies.delete(SESSION_COOKIE, { path: '/' });
-}
-
-// resolveUser returns the authenticated user for the session cookie, or null.
-export async function resolveUser(cookies: import('@sveltejs/kit').Cookies) {
-	const token = cookies.get(SESSION_COOKIE);
+export async function resolveUser(locals: App.Locals) {
+	const token = await getSessionToken(locals);
 	if (!token) return null;
 	const client = getEncoreClient(token);
 	try {

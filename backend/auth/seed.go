@@ -48,12 +48,6 @@ func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error
 		{ID: "10000000-0000-0000-0000-000000000009", Email: "member-exhausted@pnzj.dev", Role: "user", Tier: "free", Username: "member_exhausted"},
 	}
 
-	defaultPassword := "devpassword"
-	hash, err := hashPassword(defaultPassword)
-	if err != nil {
-		return nil, err
-	}
-
 	created := 0
 	skipped := 0
 
@@ -66,9 +60,9 @@ func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error
 		}
 
 		_, err := db.Exec(ctx, `
-			INSERT INTO users (id, email, password_hash, role, tier, username, sub_partner_id)
-			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''))
-		`, u.ID, u.Email, hash, u.Role, u.Tier, u.Username, u.SubPartnerID)
+			INSERT INTO users (id, email, role, tier, username, sub_partner_id, email_verified_at)
+			VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), now())
+		`, u.ID, u.Email, u.Role, u.Tier, u.Username, u.SubPartnerID)
 		if err != nil {
 			return nil, err
 		}
@@ -78,6 +72,6 @@ func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error
 	return &SeedUsersResponse{
 		Created: created,
 		Skipped: skipped,
-		Message: fmt.Sprintf("Seeded %d users, skipped %d (already exist). Default password: %s", created, skipped, defaultPassword),
+		Message: fmt.Sprintf("Seeded %d users, skipped %d (already exist).", created, skipped),
 	}, nil
 }

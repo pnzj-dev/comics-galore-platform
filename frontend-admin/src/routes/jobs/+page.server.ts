@@ -1,8 +1,9 @@
 import { getEncoreClient } from '$lib/server/encore';
+import { getSessionToken } from '$lib/server/session';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ cookies, url }) => {
-	const client = getEncoreClient(cookies.get('token'));
+export const load: PageServerLoad = async ({ locals, url }) => {
+	const client = getEncoreClient(await getSessionToken(locals));
 	try {
 		const res = await client.jobs.ListJobRuns({
 			JobName: url.searchParams.get('job_name') || '',

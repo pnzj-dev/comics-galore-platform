@@ -108,7 +108,7 @@ Never hand-write core config files that a generator produces.
 - Desktop may additionally use native file dialogs, but still uploads via presigned URLs.
 
 ### Bootstrap & Matrix
-- System refuses to start without at least one admin.
+- The first admin is created via the one-time `/auth/bootstrap` endpoint (gated by `BootstrapSecret`).
 - Incomplete Tier × Interval plan matrix → red banner in admin (web and desktop admin views).
 
 ### Quality

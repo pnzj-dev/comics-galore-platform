@@ -1,10 +1,11 @@
 import { getEncoreClient } from '$lib/server/encore';
+import { getSessionToken } from '$lib/server/session';
 import { getUserPreferences } from '$lib/server/session';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ cookies, url }) => {
-	const client = getEncoreClient(cookies.get('token'));
-	const prefs = await getUserPreferences(cookies);
+export const load: PageServerLoad = async ({ locals, cookies, url }) => {
+	const client = getEncoreClient(await getSessionToken(locals));
+	const prefs = await getUserPreferences(locals);
 	const page = parseInt(url.searchParams.get('page') || '1');
 	const limit = prefs?.items_per_page || 20;
 	try {

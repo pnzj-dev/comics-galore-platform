@@ -1,11 +1,10 @@
 <script lang="ts">
-	import { modal } from '$lib/stores/modal.svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import ThemeToggle from '$lib/components/common/ThemeToggle.svelte';
 	import LocaleSwitcher from '$lib/components/common/LocaleSwitcher.svelte';
 	import AvatarMenu from '$lib/components/common/AvatarMenu.svelte';
 	import AnnouncementBanner from '$lib/components/common/AnnouncementBanner.svelte';
-	import { currentUser, isAuthenticated, hydrated } from '$lib/stores/auth';
+	import { currentUser, isAuthenticated, hydrated, login, register } from '$lib/stores/auth';
 	import { t } from '$lib/i18n';
 
 	let { data, children } = $props();
@@ -36,8 +35,8 @@
 			{#if authed && user}
 				<AvatarMenu />
 			{:else}
-				<Button variant="ghost" size="sm" onclick={() => modal.open('login')}>{t('nav.login')}</Button>
-				<Button size="sm" onclick={() => modal.open('register')}>{t('nav.register')}</Button>
+				<Button variant="ghost" size="sm" onclick={() => login()}>{t('nav.login')}</Button>
+				<Button size="sm" onclick={() => register()}>{t('nav.register')}</Button>
 			{/if}
 		</div>
 	</div>

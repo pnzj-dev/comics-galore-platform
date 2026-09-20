@@ -8,14 +8,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
 	"comics-galore/backend/nowpayments"
-	"comics-galore/backend/turnstile"
 
 	"encore.dev/beta/auth"
 	"encore.dev/beta/errs"
@@ -24,28 +22,10 @@ import (
 )
 
 var secrets struct {
-	JWTSecret           string
 	NowPaymentsAPIKey   string
 	NowPaymentsIPNKey   string
 	NowPaymentsEmail    string
 	NowPaymentsPassword string
-
-	// WebAuthn / Passkey
-	WebAuthnRPID    string
-	WebAuthnOrigins string // comma-separated list of allowed origins
-
-	// OAuth providers
-	FrontendURL           string
-	GoogleClientID        string
-	GoogleClientSecret    string
-	FacebookClientID      string
-	FacebookClientSecret  string
-	TwitterClientID       string
-	TwitterClientSecret   string
-	AppleClientID         string
-	AppleTeamID           string
-	AppleKeyID            string
-	ApplePrivateKey       string
 
 	// Email (Resend)
 	ResendAPIKey string
@@ -53,6 +33,11 @@ var secrets struct {
 	// BootstrapSecret gates the one-time first-admin provisioning endpoint
 	// (/auth/bootstrap). Empty disables bootstrap entirely.
 	BootstrapSecret string
+
+	// Logto identity provider (OIDC).
+	LogtoIssuer   string // e.g. https://<tenant>.logto.app/oidc
+	LogtoJWKSURI  string // e.g. https://<tenant>.logto.app/oidc/jwks
+	LogtoAudience string // optional; if set, the token aud claim is enforced
 }
 
 var npProvider *nowpayments.Provider
@@ -73,82 +58,61 @@ type AuthParams struct {
 }
 
 type AuthData struct {
-	UserID         string
-	Email          string
-	Role           string
-	Tier           string
-	ImpersonatedBy string
+	UserID string
+	Email  string
+	Role   string
+	Tier   string
 }
 
 //encore:authhandler
 func AuthHandler(ctx context.Context, p *AuthParams) (auth.UID, *AuthData, error) {
-	if p.Authorization == "" {
-		return "", nil, &errs.Error{
-			Code:    errs.Unauthenticated,
-			Message: "missing authorization header",
-		}
+	token := strings.TrimSpace(p.Authorization)
+	if token == "" {
+		return "", nil, &errs.Error{Code: errs.Unauthenticated, Message: "missing authorization header"}
+	}
+	token = strings.TrimPrefix(token, "Bearer ")
+	if token == "" {
+		return "", nil, &errs.Error{Code: errs.Unauthenticated, Message: "invalid authorization format"}
 	}
 
-	token := strings.TrimPrefix(p.Authorization, "Bearer ")
-	if token == p.Authorization {
-		return "", nil, &errs.Error{
-			Code:    errs.Unauthenticated,
-			Message: "invalid authorization format",
-		}
+	claims, err := validateLogtoToken(ctx, token)
+	if err != nil {
+		return "", nil, &errs.Error{Code: errs.Unauthenticated, Message: "invalid or expired token"}
 	}
 
-	sess, err := validateSession(ctx, token)
+	if claims.Sub == "" {
+		return "", nil, &errs.Error{Code: errs.Unauthenticated, Message: "token missing subject"}
+	}
+
+	u, err := resolveLogtoUser(ctx, claims.Sub, claims.Email)
 	if err != nil {
 		return "", nil, err
 	}
-	touchSession(ctx, token)
 
-	var email sql.NullString
-	var role, tier string
-	if err := db.QueryRow(ctx, `SELECT email, role, tier FROM users WHERE id = $1`, sess.UserID).Scan(&email, &role, &tier); err != nil {
-		if isNoRows(err) {
-			return "", nil, &errs.Error{Code: errs.Unauthenticated, Message: "invalid session"}
-		}
-		return "", nil, err
-	}
+	// Role lives on the internal users row (app-level; Logto only holds
+	// identity + credentials).
+	role := u.Role
 
 	var maintenance bool
 	if e := db.QueryRow(ctx, `SELECT COALESCE((value::jsonb->>'maintenance_mode')::boolean, false) FROM app_settings WHERE key = 'defaults'`).Scan(&maintenance); e == nil && maintenance && role != "admin" {
 		return "", nil, &errs.Error{Code: errs.Unavailable, Message: "the platform is under maintenance, please try again later"}
 	}
 
-	var requireVerify bool
-	if e := db.QueryRow(ctx, `SELECT COALESCE((value::jsonb->>'require_email_verify')::boolean, false) FROM app_settings WHERE key = 'defaults'`).Scan(&requireVerify); e == nil && requireVerify {
-		var emailVerified sql.NullTime
-		if e2 := db.QueryRow(ctx, `SELECT email_verified_at FROM users WHERE id = $1`, sess.UserID).Scan(&emailVerified); e2 == nil && !emailVerified.Valid {
-			return "", nil, &errs.Error{Code: errs.PermissionDenied, Message: "email verification required"}
-		}
+	if u.BannedAt.Valid {
+		return "", nil, &errs.Error{Code: errs.PermissionDenied, Message: "account is banned"}
+	}
+	if u.SuspendedAt.Valid {
+		return "", nil, &errs.Error{Code: errs.PermissionDenied, Message: "account is suspended"}
 	}
 
-	var bannedAt, suspendedAt sql.NullTime
-	if err := db.QueryRow(ctx, `SELECT banned_at, suspended_at FROM users WHERE id = $1`, sess.UserID).Scan(&bannedAt, &suspendedAt); err == nil {
-		if bannedAt.Valid {
-			return "", nil, &errs.Error{Code: errs.PermissionDenied, Message: "account is banned"}
-		}
-		if suspendedAt.Valid {
-			return "", nil, &errs.Error{Code: errs.PermissionDenied, Message: "account is suspended"}
-		}
-	}
+	db.Exec(ctx, `UPDATE users SET last_seen_at = now() WHERE id = $1`, u.ID)
 
-	return auth.UID(sess.UserID), &AuthData{
-		UserID:         sess.UserID,
-		Email:          email.String,
-		Role:           role,
-		Tier:           tier,
-		ImpersonatedBy: sess.ImpersonatedBy,
+	return auth.UID(u.ID), &AuthData{
+		UserID: u.ID,
+		Email:  u.Email.String,
+		Role:   role,
+		Tier:   u.Tier,
 	}, nil
-}
-
-type RegisterParams struct {
-	Email          string `json:"email"`
-	Password       string `json:"password" encore:"sensitive"`
-	Username       string `json:"username"`
-	TurnstileToken string `json:"turnstile_token"`
 }
 
 // usernameRe validates a public handle's characters/structure: starts and ends
@@ -158,99 +122,6 @@ var usernameRe = regexp.MustCompile(`^[a-z0-9](?:[_-]?[a-z0-9])*$`)
 
 func validUsername(username string) bool {
 	return len(username) >= 3 && len(username) <= 20 && usernameRe.MatchString(username)
-}
-
-type AuthResponse struct {
-	Token        string `json:"token"`
-	User         User   `json:"user"`
-	RequiresTOTP bool   `json:"requires_totp,omitempty"`
-	MFAToken     string `json:"mfa_token,omitempty"`
-}
-
-//encore:api public method=POST path=/auth/register
-func Register(ctx context.Context, p *RegisterParams) (*AuthResponse, error) {
-	if err := turnstile.Verify(ctx, &turnstile.VerifyParams{Token: p.TurnstileToken, Action: "register"}); err != nil {
-		return nil, err
-	}
-
-	if p.Email == "" || p.Password == "" {
-		return nil, &errs.Error{
-			Code:    errs.InvalidArgument,
-			Message: "email and password are required",
-		}
-	}
-
-	if len(p.Password) < 8 {
-		return nil, &errs.Error{
-			Code:    errs.InvalidArgument,
-			Message: "password must be at least 8 characters",
-		}
-	}
-
-	username := strings.ToLower(strings.TrimSpace(p.Username))
-	if username == "" || !validUsername(username) {
-		return nil, &errs.Error{
-			Code:    errs.InvalidArgument,
-			Message: "username must be 3-20 characters, lowercase letters, numbers, and single - or _ in between",
-		}
-	}
-
-	var usernameTaken bool
-	if err := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)`, username).Scan(&usernameTaken); err == nil && usernameTaken {
-		return nil, &errs.Error{Code: errs.AlreadyExists, Message: "this username is already taken"}
-	}
-
-	var regOpen bool
-	if e := db.QueryRow(ctx, `SELECT COALESCE((value::jsonb->>'registrations_open')::boolean, true) FROM app_settings WHERE key = 'defaults'`).Scan(&regOpen); e == nil && !regOpen {
-		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "registration is currently closed"}
-	}
-
-	var maintenance bool
-	if e := db.QueryRow(ctx, `SELECT COALESCE((value::jsonb->>'maintenance_mode')::boolean, false) FROM app_settings WHERE key = 'defaults'`).Scan(&maintenance); e == nil && maintenance {
-		return nil, &errs.Error{Code: errs.Unavailable, Message: "the platform is under maintenance, please try again later"}
-	}
-
-	existing, err := getUserByEmail(ctx, p.Email)
-	if err != nil && !isNoRows(err) {
-		return nil, err
-	}
-	if existing != nil {
-		return nil, &errs.Error{
-			Code:    errs.AlreadyExists,
-			Message: "a user with this email already exists",
-		}
-	}
-
-	hash, err := hashPassword(p.Password)
-	if err != nil {
-		return nil, err
-	}
-
-	role := "user"
-
-	var user User
-	err = db.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, role, username, terms_accepted_at)
-		VALUES ($1, $2, $3, $4, now())
-		RETURNING id, email, role, tier, COALESCE(username, ''), created_at
-	`, p.Email, hash, role, username).Scan(&user.ID, &user.Email, &user.Role, &user.Tier, &user.Username, &user.CreatedAt)
-	if err != nil {
-		return nil, err
-	}
-
-	token, err := createSession(ctx, user.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	verifyToken := randomToken(32)
-	db.Exec(ctx, `UPDATE users SET verify_token = $1, verify_token_expires_at = now() + interval '24 hours' WHERE id = $2`, verifyToken, user.ID)
-	go sendVerificationEmail(user.Email, verifyToken)
-
-	return &AuthResponse{
-		Token: token,
-		User:  user,
-	}, nil
 }
 
 type UsernameAvailableParams struct {
@@ -280,90 +151,6 @@ func UsernameAvailable(ctx context.Context, p *UsernameAvailableParams) (*Userna
 	return &UsernameAvailableResponse{Available: true, Valid: true}, nil
 }
 
-type LoginParams struct {
-	Email          string `json:"email"`
-	Password       string `json:"password" encore:"sensitive"`
-	TurnstileToken string `json:"turnstile_token"`
-}
-
-//encore:api public method=POST path=/auth/login
-func Login(ctx context.Context, p *LoginParams) (*AuthResponse, error) {
-	if err := turnstile.Verify(ctx, &turnstile.VerifyParams{Token: p.TurnstileToken, Action: "login"}); err != nil {
-		return nil, err
-	}
-
-	if p.Email == "" || p.Password == "" {
-		return nil, &errs.Error{
-			Code:    errs.InvalidArgument,
-			Message: "email and password are required",
-		}
-	}
-
-	user, err := getUserByEmail(ctx, p.Email)
-	if err != nil {
-		if isNoRows(err) {
-			return nil, &errs.Error{
-				Code:    errs.Unauthenticated,
-				Message: "invalid email or password",
-			}
-		}
-		return nil, err
-	}
-
-	if !user.PasswordHash.Valid || !checkPassword(user.PasswordHash.String, p.Password) {
-		return nil, &errs.Error{
-			Code:    errs.Unauthenticated,
-			Message: "invalid email or password",
-		}
-	}
-
-	if user.BannedAt.Valid {
-		return nil, &errs.Error{
-			Code:    errs.PermissionDenied,
-			Message: "account is banned",
-		}
-	}
-	if user.SuspendedAt.Valid {
-		return nil, &errs.Error{
-			Code:    errs.PermissionDenied,
-			Message: "account is suspended",
-		}
-	}
-
-	_, err = db.Exec(ctx, `UPDATE users SET last_seen_at = now() WHERE id = $1`, user.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	// Two-factor authentication: when TOTP is enabled, don't issue a session yet.
-	// Return a short-lived MFA challenge that the client exchanges for a session
-	// after the user submits their authenticator-app code.
-	if _, enabled, err := userTOTPSecret(ctx, user.ID); err == nil && enabled {
-		mfaToken, err := storeMFAChallenge(ctx, user.ID)
-		if err != nil {
-			return nil, err
-		}
-		return &AuthResponse{RequiresTOTP: true, MFAToken: mfaToken}, nil
-	}
-
-	token, err := createSession(ctx, user.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &AuthResponse{
-		Token: token,
-		User: User{
-			ID:        user.ID,
-			Email:     user.Email.String,
-			Role:      user.Role,
-			Tier:      user.Tier,
-			Username:  user.Username.String,
-			CreatedAt: user.CreatedAt,
-		},
-	}, nil
-}
-
 //encore:api auth method=GET path=/auth/me
 func Me(ctx context.Context) (*User, error) {
 	data := auth.Data().(*AuthData)
@@ -378,139 +165,6 @@ func Me(ctx context.Context) (*User, error) {
 		return nil, err
 	}
 	return user, nil
-}
-
-//encore:api auth method=GET path=/auth/renew
-func RenewToken(ctx context.Context) (*AuthResponse, error) {
-	data := auth.Data().(*AuthData)
-	user, err := getUserByID(ctx, data.UserID)
-	if err != nil {
-		if isNoRows(err) {
-			return nil, &errs.Error{
-				Code:    errs.NotFound,
-				Message: "user not found",
-			}
-		}
-		return nil, err
-	}
-
-	token, err := createSession(ctx, user.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &AuthResponse{
-		Token: token,
-		User:  *user,
-	}, nil
-}
-
-// LogoutParams carries the session token being terminated. The frontend sends
-// the same bearer token it uses for API calls.
-type LogoutParams struct {
-	Token string `json:"token"`
-}
-
-//encore:api public method=POST path=/auth/logout
-func Logout(ctx context.Context, p *LogoutParams) error {
-	if p.Token == "" {
-		return nil
-	}
-	_ = deleteSession(ctx, p.Token)
-	return nil
-}
-
-//encore:api auth method=POST path=/auth/logout-all
-func LogoutAll(ctx context.Context) error {
-	data := auth.Data().(*AuthData)
-	return revokeAllSessions(ctx, data.UserID)
-}
-
-//encore:api auth method=GET path=/auth/sessions
-func ListSessions(ctx context.Context) (*SessionsResponse, error) {
-	data := auth.Data().(*AuthData)
-	rows, err := db.Query(ctx, `
-		SELECT id, created_at, last_seen_at, expires_at
-		FROM sessions WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
-		ORDER BY created_at DESC
-	`, data.UserID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var out SessionsResponse
-	for rows.Next() {
-		var s SessionInfo
-		if err := rows.Scan(&s.ID, &s.CreatedAt, &s.LastSeenAt, &s.ExpiresAt); err != nil {
-			return nil, err
-		}
-		out.Sessions = append(out.Sessions, s)
-	}
-	return &out, rows.Err()
-}
-
-type SessionsResponse struct {
-	Sessions []SessionInfo `json:"sessions"`
-}
-
-type SessionInfo struct {
-	ID         string    `json:"id"`
-	CreatedAt  time.Time `json:"created_at"`
-	LastSeenAt time.Time `json:"last_seen_at"`
-	ExpiresAt  time.Time `json:"expires_at"`
-}
-
-// RevokeSessionParams revokes one session by id (logout of another device).
-type RevokeSessionParams struct {
-	SessionID string `json:"session_id"`
-}
-
-//encore:api auth method=POST path=/auth/sessions/revoke
-func RevokeSession(ctx context.Context, p *RevokeSessionParams) error {
-	data := auth.Data().(*AuthData)
-	if p.SessionID == "" {
-		return &errs.Error{Code: errs.InvalidArgument, Message: "session_id is required"}
-	}
-	_, err := db.Exec(ctx, `
-		UPDATE sessions SET revoked_at = now()
-		WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
-	`, p.SessionID, data.UserID)
-	return err
-}
-
-// ----- Email Verification -----
-
-type VerifyEmailParams struct {
-	Token string `json:"token"`
-}
-
-//encore:api public method=POST path=/auth/verify-email
-func VerifyEmail(ctx context.Context, p *VerifyEmailParams) error {
-	if p.Token == "" {
-		return &errs.Error{Code: errs.InvalidArgument, Message: "token is required"}
-	}
-
-	var userID string
-	err := db.QueryRow(ctx, `
-		UPDATE users SET email_verified_at = now(), verify_token = NULL, verify_token_expires_at = NULL
-		WHERE verify_token = $1 AND verify_token_expires_at > now() AND email_verified_at IS NULL
-		RETURNING id
-	`, p.Token).Scan(&userID)
-	if err != nil {
-		if isNoRows(err) {
-			return &errs.Error{Code: errs.InvalidArgument, Message: "invalid or expired verification token"}
-		}
-		return err
-	}
-
-	// Eagerly provision the NowPayments customer (synchronous). Failure is
-	// non-fatal: subscription creation retries lazily via EnsureSubPartnerID.
-	if _, err := ensureSubPartnerID(ctx, userID); err != nil {
-		log.Printf("[auth] ensure sub_partner_id for %s: %v", userID, err)
-	}
-
-	return nil
 }
 
 // nowpaymentsSubPartnerName builds a unique, non-email, ≤30-character name for
@@ -585,6 +239,28 @@ func SetUserTier(ctx context.Context, p *SetUserTierParams) error {
 	return err
 }
 
+type GetUserRoleParams struct {
+	UserID string `json:"user_id"`
+}
+
+type GetUserRoleResponse struct {
+	Role string `json:"role"`
+}
+
+// GetUserRole returns a user's role to other services that must authorize an
+// actor without reading the auth database directly (ADR 0016).
+//encore:api private method=POST path=/auth/user-role
+func GetUserRole(ctx context.Context, p *GetUserRoleParams) (*GetUserRoleResponse, error) {
+	var role string
+	if err := db.QueryRow(ctx, `SELECT role FROM users WHERE id = $1`, p.UserID).Scan(&role); err != nil {
+		if isNoRows(err) {
+			return nil, &errs.Error{Code: errs.NotFound, Message: "user not found"}
+		}
+		return nil, err
+	}
+	return &GetUserRoleResponse{Role: role}, nil
+}
+
 type NotifyFollowersNewComicParams struct {
 	UserIDs    []string `json:"user_ids"`
 	ComicTitle string   `json:"comic_title"`
@@ -619,8 +295,8 @@ func NotifyFollowersNewComic(ctx context.Context, p *NotifyFollowersNewComicPara
 }
 
 type NotifySupportReplyParams struct {
-	UserID   string `json:"user_id"`
-	Subject  string `json:"subject"`
+	UserID  string `json:"user_id"`
+	Subject string `json:"subject"`
 }
 
 //encore:api private method=POST path=/auth/notify-support-reply
@@ -650,10 +326,10 @@ func NotifySupportReply(ctx context.Context, p *NotifySupportReplyParams) error 
 // service (which owns the AI decision flow). The API key stays a secret in the
 // comics service; this endpoint returns non-secret configuration only.
 type AIModerationConfig struct {
-	Enabled             bool    `json:"enabled"`
-	Model               string  `json:"model"`
-	Endpoint            string  `json:"endpoint"`
-	Prompt              string  `json:"prompt"`
+	Enabled              bool    `json:"enabled"`
+	Model                string  `json:"model"`
+	Endpoint             string  `json:"endpoint"`
+	Prompt               string  `json:"prompt"`
 	AutoApproveThreshold float64 `json:"auto_approve_threshold"`
 	AutoRejectThreshold  float64 `json:"auto_reject_threshold"`
 }
@@ -811,98 +487,6 @@ func GetUsersInfo(ctx context.Context, p *GetUsersInfoParams) (*GetUsersInfoResp
 	return &GetUsersInfoResponse{Users: users}, rows.Err()
 }
 
-//encore:api auth method=POST path=/auth/resend-verification
-func ResendVerification(ctx context.Context) error {
-	data := auth.Data().(*AuthData)
-
-	var verified bool
-		db.QueryRow(ctx, `SELECT email_verified_at IS NOT NULL FROM users WHERE id = $1`, data.UserID).Scan(&verified)
-	if verified {
-		return &errs.Error{Code: errs.InvalidArgument, Message: "email already verified"}
-	}
-
-	token := randomToken(32)
-	_, err := db.Exec(ctx, `
-		UPDATE users SET verify_token = $1, verify_token_expires_at = now() + interval '24 hours'
-		WHERE id = $2 AND email_verified_at IS NULL
-	`, token, data.UserID)
-	if err != nil {
-		return err
-	}
-
-	var email string
-	db.QueryRow(ctx, `SELECT email FROM users WHERE id = $1`, data.UserID).Scan(&email)
-	if email != "" {
-		go sendVerificationEmail(email, token)
-	}
-	return nil
-}
-
-// ----- Password Reset -----
-
-type PasswordResetRequest struct {
-	Email          string `json:"email"`
-	TurnstileToken string `json:"turnstile_token"`
-}
-
-//encore:api public method=POST path=/auth/password-reset/request
-func RequestPasswordReset(ctx context.Context, p *PasswordResetRequest) error {
-	if err := turnstile.Verify(ctx, &turnstile.VerifyParams{Token: p.TurnstileToken, Action: "password_reset"}); err != nil {
-		return err
-	}
-
-	if p.Email == "" {
-		return &errs.Error{Code: errs.InvalidArgument, Message: "email is required"}
-	}
-
-	token := randomToken(32)
-	result, err := db.Exec(ctx, `
-		UPDATE users SET reset_token = $1, reset_token_expires_at = now() + interval '1 hour'
-		WHERE email = $2
-	`, token, p.Email)
-	if err != nil {
-		return err
-	}
-	n := result.RowsAffected()
-	if n > 0 {
-		go sendPasswordResetEmail(p.Email, token)
-	}
-	return nil
-}
-
-type PasswordResetConfirm struct {
-	Token    string `json:"token"`
-	Password string `json:"password" encore:"sensitive"`
-}
-
-//encore:api public method=POST path=/auth/password-reset/confirm
-func ConfirmPasswordReset(ctx context.Context, p *PasswordResetConfirm) error {
-	if p.Token == "" || p.Password == "" {
-		return &errs.Error{Code: errs.InvalidArgument, Message: "token and password are required"}
-	}
-	if len(p.Password) < 8 {
-		return &errs.Error{Code: errs.InvalidArgument, Message: "password must be at least 8 characters"}
-	}
-
-	hash, err := hashPassword(p.Password)
-	if err != nil {
-		return err
-	}
-
-	result, err := db.Exec(ctx, `
-		UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires_at = NULL
-		WHERE reset_token = $2 AND reset_token_expires_at > now()
-	`, hash, p.Token)
-	if err != nil {
-		return err
-	}
-	n := result.RowsAffected()
-	if n == 0 {
-		return &errs.Error{Code: errs.InvalidArgument, Message: "invalid or expired reset token"}
-	}
-	return nil
-}
-
 type User struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
@@ -914,24 +498,23 @@ type User struct {
 }
 
 type userRow struct {
-	ID           string
-	Email        sql.NullString
-	PasswordHash sql.NullString
-	Role         string
-	Tier         string
-	Username     sql.NullString
-	AvatarKey    sql.NullString
-	BannedAt     sql.NullTime
-	SuspendedAt  sql.NullTime
-	CreatedAt    time.Time
+	ID          string
+	Email       sql.NullString
+	Role        string
+	Tier        string
+	Username    sql.NullString
+	AvatarKey   sql.NullString
+	BannedAt    sql.NullTime
+	SuspendedAt sql.NullTime
+	CreatedAt   time.Time
 }
 
 func getUserByEmail(ctx context.Context, email string) (*userRow, error) {
 	var u userRow
 	err := db.QueryRow(ctx, `
-		SELECT id, email, password_hash, role, tier, COALESCE(username, ''), COALESCE(avatar_key::text, ''), banned_at, suspended_at, created_at
+		SELECT id, email, role, tier, COALESCE(username, ''), COALESCE(avatar_key::text, ''), banned_at, suspended_at, created_at
 		FROM users WHERE email = $1
-	`, email).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.Tier, &u.Username, &u.AvatarKey, &u.BannedAt, &u.SuspendedAt, &u.CreatedAt)
+	`, email).Scan(&u.ID, &u.Email, &u.Role, &u.Tier, &u.Username, &u.AvatarKey, &u.BannedAt, &u.SuspendedAt, &u.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -1110,13 +693,13 @@ type AdminUserListResponse struct {
 }
 
 type AdminListUsersParams struct {
-	Page       int    `query:"page"`
-	Limit      int    `query:"limit"`
-	Search     string `query:"search"`
-	Sort       string `query:"sort"`
-	SortDir    string `query:"sort_dir"`
-	FilterRole string `query:"filter_role"`
-	FilterTier string `query:"filter_tier"`
+	Page        int    `query:"page"`
+	Limit       int    `query:"limit"`
+	Search      string `query:"search"`
+	Sort        string `query:"sort"`
+	SortDir     string `query:"sort_dir"`
+	FilterRole  string `query:"filter_role"`
+	FilterTier  string `query:"filter_tier"`
 	FilterEmail string `query:"filter_email"`
 }
 
@@ -1128,22 +711,34 @@ func AdminListUsers(ctx context.Context, p *AdminListUsersParams) (*AdminUserLis
 	}
 
 	page := p.Page
-	if page <= 0 { page = 1 }
+	if page <= 0 {
+		page = 1
+	}
 	limit := p.Limit
-	if limit <= 0 { limit = 20 }
-	if limit > 100 { limit = 100 }
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
 	offset := (page - 1) * limit
 
 	search := "%" + p.Search + "%"
 	sortCol := "created_at"
 	sortDir := "DESC"
 	switch p.Sort {
-	case "email": sortCol = "email"
-	case "role": sortCol = "role"
-	case "tier": sortCol = "tier"
-	case "created_at": sortCol = "created_at"
+	case "email":
+		sortCol = "email"
+	case "role":
+		sortCol = "role"
+	case "tier":
+		sortCol = "tier"
+	case "created_at":
+		sortCol = "created_at"
 	}
-	if strings.ToLower(p.SortDir) == "asc" { sortDir = "ASC" }
+	if strings.ToLower(p.SortDir) == "asc" {
+		sortDir = "ASC"
+	}
 
 	where := "WHERE (email ILIKE $1)"
 	args := []interface{}{search}
@@ -1175,7 +770,9 @@ func AdminListUsers(ctx context.Context, p *AdminListUsersParams) (*AdminUserLis
 	args = append(args, limit, offset)
 
 	rows, err := db.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var users []AdminUser
@@ -1261,38 +858,6 @@ func AdminUnsuspendUser(ctx context.Context, id string) error {
 	}
 	_, err := db.Exec(ctx, `UPDATE users SET suspended_at = NULL WHERE id = $1`, id)
 	return err
-}
-
-type ImpersonateResponse struct {
-	Token string `json:"token"`
-	User  User   `json:"user"`
-}
-
-//encore:api auth method=POST path=/admin/users/:id/impersonate
-func AdminImpersonateUser(ctx context.Context, id string) (*ImpersonateResponse, error) {
-	data := auth.Data().(*AuthData)
-	if data.Role != "admin" {
-		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "admin only"}
-	}
-
-	user, err := getUserByID(ctx, id)
-	if err != nil {
-		if isNoRows(err) {
-			return nil, &errs.Error{Code: errs.NotFound, Message: "user not found"}
-		}
-		return nil, err
-	}
-
-	token, err := createImpersonationSession(ctx, user.ID, data.UserID)
-	if err != nil {
-		return nil, err
-	}
-
-	details, _ := json.Marshal(map[string]string{"impersonated": id})
-	db.Exec(ctx, `INSERT INTO audit_logs (actor_id, action, target_type, target_id, details) VALUES ($1, 'impersonate', 'user', $2, $3)`,
-		data.UserID, id, string(details))
-
-	return &ImpersonateResponse{Token: token, User: *user}, nil
 }
 
 // ----- Notification Preferences -----

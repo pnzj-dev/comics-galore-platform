@@ -1,8 +1,9 @@
 import { getEncoreClient } from '$lib/server/encore';
+import { getSessionToken } from '$lib/server/session';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ cookies }) => {
-	const token = cookies.get('token');
+export const load: PageServerLoad = async ({ locals, cookies }) => {
+	const token = await getSessionToken(locals);
 	const client = getEncoreClient(token);
 
 	const [rankings, home] = await Promise.all([

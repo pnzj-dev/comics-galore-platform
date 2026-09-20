@@ -1,35 +1,25 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { SESSION_COOKIE } from '$lib/server/session';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:4000';
 
 // Same-origin proxy for authenticated browser calls. The browser cannot read
-// the HttpOnly session cookie, so authenticated mutations are routed through
-// this endpoint; the server reads the cookie and forwards the request to the
-// Encore backend with the session as a Bearer token.
-export const GET: RequestHandler = ({ request, params, cookies, fetch }) =>
-	forward(request, params.path, cookies, fetch);
+// the Logto session cookie, so authenticated mutations are routed through this
+// endpoint; the server reads the Logto session and forwards the ID token to
+// the Encore backend as a Bearer token.
+export const GET: RequestHandler = (e) => forward(e);
+export const POST: RequestHandler = (e) => forward(e);
+export const PUT: RequestHandler = (e) => forward(e);
+export const PATCH: RequestHandler = (e) => forward(e);
+export const DELETE: RequestHandler = (e) => forward(e);
 
-export const POST: RequestHandler = ({ request, params, cookies, fetch }) =>
-	forward(request, params.path, cookies, fetch);
+async function forward(event: import('./$types').RequestEvent): Promise<Response> {
+	const { request, params, locals, fetch } = event;
+	const path = params.path;
 
-export const PUT: RequestHandler = ({ request, params, cookies, fetch }) =>
-	forward(request, params.path, cookies, fetch);
+	const ctx = await locals.logtoClient.getContext();
+	const token = ctx.isAuthenticated ? await locals.logtoClient.getIdToken() : undefined;
 
-export const PATCH: RequestHandler = ({ request, params, cookies, fetch }) =>
-	forward(request, params.path, cookies, fetch);
-
-export const DELETE: RequestHandler = ({ request, params, cookies, fetch }) =>
-	forward(request, params.path, cookies, fetch);
-
-async function forward(
-	request: Request,
-	path: string,
-	cookies: import('@sveltejs/kit').Cookies,
-	fetch: typeof globalThis.fetch,
-): Promise<Response> {
-	const token = cookies.get(SESSION_COOKIE);
 	const url = `${BACKEND_URL}/${path}${new URL(request.url).search}`;
 
 	const headers = new Headers(request.headers);

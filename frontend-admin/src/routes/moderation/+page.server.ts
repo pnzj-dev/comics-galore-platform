@@ -1,9 +1,10 @@
 import { getEncoreClient } from '$lib/server/encore';
+import { getSessionToken } from '$lib/server/session';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ cookies, url }) => {
+export const load: PageServerLoad = async ({ locals, url }) => {
 	try {
-		const client = getEncoreClient(cookies.get('token'));
+		const client = getEncoreClient(await getSessionToken(locals));
 		const [comics, flags] = await Promise.all([
 			client.comics.PendingComics({
 				Page: parseInt(url.searchParams.get('page') || '1'),

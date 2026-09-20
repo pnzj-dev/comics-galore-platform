@@ -1,11 +1,12 @@
 import { getEncoreClient } from '$lib/server/encore';
+import { getSessionToken } from '$lib/server/session';
 import { getUserPreferences } from '$lib/server/session';
 import type { comics } from '$lib/server/client';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ url, cookies }) => {
-	const client = getEncoreClient(cookies.get('token'));
-	const prefs = await getUserPreferences(cookies);
+export const load: PageServerLoad = async ({ locals, url, cookies }) => {
+	const client = getEncoreClient(await getSessionToken(locals));
+	const prefs = await getUserPreferences(locals);
 
 	// Default the language filter to the user's preferred content language.
 	const lang = url.searchParams.get('language') || prefs?.content_language || '';

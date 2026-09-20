@@ -9,9 +9,8 @@ import (
 )
 
 type BootstrapAdminParams struct {
-	Token    string `json:"token" encore:"sensitive"`
-	Email    string `json:"email"`
-	Password string `json:"password" encore:"sensitive"`
+	Token string `json:"token" encore:"sensitive"`
+	Email string `json:"email"`
 }
 
 type BootstrapAdminResponse struct {
@@ -32,9 +31,6 @@ func BootstrapAdmin(ctx context.Context, p *BootstrapAdminParams) (*BootstrapAdm
 	if email == "" {
 		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "email is required"}
 	}
-	if len(p.Password) < 8 {
-		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "password must be at least 8 characters"}
-	}
 
 	var adminCount int
 	if err := db.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
@@ -44,17 +40,20 @@ func BootstrapAdmin(ctx context.Context, p *BootstrapAdminParams) (*BootstrapAdm
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "an admin already exists; bootstrap is one-time only"}
 	}
 
-	hash, err := hashPassword(p.Password)
-	if err != nil {
-		return nil, err
-	}
-
+	// Logto owns credentials; bootstrap only creates/promotes the app-level
+	// admin row. The admin links their Logto identity to this row on first
+	// sign-in (by email). Upsert so a user who signed in before bootstrap is
+	// promoted rather than rejected on the unique email constraint.
 	var user User
-	err = db.QueryRow(ctx, `
-		INSERT INTO users (email, password_hash, role, tier, username, terms_accepted_at, email_verified_at)
-		VALUES ($1, $2, 'admin', 'platinum', $3, now(), now())
+	err := db.QueryRow(ctx, `
+		INSERT INTO users (email, role, tier, username, terms_accepted_at, email_verified_at)
+		VALUES ($1, 'admin', 'platinum', $2, now(), now())
+		ON CONFLICT (email) DO UPDATE SET
+			role = 'admin',
+			tier = 'platinum',
+			email_verified_at = COALESCE(users.email_verified_at, now())
 		RETURNING id, email, role, tier, COALESCE(username, ''), created_at
-	`, email, hash, adminUsername(email)).Scan(&user.ID, &user.Email, &user.Role, &user.Tier, &user.Username, &user.CreatedAt)
+	`, email, adminUsername(email)).Scan(&user.ID, &user.Email, &user.Role, &user.Tier, &user.Username, &user.CreatedAt)
 	if err != nil {
 		return nil, err
 	}

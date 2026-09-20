@@ -1,6 +1,5 @@
 import { writable } from 'svelte/store';
 import type { auth } from '$lib/api/encore-client';
-import { isProtectedPath } from '$lib/utils/protected-routes';
 
 export type User = auth.User;
 
@@ -12,97 +11,23 @@ export const isAuthenticated = writable<boolean>(false);
 // single source of truth so logout/login update the UI reactively.
 export const hydrated = writable<boolean>(false);
 
-// The session cookie is HttpOnly and set/cleared server-side. These helpers
-// POST to the SvelteKit server endpoints which exchange credentials for a
-// session cookie and return the user.
-async function post(path: string, body: unknown): Promise<User> {
-	const res = await fetch(path, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(body),
-	});
-	if (!res.ok) {
-		let message = 'request failed';
-		try {
-			const data = await res.json();
-			message = data.message || message;
-		} catch {
-			/* ignore */
-		}
-		throw new Error(message);
-	}
-	const user = (await res.json()) as User;
-	currentUser.set(user);
-	isAuthenticated.set(true);
-	return user;
+// Logto owns authentication. Sign-in/sign-out are GET endpoints that redirect
+// to the Logto hosted UI (/login and /logout server routes). `?mode` deep-links
+// to a specific screen.
+export function login() {
+	window.location.href = '/login';
 }
 
-export async function register(username: string, email: string, password: string, turnstileToken?: string): Promise<User> {
-	return post('/auth/register', { username, email, password, turnstile_token: turnstileToken || '' });
+export function register() {
+	window.location.href = '/login?mode=signup';
 }
 
-// login can return a User (password-only, session issued) or a TOTP challenge
-// ({ requires_totp, mfa_token }) when 2FA is enabled. Only the former mutates
-// the auth store.
-export async function login(email: string, password: string, turnstileToken?: string): Promise<User | { requires_totp: true; mfa_token: string }> {
-	const res = await fetch('/auth/login', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ email, password, turnstile_token: turnstileToken || '' }),
-	});
-	if (!res.ok) {
-		let message = 'request failed';
-		try {
-			const data = await res.json();
-			message = data.message || message;
-		} catch {
-			/* ignore */
-		}
-		throw new Error(message);
-	}
-	const data = await res.json();
-	if (data.requires_totp) {
-		return data as { requires_totp: true; mfa_token: string };
-	}
-	currentUser.set(data as User);
-	isAuthenticated.set(true);
-	return data as User;
+export function forgotPassword() {
+	window.location.href = '/login?mode=forgot';
 }
 
-// verifyTotpLogin completes the TOTP login step, exchanging the short-lived
-// challenge + authenticator code for a session.
-export async function verifyTotpLogin(mfaToken: string, code: string): Promise<User> {
-	const res = await fetch('/auth/login/totp', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ mfa_token: mfaToken, code }),
-	});
-	if (!res.ok) {
-		let message = 'request failed';
-		try {
-			const data = await res.json();
-			message = data.message || message;
-		} catch {
-			/* ignore */
-		}
-		throw new Error(message);
-	}
-	const user = (await res.json()) as User;
-	currentUser.set(user);
-	isAuthenticated.set(true);
-	return user;
-}
-
-export async function logout(redirectTo?: string) {
-	const redirect = redirectTo || (isProtectedPath(window.location.pathname) ? '/' : '');
-	try {
-		await fetch('/auth/logout', { method: 'POST' });
-	} catch {
-		/* ignore */
-	}
+export function logout() {
 	currentUser.set(null);
 	isAuthenticated.set(false);
-	if (redirect) {
-		window.location.assign(redirect);
-	}
+	window.location.href = '/logout';
 }

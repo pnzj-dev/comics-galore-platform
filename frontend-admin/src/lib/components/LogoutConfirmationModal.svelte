@@ -17,7 +17,7 @@
 	}
 
 	function handleLogout() {
-		logout('/login');
+		logout();
 		close();
 	}
 </script>

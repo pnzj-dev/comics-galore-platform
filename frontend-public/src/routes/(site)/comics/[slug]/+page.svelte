@@ -14,7 +14,7 @@
 	import AdBanner from '$lib/components/home/AdBanner.svelte';
 	import Turnstile from '$lib/components/common/Turnstile.svelte';
 	import { TURNSTILE_SITEKEY } from '$lib/utils/turnstile';
-	import { currentUser } from '$lib/stores/auth';
+	import { currentUser, login } from '$lib/stores/auth';
 	import { createCommentStream } from '$lib/stores/live-comments';
 	import { modal } from '$lib/stores/modal.svelte';
 	import { quotaRefresh } from '$lib/stores/quota.svelte';
@@ -548,7 +548,7 @@
 						{#if user}
 							<Button size="lg" class="w-full" href="/pricing">Upgrade to read mature content</Button>
 						{:else}
-							<Button size="lg" class="w-full" onclick={() => modal.open('login')}>Sign in</Button>
+							<Button size="lg" class="w-full" onclick={() => login()}>Sign in</Button>
 						{/if}
 					{:else}
 						{#if comic.status === 'published' && comic.extraction_status === 'processing'}
@@ -567,7 +567,7 @@
 								<Button size="lg" variant="outline" class="w-full" onclick={startDownload}>Download</Button>
 							{/if}
 						{:else}
-							<Button size="lg" variant="outline" class="w-full" onclick={() => modal.open('login')}>Sign in</Button>
+							<Button size="lg" variant="outline" class="w-full" onclick={() => login()}>Sign in</Button>
 						{/if}
 					{/if}
 				</div>

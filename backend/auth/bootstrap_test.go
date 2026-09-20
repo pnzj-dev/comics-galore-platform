@@ -6,32 +6,17 @@ import (
 	"testing"
 
 	"encore.dev/beta/errs"
-	"encore.dev/et"
 )
 
 const testBootstrapSecret = "test-bootstrap-secret"
-
-// isolateAuthDB points the package-level db at a fresh, isolated test database
-// for the current test and returns a function that restores the previous value.
-func isolateAuthDB(t *testing.T) (restore func()) {
-	t.Helper()
-	isolated, err := et.NewTestDatabase(context.Background(), "authdb")
-	if err != nil {
-		t.Fatalf("new test database: %v", err)
-	}
-	original := db
-	db = isolated
-	return func() { db = original }
-}
 
 func TestBootstrapAdmin_Disabled(t *testing.T) {
 	ctx := context.Background()
 	secrets.BootstrapSecret = ""
 
 	_, err := BootstrapAdmin(ctx, &BootstrapAdminParams{
-		Token:    "whatever",
-		Email:    "admin@example.com",
-		Password: "password123",
+		Token: "whatever",
+		Email: "admin@example.com",
 	})
 	if err == nil {
 		t.Fatal("expected error when bootstrap is disabled, got nil")
@@ -50,9 +35,8 @@ func TestBootstrapAdmin_WrongToken(t *testing.T) {
 	secrets.BootstrapSecret = testBootstrapSecret
 
 	_, err := BootstrapAdmin(ctx, &BootstrapAdminParams{
-		Token:    "wrong-token",
-		Email:    "admin@example.com",
-		Password: "password123",
+		Token: "wrong-token",
+		Email: "admin@example.com",
 	})
 	if err == nil {
 		t.Fatal("expected error for wrong token, got nil")
@@ -66,37 +50,25 @@ func TestBootstrapAdmin_WrongToken(t *testing.T) {
 	}
 }
 
-func TestBootstrapAdmin_Validation(t *testing.T) {
+func TestBootstrapAdmin_MissingEmail(t *testing.T) {
 	ctx := context.Background()
+	restore := isolateAuthDB(t)
+	defer restore()
 	secrets.BootstrapSecret = testBootstrapSecret
 
-	tests := []struct {
-		name     string
-		email    string
-		password string
-	}{
-		{"empty email", "", "password123"},
-		{"short password", "admin@example.com", "short"},
+	_, err := BootstrapAdmin(ctx, &BootstrapAdminParams{
+		Token: testBootstrapSecret,
+		Email: "",
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := BootstrapAdmin(ctx, &BootstrapAdminParams{
-				Token:    testBootstrapSecret,
-				Email:    tt.email,
-				Password: tt.password,
-			})
-			if err == nil {
-				t.Fatal("expected error, got nil")
-			}
-			var e *errs.Error
-			if !errors.As(err, &e) {
-				t.Fatalf("expected errs.Error, got %T", err)
-			}
-			if e.Code != errs.InvalidArgument {
-				t.Errorf("expected InvalidArgument, got %v", e.Code)
-			}
-		})
+	var e *errs.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("expected errs.Error, got %T", err)
+	}
+	if e.Code != errs.InvalidArgument {
+		t.Errorf("expected InvalidArgument, got %v", e.Code)
 	}
 }
 
@@ -107,9 +79,8 @@ func TestBootstrapAdmin_CreatesAdmin(t *testing.T) {
 	secrets.BootstrapSecret = testBootstrapSecret
 
 	resp, err := BootstrapAdmin(ctx, &BootstrapAdminParams{
-		Token:    testBootstrapSecret,
-		Email:    "Admin@Example.com",
-		Password: "password123",
+		Token: testBootstrapSecret,
+		Email: "Admin@Example.com",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -135,17 +106,15 @@ func TestBootstrapAdmin_OneTime(t *testing.T) {
 	secrets.BootstrapSecret = testBootstrapSecret
 
 	if _, err := BootstrapAdmin(ctx, &BootstrapAdminParams{
-		Token:    testBootstrapSecret,
-		Email:    "admin@example.com",
-		Password: "password123",
+		Token: testBootstrapSecret,
+		Email: "admin@example.com",
 	}); err != nil {
 		t.Fatalf("first bootstrap should succeed: %v", err)
 	}
 
 	_, err := BootstrapAdmin(ctx, &BootstrapAdminParams{
-		Token:    testBootstrapSecret,
-		Email:    "admin2@example.com",
-		Password: "password123",
+		Token: testBootstrapSecret,
+		Email: "admin2@example.com",
 	})
 	if err == nil {
 		t.Fatal("expected error on second bootstrap, got nil")

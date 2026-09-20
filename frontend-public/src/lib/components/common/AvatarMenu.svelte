@@ -10,7 +10,7 @@
 		DropdownMenuSeparator,
 	} from '$lib/components/ui/dropdown-menu/index.js';
 	import { t } from '$lib/i18n';
-	import { ChevronDown, User, Settings, Shield, LogOut } from 'lucide-svelte';
+	import { ChevronDown, User, Settings, LogOut } from 'lucide-svelte';
 
 	const MEDIA_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -62,10 +62,6 @@
 		<DropdownMenuItem onclick={() => modal.open('settings')}>
 			<Settings class="size-4" />
 			{t('menu.preferences')}
-		</DropdownMenuItem>
-		<DropdownMenuItem onclick={() => modal.open('security')}>
-			<Shield class="size-4" />
-			{t('menu.security')}
 		</DropdownMenuItem>
 		<DropdownMenuSeparator />
 		<DropdownMenuItem variant="destructive" onclick={() => modal.open('logout')}>

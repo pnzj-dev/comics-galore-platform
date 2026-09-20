@@ -41,6 +41,7 @@ export default class Client {
     public readonly social: social.ServiceClient
     public readonly tiers: tiers.ServiceClient
     public readonly upload: upload.ServiceClient
+    public readonly mcp: mcp.ServiceClient
     private readonly options: ClientOptions
     private readonly target: string
 
@@ -64,6 +65,7 @@ export default class Client {
         this.social = new social.ServiceClient(base)
         this.tiers = new tiers.ServiceClient(base)
         this.upload = new upload.ServiceClient(base)
+        this.mcp = new mcp.ServiceClient(base)
     }
 
     /**
@@ -3255,6 +3257,66 @@ export namespace upload {
          */
         public async UploadImage(method: "POST", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
             return this.baseClient.callAPI(method, `/upload/image`, body, options)
+        }
+    }
+}
+
+export namespace mcp {
+    export interface McpKeyInfo {
+        id: string
+        label: string
+        "key_suffix": string
+        "user_id": string
+        username: string
+        "created_at": string
+        "revoked_at": string
+    }
+
+    export interface McpKeyListResponse {
+        keys: McpKeyInfo[]
+    }
+
+    export interface CreateMcpKeyParams {
+        label: string
+        "user_id": string
+    }
+
+    export interface CreateMcpKeyResponse {
+        key: string
+        info: McpKeyInfo
+    }
+
+    export class ServiceClient {
+        private baseClient: BaseClient
+
+        constructor(baseClient: BaseClient) {
+            this.baseClient = baseClient
+            this.AdminListMcpKeys = this.AdminListMcpKeys.bind(this)
+            this.AdminCreateMcpKey = this.AdminCreateMcpKey.bind(this)
+            this.AdminRevokeMcpKey = this.AdminRevokeMcpKey.bind(this)
+        }
+
+        /**
+         * AdminListMcpKeys lists all MCP keys (masked — never the raw key).
+         */
+        public async AdminListMcpKeys(): Promise<McpKeyListResponse> {
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/mcp/keys`)
+            return await resp.json() as McpKeyListResponse
+        }
+
+        /**
+         * AdminCreateMcpKey issues a new MCP key and returns the raw key once.
+         */
+        public async AdminCreateMcpKey(params: CreateMcpKeyParams): Promise<CreateMcpKeyResponse> {
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/mcp/keys`, JSON.stringify(params))
+            return await resp.json() as CreateMcpKeyResponse
+        }
+
+        /**
+         * AdminRevokeMcpKey revokes an MCP key.
+         */
+        public async AdminRevokeMcpKey(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("DELETE", `/admin/mcp/keys/${encodeURIComponent(id)}`)
         }
     }
 }
