@@ -37,7 +37,7 @@
 			{#if authed && user}
 				<AvatarMenu />
 			{:else}
-				<Button variant="ghost" size="sm" onclick={() => login()}>{t('nav.login')}</Button>
+				<Button size="sm" onclick={() => login()}>{t('nav.login')}</Button>
 			{/if}
 		</div>
 	</div>

@@ -17,7 +17,7 @@
 		</CardHeader>
 		<CardContent>
 			<form method="POST" action="?/signIn" class="space-y-4">
-				<Button type="submit" class="w-full">Sign in with Logto</Button>
+				<Button type="submit" class="w-full">Sign in</Button>
 			</form>
 			<form method="POST" action="?/forgotPassword" class="mt-3 text-center">
 				<button type="submit" class="text-sm text-muted-foreground hover:text-foreground hover:underline">Forgot password?</button>
