@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"encore.dev/beta/errs"
 )
@@ -78,4 +79,44 @@ func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error
 		Skipped: skipped,
 		Message: fmt.Sprintf("Seeded %d users, skipped %d (already exist).", created, skipped),
 	}, nil
+}
+
+// DevLinkLogtoParams links pre-seeded internal users (by email) to their Logto
+// identity, so the first sign-in resolves to the seeded role regardless of
+// whether Logto emits the email claim.
+type DevLinkLogtoParams struct {
+	Token string            `json:"token"`
+	Users []DevLinkLogtoUser `json:"users"`
+}
+
+type DevLinkLogtoUser struct {
+	Email   string `json:"email"`
+	LogtoID string `json:"logto_id"`
+}
+
+type DevLinkLogtoResponse struct {
+	Linked int `json:"linked"`
+}
+
+//encore:api public method=POST path=/dev/link-logto
+func DevLinkLogto(ctx context.Context, p *DevLinkLogtoParams) (*DevLinkLogtoResponse, error) {
+	if !isDevTokenValid(p.Token) {
+		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "invalid dev seed token"}
+	}
+
+	linked := 0
+	for _, u := range p.Users {
+		email := strings.ToLower(strings.TrimSpace(u.Email))
+		logtoID := strings.TrimSpace(u.LogtoID)
+		if email == "" || logtoID == "" {
+			continue
+		}
+		res, err := db.Exec(ctx, `UPDATE users SET logto_id = $1 WHERE email = $2 AND logto_id IS NULL`, logtoID, email)
+		if err != nil {
+			return nil, err
+		}
+		linked += int(res.RowsAffected())
+	}
+
+	return &DevLinkLogtoResponse{Linked: linked}, nil
 }
