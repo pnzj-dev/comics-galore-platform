@@ -8,6 +8,8 @@
 	import LogoutConfirmationModal from '$lib/components/LogoutConfirmationModal.svelte';
 	import NowPaymentsLinkWizard from '$lib/components/NowPaymentsLinkWizard.svelte';
 	import { LayoutDashboard, Shield, Users, CreditCard, BookOpen, Trash2, Settings, LogOut, AlertTriangle, ArrowDownToLine, ReceiptText, LifeBuoy, Sparkles, Ticket, Activity, HardDrive, FlaskConical, KeyRound } from 'lucide-svelte';
+	import EnvironmentBadge from '$lib/components/common/EnvironmentBadge.svelte';
+	import { ENV, IS_NON_PROD, applyEnvironmentEffects } from '$lib/utils/env';
 
 	let { data, children } = $props();
 	let planMatrixComplete = $state(true);
@@ -18,6 +20,7 @@
 			currentUser.set(data.user);
 			isAuthenticated.set(true);
 		}
+		return applyEnvironmentEffects();
 	});
 
 	const user = $derived(data.user || $currentUser);
@@ -69,12 +72,25 @@
 	}
 </script>
 
+<svelte:head>
+	<html lang="en" data-env={ENV ?? 'prod'}></html>
+	{#if ENV && ENV !== 'prod'}
+		<link rel="icon" type="image/svg+xml" href="/favicon-{ENV}.svg" />
+	{/if}
+	{#if IS_NON_PROD}
+		<meta name="robots" content="noindex, nofollow" />
+	{/if}
+</svelte:head>
+
+<EnvironmentBadge variant="bar" />
+
 {#if authed && (user?.role === 'admin' || user?.role === 'moderator') && page.url?.pathname !== '/login'}
 	<div class="flex h-screen overflow-hidden">
 		<!-- Sidebar -->
 		<aside class="w-60 flex-shrink-0 bg-slate-900 dark:bg-slate-950 text-white flex flex-col">
 			<div class="p-4 border-b border-slate-700/50">
 				<a href="/dashboard" class="text-sm font-bold tracking-wide text-white">Comics Galore</a>
+				<EnvironmentBadge variant="pill" onDark />
 				<p class="text-[10px] text-slate-400 mt-0.5">Admin Panel</p>
 			</div>
 

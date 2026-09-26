@@ -55,7 +55,8 @@ jobs:
             --app "${{ matrix.app }}-dev" \
             --build-arg VITE_BACKEND_URL="https://dev-comics-galore-backend-v5k2.encr.app" \
             --build-arg VITE_API_URL="https://dev-comics-galore-backend-v5k2.encr.app" \
-            --build-arg VITE_TURNSTILE_SITEKEY="${{ secrets.TURNSTILE_SITEKEY }}"
+            --build-arg VITE_TURNSTILE_SITEKEY="${{ secrets.TURNSTILE_SITEKEY }}" \
+            --build-arg VITE_ENV=dev
 
   worker:
     uses: ./.github/workflows/deploy-worker.yml

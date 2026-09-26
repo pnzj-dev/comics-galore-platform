@@ -9,6 +9,8 @@
 	import BoostModal from '$lib/components/billing/BoostModal.svelte';
 	import AddToListModal from '$lib/components/lists/AddToListModal.svelte';
 	import NewMessageModal from '$lib/components/messages/NewMessageModal.svelte';
+	import EnvironmentBadge from '$lib/components/common/EnvironmentBadge.svelte';
+	import { ENV, IS_NON_PROD, applyEnvironmentEffects } from '$lib/utils/env';
 	import { initializeLocale } from '$lib/i18n';
 
 	let { data, children } = $props();
@@ -23,12 +25,21 @@
 			isAuthenticated.set(true);
 		}
 		hydrated.set(true);
+		return applyEnvironmentEffects();
 	});
 </script>
 
 <svelte:head>
-	<html lang={data.locale}></html>
+	<html lang={data.locale} data-env={ENV ?? 'prod'}></html>
+	{#if ENV && ENV !== 'prod'}
+		<link rel="icon" type="image/svg+xml" href="/favicon-{ENV}.svg" />
+	{/if}
+	{#if IS_NON_PROD}
+		<meta name="robots" content="noindex, nofollow" />
+	{/if}
 </svelte:head>
+
+<EnvironmentBadge variant="bar" />
 
 {@render children()}
 

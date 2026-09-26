@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card/index.js';
+	import EnvironmentBadge from '$lib/components/common/EnvironmentBadge.svelte';
 </script>
 
 <svelte:head><title>Admin Login — Comics Galore</title></svelte:head>
@@ -8,7 +9,10 @@
 <div class="flex min-h-[80vh] items-center justify-center p-4">
 	<Card class="w-full max-w-md">
 		<CardHeader>
-			<CardTitle>Admin Login</CardTitle>
+			<div class="flex items-center gap-2">
+				<CardTitle>Admin Login</CardTitle>
+				<EnvironmentBadge variant="pill" />
+			</div>
 			<CardDescription>Sign in to the admin panel</CardDescription>
 		</CardHeader>
 		<CardContent>

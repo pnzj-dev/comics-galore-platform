@@ -24,7 +24,7 @@
 		{ key: 'created_at', label: 'Created', sortable: true },
 	];
 
-	function statusBadge(u: Record<string, unknown>): string {
+	function statusBadge(u: { banned_at?: string; suspended_at?: string }): string {
 		if (u.banned_at) return 'banned';
 		if (u.suspended_at) return 'suspended';
 		return 'active';

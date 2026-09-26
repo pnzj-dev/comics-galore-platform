@@ -44,20 +44,20 @@
 		<CardHeader><CardTitle>New coupon</CardTitle></CardHeader>
 		<CardContent class="flex flex-wrap items-end gap-3">
 			<div class="space-y-1.5">
-				<label class="text-xs text-muted-foreground">Code</label>
-				<Input bind:value={code} placeholder="SUMMER20" />
+				<label for="coupon-code" class="text-xs text-muted-foreground">Code</label>
+				<Input id="coupon-code" bind:value={code} placeholder="SUMMER20" />
 			</div>
 			<div class="space-y-1.5">
-				<label class="text-xs text-muted-foreground">Percent off</label>
-				<Input type="number" bind:value={percentOff} min={1} max={100} />
+				<label for="coupon-percent" class="text-xs text-muted-foreground">Percent off</label>
+				<Input id="coupon-percent" type="number" bind:value={percentOff} min={1} max={100} />
 			</div>
 			<div class="space-y-1.5">
-				<label class="text-xs text-muted-foreground">Tier (optional)</label>
-				<Input bind:value={tier} placeholder="gold" />
+				<label for="coupon-tier" class="text-xs text-muted-foreground">Tier (optional)</label>
+				<Input id="coupon-tier" bind:value={tier} placeholder="gold" />
 			</div>
 			<div class="space-y-1.5">
-				<label class="text-xs text-muted-foreground">Max uses (0=unlimited)</label>
-				<Input type="number" bind:value={maxUses} min={0} />
+				<label for="coupon-max-uses" class="text-xs text-muted-foreground">Max uses (0=unlimited)</label>
+				<Input id="coupon-max-uses" type="number" bind:value={maxUses} min={0} />
 			</div>
 			<Button onclick={createCoupon} disabled={creating}>{creating ? 'Creating…' : 'Create'}</Button>
 			{#if error}<p class="text-sm text-destructive">{error}</p>{/if}

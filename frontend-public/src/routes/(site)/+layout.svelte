@@ -4,6 +4,7 @@
 	import LocaleSwitcher from '$lib/components/common/LocaleSwitcher.svelte';
 	import AvatarMenu from '$lib/components/common/AvatarMenu.svelte';
 	import AnnouncementBanner from '$lib/components/common/AnnouncementBanner.svelte';
+	import EnvironmentBadge from '$lib/components/common/EnvironmentBadge.svelte';
 	import { currentUser, isAuthenticated, hydrated, login } from '$lib/stores/auth';
 	import { t } from '$lib/i18n';
 
@@ -17,6 +18,7 @@
 	<div class="flex h-14 items-center justify-between px-4 max-w-7xl mx-auto">
 		<div class="flex items-center gap-4">
 			<a href="/" class="font-semibold text-lg">Comics Galore</a>
+			<EnvironmentBadge variant="pill" />
 			<a href="/comics" class="text-sm text-muted-foreground hover:text-foreground">{t('nav.browse')}</a>
 			<a href="/series" class="text-sm text-muted-foreground hover:text-foreground">{t('nav.series')}</a>
 			<a href="/pricing" class="text-sm text-muted-foreground hover:text-foreground">{t('nav.pricing')}</a>

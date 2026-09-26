@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { formatDate, formatUSD } from '$lib/utils/format';
+	import type { billing } from '$lib/server/client';
 
-	let { deposit }: { deposit: Record<string, unknown> } = $props();
+	let { deposit }: { deposit: billing.AdminDeposit } = $props();
 
 	let copied = $state(false);
 

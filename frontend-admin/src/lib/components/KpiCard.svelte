@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Component } from 'svelte';
+	import type { ComponentType } from 'svelte';
 
 	let {
 		title,
@@ -10,7 +10,7 @@
 	}: {
 		title: string;
 		value: string;
-		icon?: Component;
+		icon?: ComponentType;
 		hint?: string;
 		accent?: boolean;
 	} = $props();

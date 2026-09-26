@@ -98,7 +98,7 @@
 			<DetailRow label="Title" value={row.title as string} />
 			<DetailRow label="Author" value={row.author as string} />
 			<DetailRow label="Status" value={(row.status as string)?.replace('_', ' ')} />
-			<DetailRow label="Deleted at" value={formatDate(row.deleted_at as string)} />
+			<DetailRow label="Deleted at" value={formatDate((row as unknown as { deleted_at?: string }).deleted_at ?? '')} />
 		{/snippet}
 	</AdminTable>
 </section>

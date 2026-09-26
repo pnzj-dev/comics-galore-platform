@@ -7,6 +7,7 @@
 
 	let { data } = $props();
 
+	// svelte-ignore state_referenced_locally
 	let keys = $state(data.keys);
 	let showCreate = $state(false);
 	let newLabel = $state('');
