@@ -25,4 +25,4 @@ jobs:
         working-directory: temporal-worker
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: flyctl deploy --app "cg-worker-${{ inputs.environment }}"
+        run: flyctl deploy --local-only --app "cg-worker-${{ inputs.environment }}"
