@@ -18,10 +18,6 @@ export function login() {
 	window.location.href = '/login';
 }
 
-export function register() {
-	window.location.href = '/login?mode=signup';
-}
-
 export function forgotPassword() {
 	window.location.href = '/login?mode=forgot';
 }

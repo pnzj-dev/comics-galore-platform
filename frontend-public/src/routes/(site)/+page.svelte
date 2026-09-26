@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { currentUser, hydrated, login, register } from '$lib/stores/auth';
+	import { currentUser, hydrated, login } from '$lib/stores/auth';
 	import ComicCard from '$lib/components/comics/ComicCard.svelte';
 	import TrendingPopularSeries from '$lib/components/home/TrendingPopularSeries.svelte';
 	import ComicsHome from '$lib/components/home/ComicsHome.svelte';
@@ -34,7 +34,7 @@
 	</p>
 	<div class="mt-8 flex gap-4">
 		{#if !authed}
-			<Button size="lg" onclick={() => register()}>Get Started</Button>
+			<Button size="lg" onclick={() => login()}>Get Started</Button>
 			<Button size="lg" variant="outline" onclick={() => login()}>Sign In</Button>
 		{:else}
 			<Button size="lg" href="/comics">Browse Comics</Button>

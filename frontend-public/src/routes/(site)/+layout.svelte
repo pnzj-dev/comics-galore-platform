@@ -4,7 +4,7 @@
 	import LocaleSwitcher from '$lib/components/common/LocaleSwitcher.svelte';
 	import AvatarMenu from '$lib/components/common/AvatarMenu.svelte';
 	import AnnouncementBanner from '$lib/components/common/AnnouncementBanner.svelte';
-	import { currentUser, isAuthenticated, hydrated, login, register } from '$lib/stores/auth';
+	import { currentUser, isAuthenticated, hydrated, login } from '$lib/stores/auth';
 	import { t } from '$lib/i18n';
 
 	let { data, children } = $props();
@@ -36,7 +36,6 @@
 				<AvatarMenu />
 			{:else}
 				<Button variant="ghost" size="sm" onclick={() => login()}>{t('nav.login')}</Button>
-				<Button size="sm" onclick={() => register()}>{t('nav.register')}</Button>
 			{/if}
 		</div>
 	</div>
