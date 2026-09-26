@@ -6,13 +6,56 @@ on:
 
 jobs:
   deploy:
-    uses: ./.github/workflows/deploy-app.yml
-    with:
-      environment: staging
-      backend_url: https://staging-comics-galore-backend-v5k2.encr.app
-    secrets:
-      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      TURNSTILE_SITEKEY: ${{ secrets.TURNSTILE_SITEKEY }}
+    name: Deploy ${{ matrix.app }} (staging)
+    runs-on: ubuntu-latest
+    environment: staging
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: cg-public
+            dir: frontend-public
+          - app: cg-admin
+            dir: frontend-admin
+    steps:
+      - uses: actions/checkout@v5
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Ensure app exists
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl apps create "${{ matrix.app }}-staging" -y || true
+      - name: Set runtime secrets
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          LOGTO_ENDPOINT: ${{ vars.LOGTO_ENDPOINT }}
+          PUBLIC_ID: ${{ vars.LOGTO_PUBLIC_APP_ID }}
+          PUBLIC_SECRET: ${{ secrets.LOGTO_PUBLIC_APP_SECRET }}
+          ADMIN_ID: ${{ vars.LOGTO_ADMIN_APP_ID }}
+          ADMIN_SECRET: ${{ secrets.LOGTO_ADMIN_APP_SECRET }}
+          ENC_KEY: ${{ secrets.LOGTO_COOKIE_ENCRYPTION_KEY }}
+        run: |
+          if [ "${{ matrix.app }}" = "cg-public" ]; then
+            LOGTO_APP_ID="$PUBLIC_ID"; LOGTO_APP_SECRET="$PUBLIC_SECRET"
+          else
+            LOGTO_APP_ID="$ADMIN_ID"; LOGTO_APP_SECRET="$ADMIN_SECRET"
+          fi
+          flyctl secrets set \
+            BACKEND_URL="https://staging-comics-galore-backend-v5k2.encr.app" \
+            LOGTO_ENDPOINT="$LOGTO_ENDPOINT" \
+            LOGTO_APP_ID="$LOGTO_APP_ID" \
+            LOGTO_APP_SECRET="$LOGTO_APP_SECRET" \
+            LOGTO_COOKIE_ENCRYPTION_KEY="$ENC_KEY" \
+            --app "${{ matrix.app }}-staging" --stage
+      - name: Deploy
+        working-directory: ${{ matrix.dir }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl deploy \
+            --app "${{ matrix.app }}-staging" \
+            --build-arg VITE_BACKEND_URL="https://staging-comics-galore-backend-v5k2.encr.app" \
+            --build-arg VITE_API_URL="https://staging-comics-galore-backend-v5k2.encr.app" \
+            --build-arg VITE_TURNSTILE_SITEKEY="${{ secrets.TURNSTILE_SITEKEY }}"
 
   worker:
     uses: ./.github/workflows/deploy-worker.yml
