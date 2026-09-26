@@ -51,7 +51,7 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
-          flyctl deploy \
+          flyctl deploy --local-only \
             --app "${{ matrix.app }}-staging" \
             --build-arg VITE_BACKEND_URL="https://staging-comics-galore-backend-v5k2.encr.app" \
             --build-arg VITE_API_URL="https://staging-comics-galore-backend-v5k2.encr.app" \
