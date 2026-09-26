@@ -46,6 +46,10 @@ func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error
 		{ID: "10000000-0000-0000-0000-000000000007", Email: "member-gold@pnzj.dev", Role: "user", Tier: "gold", Username: "member_gold"},
 		{ID: "10000000-0000-0000-0000-000000000008", Email: "member-platinum@pnzj.dev", Role: "user", Tier: "platinum", Username: "member_platinum"},
 		{ID: "10000000-0000-0000-0000-000000000009", Email: "member-exhausted@pnzj.dev", Role: "user", Tier: "free", Username: "member_exhausted"},
+		// One login-able account per role (Logto identity linked on first sign-in by email).
+		{ID: "10000000-0000-0000-0000-000000000010", Email: "moderator@comics-galore.dev", Role: "moderator", Tier: "platinum", Username: "moderator"},
+		{ID: "10000000-0000-0000-0000-000000000011", Email: "uploader@comics-galore.dev", Role: "uploader", Tier: "free", Username: "uploader"},
+		{ID: "10000000-0000-0000-0000-000000000012", Email: "user@comics-galore.dev", Role: "user", Tier: "free", Username: "user"},
 	}
 
 	created := 0
