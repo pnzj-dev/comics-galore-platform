@@ -19,6 +19,13 @@
 	// svelte-ignore state_referenced_locally
 	initializeLocale(data.locale);
 
+	// Set <html> attributes from the client (data-env drives env CSS, lang for i18n).
+	// Kept out of <svelte:head> — SvelteKit's <html> marker there breaks hydration.
+	$effect(() => {
+		document.documentElement.dataset.env = ENV ?? 'prod';
+		if (data.locale) document.documentElement.lang = data.locale;
+	});
+
 	onMount(() => {
 		if (data.user) {
 			currentUser.set(data.user);
@@ -30,7 +37,6 @@
 </script>
 
 <svelte:head>
-	<html lang={data.locale} data-env={ENV ?? 'prod'}></html>
 	{#if ENV && ENV !== 'prod'}
 		<link rel="icon" type="image/svg+xml" href="/favicon-{ENV}.svg" />
 	{/if}

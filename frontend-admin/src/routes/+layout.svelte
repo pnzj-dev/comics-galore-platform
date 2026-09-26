@@ -15,6 +15,12 @@
 	let planMatrixComplete = $state(true);
 	let wizardBlocked = $state(false);
 
+	// Set <html data-env> from the client — drives env CSS. Kept out of
+	// <svelte:head> because SvelteKit's <html> marker there breaks hydration.
+	$effect(() => {
+		document.documentElement.dataset.env = ENV ?? 'prod';
+	});
+
 	onMount(() => {
 		if (data.user) {
 			currentUser.set(data.user);
@@ -73,7 +79,6 @@
 </script>
 
 <svelte:head>
-	<html lang="en" data-env={ENV ?? 'prod'}></html>
 	{#if ENV && ENV !== 'prod'}
 		<link rel="icon" type="image/svg+xml" href="/favicon-{ENV}.svg" />
 	{/if}
