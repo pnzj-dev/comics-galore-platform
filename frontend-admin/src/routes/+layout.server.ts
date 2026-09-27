@@ -6,11 +6,14 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
 	const user = await resolveUser(locals);
 
 	if (!user) {
-		if (url.pathname === '/login') return {};
+		if (url.pathname === '/login' || url.pathname === '/logout') return {};
 		throw redirect(302, '/login');
 	}
 
 	if (user.role !== 'admin' && user.role !== 'moderator') {
+		if (url.pathname === '/login' || url.pathname === '/logout') {
+			return { user, accessDenied: true };
+		}
 		throw redirect(302, '/login');
 	}
 
