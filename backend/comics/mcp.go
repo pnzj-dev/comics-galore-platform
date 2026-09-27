@@ -144,6 +144,11 @@ func InternalCreateComic(ctx context.Context, p *InternalCreateComicParams) (*In
 	if ageRating == "" {
 		ageRating = "all_ages"
 	}
+	switch ageRating {
+	case "all_ages", "teen", "mature", "explicit":
+	default:
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "invalid age_rating"}
+	}
 	readingDirection := p.ReadingDirection
 	if readingDirection != "rtl" {
 		readingDirection = "ltr"
