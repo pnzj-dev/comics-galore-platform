@@ -34,23 +34,33 @@ func InternalPresignUpload(ctx context.Context, p *InternalPresignUploadParams) 
 	}
 
 	kind := strings.TrimSpace(p.Kind)
-	if kind != "cover" && kind != "preview" && kind != "archive" {
-		kind = "preview"
+	if kind == "archive" {
+		return presignArchiveUpload(ctx, p.Filename)
 	}
+	return presignImageUpload(ctx)
+}
 
-	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(p.Filename)))
+// presignImageUpload returns a Cloudflare Images direct-upload URL whose key is
+// the image ID (usable as cover_key / page_keys).
+func presignImageUpload(ctx context.Context) (*InternalPresignUploadResponse, error) {
+	resp, err := presignCloudflareImage(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &InternalPresignUploadResponse{UploadURL: resp.UploadURL, Key: resp.ImageID}, nil
+}
+
+// presignArchiveUpload returns an object-storage (R2) presigned upload URL.
+func presignArchiveUpload(ctx context.Context, filename string) (*InternalPresignUploadResponse, error) {
+	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(filename)))
 	if ext == "" {
-		if kind == "archive" {
-			ext = ".cbz"
-		} else {
-			ext = ".jpg"
-		}
+		ext = ".cbz"
 	}
 	if len(ext) > 10 || strings.ContainsAny(ext, "/\\") {
-		ext = ".jpg"
+		ext = ".cbz"
 	}
 
-	key := kind + "s/" + randomHex(16) + ext
+	key := "archives/" + randomHex(16) + ext
 
 	ttl := 7200 * time.Second
 	if cfg, err := myauth.GetAppConfig(ctx); err == nil && cfg.S3PresignedTTLMin > 0 {

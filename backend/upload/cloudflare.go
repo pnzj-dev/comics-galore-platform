@@ -42,7 +42,13 @@ func CloudflarePresignedUpload(ctx context.Context) (*CloudflareUploadResponse, 
 	if ad.Role != "uploader" && ad.Role != "admin" {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "only uploaders can upload"}
 	}
+	return presignCloudflareImage(ctx)
+}
 
+// presignCloudflareImage returns a Cloudflare Images direct-upload URL (and the
+// image ID), falling back to an S3 presigned upload URL when Cloudflare is not
+// configured. Shared by the auth endpoint and the key-gated MCP presign path.
+func presignCloudflareImage(ctx context.Context) (*CloudflareUploadResponse, error) {
 	// If Cloudflare is not configured, fall back to S3 presigned URLs
 	if cfClient == nil {
 		return s3PresignedFallback(ctx)
