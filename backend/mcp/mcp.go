@@ -46,6 +46,24 @@ var (
 	resolveTicket = func(ctx context.Context, p *social.InternalResolveTicketParams) error {
 		return social.InternalResolveTicket(ctx, p)
 	}
+	createComic = func(ctx context.Context, p *comics.InternalCreateComicParams) (*comics.InternalCreateComicResponse, error) {
+		return comics.InternalCreateComic(ctx, p)
+	}
+	listFlaggedComments = func(ctx context.Context, p *comics.InternalListFlagsParams) (*comics.ListFlaggedCommentsResponse, error) {
+		return comics.InternalListFlaggedComments(ctx, p)
+	}
+	deleteComment = func(ctx context.Context, p *comics.InternalDeleteCommentParams) error {
+		return comics.InternalDeleteComment(ctx, p)
+	}
+	banUser = func(ctx context.Context, p *auth.InternalUserActionParams) error {
+		return auth.InternalBanUser(ctx, p)
+	}
+	unbanUser = func(ctx context.Context, p *auth.InternalUserActionParams) error {
+		return auth.InternalUnbanUser(ctx, p)
+	}
+	suspendUser = func(ctx context.Context, p *auth.InternalUserActionParams) error {
+		return auth.InternalSuspendUser(ctx, p)
+	}
 )
 
 // resolveMcpKey maps a server-issued API key to the bound user and role.
@@ -73,6 +91,20 @@ func bearerToken() string {
 func requireModerator(role string) error {
 	if role != "admin" && role != "moderator" {
 		return &errs.Error{Code: errs.PermissionDenied, Message: "requires moderator or admin"}
+	}
+	return nil
+}
+
+func requireUploader(role string) error {
+	if role != "uploader" && role != "admin" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "requires uploader or admin"}
+	}
+	return nil
+}
+
+func requireAdminRole(role string) error {
+	if role != "admin" {
+		return &errs.Error{Code: errs.PermissionDenied, Message: "requires admin"}
 	}
 	return nil
 }
@@ -205,4 +237,149 @@ func doResolveSupportTicket(ctx context.Context, token string, p *ResolveTicketP
 		return err
 	}
 	return resolveTicket(ctx, &social.InternalResolveTicketParams{ActorID: actor, TicketID: p.TicketID})
+}
+
+// ----- Agentic creation / moderation / user actions -----
+
+type CreateComicParams struct {
+	Title            string   `json:"title"`
+	Author           string   `json:"author"`
+	Description      string   `json:"description"`
+	ContentLanguage  string   `json:"content_language"`
+	Category         string   `json:"category"`
+	Genre            string   `json:"genre"`
+	AgeRating        string   `json:"age_rating"`
+	IsPremium        bool     `json:"is_premium"`
+	Tags             []string `json:"tags"`
+	ReadingDirection string   `json:"reading_direction"`
+	CoverKey         string   `json:"cover_key"`
+	PageKeys         []string `json:"page_keys"`
+	Publish          bool     `json:"publish"`
+	SeriesTitle      string   `json:"series_title"`
+}
+
+//encore:api public method=POST path=/mcp/create-comic
+func CreateComic(ctx context.Context, p *CreateComicParams) (*comics.InternalCreateComicResponse, error) {
+	return doCreateComic(ctx, bearerToken(), p)
+}
+
+func doCreateComic(ctx context.Context, token string, p *CreateComicParams) (*comics.InternalCreateComicResponse, error) {
+	actor, role, err := resolveMcpKey(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireUploader(role); err != nil {
+		return nil, err
+	}
+	return createComic(ctx, &comics.InternalCreateComicParams{
+		ActorID:          actor,
+		Title:            p.Title,
+		Author:           p.Author,
+		Description:      p.Description,
+		ContentLanguage:  p.ContentLanguage,
+		Category:         p.Category,
+		Genre:            p.Genre,
+		AgeRating:        p.AgeRating,
+		IsPremium:        p.IsPremium,
+		Tags:             p.Tags,
+		ReadingDirection: p.ReadingDirection,
+		CoverKey:         p.CoverKey,
+		PageKeys:         p.PageKeys,
+		Publish:          p.Publish,
+		SeriesTitle:      p.SeriesTitle,
+	})
+}
+
+type ListFlaggedCommentsParams struct {
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
+}
+
+//encore:api public method=POST path=/mcp/list-flagged-comments
+func ListFlaggedComments(ctx context.Context, p *ListFlaggedCommentsParams) (*comics.ListFlaggedCommentsResponse, error) {
+	return doListFlaggedComments(ctx, bearerToken(), p)
+}
+
+func doListFlaggedComments(ctx context.Context, token string, p *ListFlaggedCommentsParams) (*comics.ListFlaggedCommentsResponse, error) {
+	_, role, err := resolveMcpKey(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireModerator(role); err != nil {
+		return nil, err
+	}
+	return listFlaggedComments(ctx, &comics.InternalListFlagsParams{Page: p.Page, Limit: p.Limit})
+}
+
+type DeleteCommentParams struct {
+	CommentID string `json:"comment_id"`
+}
+
+//encore:api public method=POST path=/mcp/delete-comment
+func DeleteComment(ctx context.Context, p *DeleteCommentParams) error {
+	return doDeleteComment(ctx, bearerToken(), p)
+}
+
+func doDeleteComment(ctx context.Context, token string, p *DeleteCommentParams) error {
+	actor, role, err := resolveMcpKey(ctx, token)
+	if err != nil {
+		return err
+	}
+	if err := requireModerator(role); err != nil {
+		return err
+	}
+	return deleteComment(ctx, &comics.InternalDeleteCommentParams{ActorID: actor, CommentID: p.CommentID})
+}
+
+type UserActionParams struct {
+	UserID string `json:"user_id"`
+	Reason string `json:"reason"`
+}
+
+//encore:api public method=POST path=/mcp/ban-user
+func BanUser(ctx context.Context, p *UserActionParams) error {
+	return doBanUser(ctx, bearerToken(), p)
+}
+
+func doBanUser(ctx context.Context, token string, p *UserActionParams) error {
+	actor, role, err := resolveMcpKey(ctx, token)
+	if err != nil {
+		return err
+	}
+	if err := requireAdminRole(role); err != nil {
+		return err
+	}
+	return banUser(ctx, &auth.InternalUserActionParams{ActorID: actor, UserID: p.UserID, Reason: p.Reason})
+}
+
+//encore:api public method=POST path=/mcp/unban-user
+func UnbanUser(ctx context.Context, p *UserActionParams) error {
+	return doUnbanUser(ctx, bearerToken(), p)
+}
+
+func doUnbanUser(ctx context.Context, token string, p *UserActionParams) error {
+	actor, role, err := resolveMcpKey(ctx, token)
+	if err != nil {
+		return err
+	}
+	if err := requireAdminRole(role); err != nil {
+		return err
+	}
+	return unbanUser(ctx, &auth.InternalUserActionParams{ActorID: actor, UserID: p.UserID, Reason: p.Reason})
+}
+
+//encore:api public method=POST path=/mcp/suspend-user
+func SuspendUser(ctx context.Context, p *UserActionParams) error {
+	return doSuspendUser(ctx, bearerToken(), p)
+}
+
+func doSuspendUser(ctx context.Context, token string, p *UserActionParams) error {
+	actor, role, err := resolveMcpKey(ctx, token)
+	if err != nil {
+		return err
+	}
+	if err := requireAdminRole(role); err != nil {
+		return err
+	}
+	return suspendUser(ctx, &auth.InternalUserActionParams{ActorID: actor, UserID: p.UserID, Reason: p.Reason})
 }

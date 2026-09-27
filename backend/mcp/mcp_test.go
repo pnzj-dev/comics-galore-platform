@@ -149,3 +149,116 @@ func TestModerateComic_Approve(t *testing.T) {
 		t.Error("expected approveComic to be called")
 	}
 }
+
+func assertCode(t *testing.T, err error, code errs.ErrCode) {
+	t.Helper()
+	var e *errs.Error
+	if !errors.As(err, &e) {
+		t.Fatalf("expected errs.Error, got %T", err)
+	}
+	if e.Code != code {
+		t.Errorf("expected code %v, got %v", code, e.Code)
+	}
+}
+
+func TestCreateComic_NonUploaderDenied(t *testing.T) {
+	ctx := context.Background()
+	restore := isolateMcpDB(t)
+	defer restore()
+	mockRole(t, "user")
+
+	insertKey(t, ctx, "user-key", testUserID)
+
+	_, err := doCreateComic(ctx, "user-key", &CreateComicParams{Title: "Test"})
+	if err == nil {
+		t.Fatal("expected error for non-uploader")
+	}
+	assertCode(t, err, errs.PermissionDenied)
+}
+
+func TestCreateComic_Uploader(t *testing.T) {
+	ctx := context.Background()
+	restore := isolateMcpDB(t)
+	defer restore()
+	mockRole(t, "uploader")
+
+	var called bool
+	og := createComic
+	createComic = func(ctx context.Context, p *comics.InternalCreateComicParams) (*comics.InternalCreateComicResponse, error) {
+		called = true
+		if p.ActorID != testUserID {
+			t.Errorf("expected actor %s, got %s", testUserID, p.ActorID)
+		}
+		if p.Title != "My Comic" || p.SeriesTitle != "S1" || !p.Publish {
+			t.Errorf("unexpected params: %+v", p)
+		}
+		return &comics.InternalCreateComicResponse{ID: "c1"}, nil
+	}
+	t.Cleanup(func() { createComic = og })
+
+	insertKey(t, ctx, "up-key", testUserID)
+
+	if _, err := doCreateComic(ctx, "up-key", &CreateComicParams{Title: "My Comic", Publish: true, SeriesTitle: "S1"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("expected createComic to be called")
+	}
+}
+
+func TestDeleteComment_NonModeratorDenied(t *testing.T) {
+	ctx := context.Background()
+	restore := isolateMcpDB(t)
+	defer restore()
+	mockRole(t, "user")
+
+	insertKey(t, ctx, "user-key", testUserID)
+
+	if err := doDeleteComment(ctx, "user-key", &DeleteCommentParams{CommentID: "c1"}); err == nil {
+		t.Fatal("expected error for non-moderator")
+	} else {
+		assertCode(t, err, errs.PermissionDenied)
+	}
+}
+
+func TestBanUser_ModeratorDenied(t *testing.T) {
+	ctx := context.Background()
+	restore := isolateMcpDB(t)
+	defer restore()
+	mockRole(t, "moderator")
+
+	insertKey(t, ctx, "mod-key", testUserID)
+
+	if err := doBanUser(ctx, "mod-key", &UserActionParams{UserID: "u2"}); err == nil {
+		t.Fatal("expected error for non-admin")
+	} else {
+		assertCode(t, err, errs.PermissionDenied)
+	}
+}
+
+func TestBanUser_Admin(t *testing.T) {
+	ctx := context.Background()
+	restore := isolateMcpDB(t)
+	defer restore()
+	mockRole(t, "admin")
+
+	var called bool
+	og := banUser
+	banUser = func(ctx context.Context, p *auth.InternalUserActionParams) error {
+		called = true
+		if p.ActorID != testUserID || p.UserID != "u2" || p.Reason != "spam" {
+			t.Errorf("unexpected params: %+v", p)
+		}
+		return nil
+	}
+	t.Cleanup(func() { banUser = og })
+
+	insertKey(t, ctx, "admin-key", testUserID)
+
+	if err := doBanUser(ctx, "admin-key", &UserActionParams{UserID: "u2", Reason: "spam"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("expected banUser to be called")
+	}
+}

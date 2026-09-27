@@ -96,6 +96,91 @@ function registerTools(server: McpServer, backendUrl: string, auth: string) {
 		async ({ ticket_id }) =>
 			textResult(await callBackend(backendUrl, '/mcp/resolve-support-ticket', { ticket_id }, auth)),
 	);
+
+	server.tool(
+		'create_comic',
+		'Create a comic. Requires an uploader/admin MCP key. Uses placeholder art when cover_key/page_keys are omitted; pass publish=true to publish immediately (otherwise pending_review); pass series_title to attach to (or create) a series.',
+		{
+			title: z.string(),
+			author: z.string().optional(),
+			description: z.string().optional(),
+			content_language: z.string().optional(),
+			category: z.string().optional(),
+			genre: z.string().optional(),
+			age_rating: z.string().optional(),
+			is_premium: z.boolean().optional(),
+			tags: z.array(z.string()).optional(),
+			reading_direction: z.string().optional(),
+			cover_key: z.string().optional(),
+			page_keys: z.array(z.string()).optional(),
+			publish: z.boolean().optional(),
+			series_title: z.string().optional(),
+		},
+		async (args) =>
+			textResult(
+				await callBackend(
+					backendUrl,
+					'/mcp/create-comic',
+					{
+						title: args.title,
+						author: args.author ?? '',
+						description: args.description ?? '',
+						content_language: args.content_language ?? '',
+						category: args.category ?? '',
+						genre: args.genre ?? '',
+						age_rating: args.age_rating ?? '',
+						is_premium: args.is_premium ?? false,
+						tags: args.tags ?? [],
+						reading_direction: args.reading_direction ?? '',
+						cover_key: args.cover_key ?? '',
+						page_keys: args.page_keys ?? [],
+						publish: args.publish ?? false,
+						series_title: args.series_title ?? '',
+					},
+					auth,
+				),
+			),
+	);
+
+	server.tool(
+		'list_flagged_comments',
+		'List open comment moderation flags.',
+		{ page: z.number().optional(), limit: z.number().optional() },
+		async ({ page, limit }) =>
+			textResult(
+				await callBackend(backendUrl, '/mcp/list-flagged-comments', { page: page ?? 1, limit: limit ?? 20 }, auth),
+			),
+	);
+
+	server.tool(
+		'delete_comment',
+		'Delete a comment. Requires a moderator/admin MCP key.',
+		{ comment_id: z.string() },
+		async ({ comment_id }) => textResult(await callBackend(backendUrl, '/mcp/delete-comment', { comment_id }, auth)),
+	);
+
+	server.tool(
+		'ban_user',
+		'Ban a user. Requires an admin MCP key.',
+		{ user_id: z.string(), reason: z.string().optional() },
+		async ({ user_id, reason }) =>
+			textResult(await callBackend(backendUrl, '/mcp/ban-user', { user_id, reason: reason ?? '' }, auth)),
+	);
+
+	server.tool(
+		'unban_user',
+		'Unban a user. Requires an admin MCP key.',
+		{ user_id: z.string() },
+		async ({ user_id }) => textResult(await callBackend(backendUrl, '/mcp/unban-user', { user_id, reason: '' }, auth)),
+	);
+
+	server.tool(
+		'suspend_user',
+		'Suspend a user. Requires an admin MCP key.',
+		{ user_id: z.string(), reason: z.string().optional() },
+		async ({ user_id, reason }) =>
+			textResult(await callBackend(backendUrl, '/mcp/suspend-user', { user_id, reason: reason ?? '' }, auth)),
+	);
 }
 
 export default {
