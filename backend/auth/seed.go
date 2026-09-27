@@ -5,11 +5,19 @@ import (
 	"fmt"
 	"strings"
 
+	"encore.dev"
 	"encore.dev/beta/errs"
 )
 
 func isDevTokenValid(token string) bool {
 	return token != "" && token == "dev-secret"
+}
+
+// isProductionEnv reports whether the app is running in the production
+// environment, where the dev seed endpoints must be inert (no-op).
+func isProductionEnv() bool {
+	name := strings.ToLower(encore.Meta().Environment.Name)
+	return name == "production" || name == "prod"
 }
 
 type SeedParams struct {
@@ -33,6 +41,9 @@ type demoUser struct {
 
 //encore:api public method=POST path=/dev/seed-users
 func DevSeedUsers(ctx context.Context, p *SeedParams) (*SeedUsersResponse, error) {
+	if isProductionEnv() {
+		return nil, &errs.Error{Code: errs.Unavailable, Message: "dev seed is disabled in production"}
+	}
 	if !isDevTokenValid(p.Token) {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "invalid dev seed token"}
 	}
@@ -100,6 +111,9 @@ type DevLinkLogtoResponse struct {
 
 //encore:api public method=POST path=/dev/link-logto
 func DevLinkLogto(ctx context.Context, p *DevLinkLogtoParams) (*DevLinkLogtoResponse, error) {
+	if isProductionEnv() {
+		return nil, &errs.Error{Code: errs.Unavailable, Message: "dev seed is disabled in production"}
+	}
 	if !isDevTokenValid(p.Token) {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "invalid dev seed token"}
 	}

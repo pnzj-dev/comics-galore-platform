@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	myauth "comics-galore/backend/auth"
 
+	"encore.dev"
 	"encore.dev/beta/errs"
 )
 
@@ -204,6 +206,13 @@ func isDevTokenValid(token string) bool {
 	return token == "dev-secret"
 }
 
+// isProductionEnv reports whether the app is running in the production
+// environment, where the dev seed endpoints must be inert (no-op).
+func isProductionEnv() bool {
+	name := strings.ToLower(encore.Meta().Environment.Name)
+	return name == "production" || name == "prod"
+}
+
 func getAuthSeedToken() string {
 	return "dev-secret"
 }
@@ -260,6 +269,9 @@ func seedIdentifiers(i int) (isbn, upc, issn string) {
 
 //encore:api public method=POST path=/dev/seed-comics
 func DevSeedComics(ctx context.Context, p *SeedParams) (*SeedComicsResponse, error) {
+	if isProductionEnv() {
+		return nil, &errs.Error{Code: errs.Unavailable, Message: "dev seed is disabled in production"}
+	}
 	if !isDevTokenValid(p.Token) {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "invalid dev seed token"}
 	}
@@ -344,6 +356,9 @@ type SeedSeriesResponse struct {
 
 //encore:api public method=POST path=/dev/seed-series
 func DevSeedSeries(ctx context.Context, p *SeedParams) (*SeedSeriesResponse, error) {
+	if isProductionEnv() {
+		return nil, &errs.Error{Code: errs.Unavailable, Message: "dev seed is disabled in production"}
+	}
 	if !isDevTokenValid(p.Token) {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "invalid dev seed token"}
 	}

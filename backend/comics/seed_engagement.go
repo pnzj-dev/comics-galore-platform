@@ -21,6 +21,9 @@ type demoComment struct {
 
 //encore:api public method=POST path=/dev/seed-engagement
 func DevSeedEngagement(ctx context.Context, p *SeedParams) (*SeedEngagementResponse, error) {
+	if isProductionEnv() {
+		return nil, &errs.Error{Code: errs.Unavailable, Message: "dev seed is disabled in production"}
+	}
 	if !isDevTokenValid(p.Token) {
 		return nil, &errs.Error{Code: errs.PermissionDenied, Message: "invalid dev seed token"}
 	}
