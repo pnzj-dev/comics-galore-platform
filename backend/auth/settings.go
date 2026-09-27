@@ -46,6 +46,17 @@ type AppSettings struct {
 	EnableComments       bool   `json:"enable_comments"`
 	DefaultMetaDescription string `json:"default_meta_description"`
 
+	// Advertisement banner (homepage). AdEnabled is the master toggle;
+	// AdType is "direct" (styled banner) or "programmatic" (raw ad-network snippet).
+	AdEnabled   bool   `json:"ad_enabled"`
+	AdType      string `json:"ad_type"`
+	AdTitle     string `json:"ad_title"`
+	AdSubtitle  string `json:"ad_subtitle"`
+	AdCTAText   string `json:"ad_cta_text"`
+	AdCTAHref   string `json:"ad_cta_href"`
+	AdImageURL  string `json:"ad_image_url"`
+	AdEmbedHTML string `json:"ad_embed_html"`
+
 	// AI moderation (ADR 0018)
 	AIModerationEnabled      bool    `json:"ai_moderation_enabled"`
 	AIModel                  string  `json:"ai_model"`
@@ -263,6 +274,9 @@ func defaultAppSettings() *AppSettings {
 		ForbidMatureForFree:  false,
 		EnableComments:       false,
 		DefaultMetaDescription: "",
+
+		AdEnabled: false,
+		AdType:    "direct",
 
 		AIModerationEnabled:    false,
 		AIModel:                "gpt-4o-mini",

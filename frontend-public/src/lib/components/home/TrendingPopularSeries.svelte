@@ -51,7 +51,17 @@
 		onViewAll,
 	}: Props = $props();
 
-	const cards = $derived(activeTab === 'trending' ? trending : popular);
+	const hasTrending = $derived(trending.length > 0);
+	const hasPopular = $derived(popular.length > 0);
+	// If the active tab has no cards, fall back to the other non-empty tab.
+	const effectiveTab = $derived(
+		activeTab === 'trending' && hasTrending
+			? 'trending'
+			: activeTab === 'popular' && hasPopular
+				? 'popular'
+				: hasTrending ? 'trending' : 'popular',
+	);
+	const cards = $derived(effectiveTab === 'trending' ? trending : popular);
 
 	let scrollerEl: HTMLDivElement | undefined = $state();
 	let canScrollLeft = $state(false);
@@ -139,30 +149,34 @@
 		aria-label={t('series.trendingPopular')}
 		class="flex items-center gap-2 mb-4"
 	>
+		{#if hasTrending}
 		<button
 			type="button"
 			role="tab"
-			aria-selected={activeTab === 'trending'}
+			aria-selected={effectiveTab === 'trending'}
 			onclick={() => setTab('trending')}
 			onkeydown={onTabKeydown}
-			class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors {activeTab === 'trending'
+			class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors {effectiveTab === 'trending'
 				? 'bg-primary text-primary-foreground'
 				: 'bg-muted text-muted-foreground hover:bg-muted/80'}"
 		>
 			{t('series.trending')}
 		</button>
+		{/if}
+		{#if hasPopular}
 		<button
 			type="button"
 			role="tab"
-			aria-selected={activeTab === 'popular'}
+			aria-selected={effectiveTab === 'popular'}
 			onclick={() => setTab('popular')}
 			onkeydown={onTabKeydown}
-			class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors {activeTab === 'popular'
+			class="px-4 py-1.5 rounded-full text-sm font-medium transition-colors {effectiveTab === 'popular'
 				? 'bg-primary text-primary-foreground'
 				: 'bg-muted text-muted-foreground hover:bg-muted/80'}"
 		>
 			{t('series.popular')}
 		</button>
+		{/if}
 	</div>
 
 	<!-- Scrolling row -->

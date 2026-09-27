@@ -34,6 +34,14 @@
 		upload_part_size_mb: 100,
 		upload_concurrency: 4,
 		crypto_currencies: 'btc,xrp,eth,usdttrc20,usdtsol,usdc,ltc,sol,xlm,pyusd',
+		ad_enabled: false,
+		ad_type: 'direct',
+		ad_title: '',
+		ad_subtitle: '',
+		ad_cta_text: '',
+		ad_cta_href: '',
+		ad_image_url: '',
+		ad_embed_html: '',
 		// svelte-ignore state_referenced_locally
 		...(data.settings ?? {}),
 	});
@@ -311,6 +319,52 @@
 					</CardContent>
 				</Card>
 			</div>
+
+			<Card>
+				<CardHeader class="pb-2"><CardTitle>Advertisement</CardTitle></CardHeader>
+				<CardContent class="space-y-2">
+					<label class="flex items-center gap-2 text-sm cursor-pointer">
+						<input type="checkbox" bind:checked={settings.ad_enabled} class="rounded" />
+						Enable homepage ad
+					</label>
+					<div class="flex items-center gap-2">
+						<span class="text-xs text-muted-foreground whitespace-nowrap">Type</span>
+						<select bind:value={settings.ad_type} class="flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs">
+							<option value="direct">Direct</option>
+							<option value="programmatic">Programmatic</option>
+						</select>
+					</div>
+					{#if settings.ad_type === 'programmatic'}
+						<div class="space-y-1.5 pt-2 border-t border-border">
+							<span class="text-xs text-muted-foreground">Ad network snippet (HTML + scripts)</span>
+							<textarea bind:value={settings.ad_embed_html} rows={5} placeholder="Paste the ad network snippet here (its &lt;ins&gt; and &lt;script&gt; tags)…" class="w-full rounded-md border border-input bg-muted/50 px-2.5 py-1.5 text-xs font-mono resize-y"></textarea>
+						</div>
+					{:else}
+						<div class="space-y-2 pt-2 border-t border-border">
+							<div class="flex items-center gap-2">
+								<span class="text-xs text-muted-foreground whitespace-nowrap">Title</span>
+								<input bind:value={settings.ad_title} placeholder="Your story belongs here" class="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" />
+							</div>
+							<div class="flex items-center gap-2">
+								<span class="text-xs text-muted-foreground whitespace-nowrap">Subtitle</span>
+								<input bind:value={settings.ad_subtitle} placeholder="Advertisement" class="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" />
+							</div>
+							<div class="flex items-center gap-2">
+								<span class="text-xs text-muted-foreground whitespace-nowrap">CTA text</span>
+								<input bind:value={settings.ad_cta_text} placeholder="Learn more" class="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" />
+							</div>
+							<div class="flex items-center gap-2">
+								<span class="text-xs text-muted-foreground whitespace-nowrap">CTA link</span>
+								<input bind:value={settings.ad_cta_href} placeholder="https://…" class="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" />
+							</div>
+							<div class="flex items-center gap-2">
+								<span class="text-xs text-muted-foreground whitespace-nowrap">Image URL</span>
+								<input bind:value={settings.ad_image_url} placeholder="https://…/image.png" class="flex-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm" />
+							</div>
+						</div>
+					{/if}
+				</CardContent>
+			</Card>
 
 			<Card>
 				<CardHeader class="pb-2"><CardTitle>Tier download quotas (downloads/month)</CardTitle></CardHeader>

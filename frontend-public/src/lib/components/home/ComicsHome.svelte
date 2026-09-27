@@ -38,11 +38,14 @@
 	}
 
 	export interface AdBannerData {
+		enabled?: boolean;
+		type?: string;
 		image_url?: string;
 		title?: string;
 		subtitle?: string;
 		cta_text?: string;
 		cta_href?: string;
+		embed_html?: string;
 	}
 
 	interface Props {
@@ -85,11 +88,13 @@
 	];
 
 	// Client-side filtering of the already-loaded daily list by schedule day.
-	const filteredDaily = $derived(
-		activeDay === 'completed'
-			? daily_series.filter((s) => s.schedule_day === 'completed')
-			: daily_series.filter((s) => s.schedule_day === activeDay),
+	// Only days with series are shown as pills; if the active day has none,
+	// fall back to the first available day.
+	const availableDays = $derived(days.filter((d) => daily_series.some((s) => s.schedule_day === d.id)));
+	const effectiveDay = $derived(
+		daily_series.some((s) => s.schedule_day === activeDay) ? activeDay : (availableDays[0]?.id ?? activeDay),
 	);
+	const filteredDaily = $derived(daily_series.filter((s) => s.schedule_day === effectiveDay));
 
 	function handleCategoryChange(id: string) {
 		onCategoryChange?.(id);
@@ -103,14 +108,18 @@
 <div class="space-y-10 py-6">
 	<!-- 1. Advertising Section -->
 	<AdBanner
+		enabled={ad.enabled}
+		type={ad.type}
 		imageUrl={ad.image_url}
 		title={ad.title}
 		subtitle={ad.subtitle}
 		ctaText={ad.cta_text}
 		ctaHref={ad.cta_href}
+		embedHtml={ad.embed_html}
 	/>
 
 	<!-- 2. Popular Series by Category -->
+	{#if popular_by_category.length > 0}
 	<section aria-labelledby="popular-heading">
 		<div class="mb-4 flex items-center justify-between">
 			<h2 id="popular-heading" class="text-xl font-bold text-gray-900 dark:text-white">
@@ -131,8 +140,10 @@
 
 		<SeriesCarousel series={popular_by_category} size="md" />
 	</section>
+	{/if}
 
 	<!-- 3. Newly Released -->
+	{#if newly_released.length > 0}
 	<section aria-labelledby="newly-heading">
 		<div class="mb-4 flex items-center justify-between">
 			<h2 id="newly-heading" class="text-xl font-bold text-gray-900 dark:text-white">
@@ -151,8 +162,10 @@
 
 		<SeriesCarousel series={newly_released} size="lg" />
 	</section>
+	{/if}
 
 	<!-- 4. Daily -->
+	{#if daily_series.length > 0}
 	<section aria-labelledby="daily-heading">
 		<div class="mb-4 flex items-center justify-between">
 			<h2 id="daily-heading" class="text-xl font-bold text-gray-900 dark:text-white">Daily</h2>
@@ -167,7 +180,7 @@
 			{/if}
 		</div>
 
-		<DayPills {days} activeId={activeDay} onChange={handleDayChange} class="mb-5" />
+		<DayPills days={availableDays} activeId={effectiveDay} onChange={handleDayChange} class="mb-5" />
 
 		<div class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
 			{#each filteredDaily as item (item.id)}
@@ -197,8 +210,10 @@
 			{/each}
 		</div>
 	</section>
+	{/if}
 
 	<!-- 5. More stories from indie creators -->
+	{#if indie_series.length > 0}
 	<section aria-labelledby="indie-heading">
 		<div class="mb-4 flex items-center justify-between">
 			<h2 id="indie-heading" class="text-xl font-bold text-gray-900 dark:text-white">
@@ -217,4 +232,5 @@
 
 		<SeriesCarousel series={indie_series} size="sm" />
 	</section>
+	{/if}
 </div>

@@ -4,16 +4,23 @@ import (
 	"context"
 	"database/sql"
 
+	myauth "comics-galore/backend/auth"
+
 	"encore.dev/storage/sqldb"
 )
 
-// AdBanner is a reserved advertising slot. Real ad content is provided by an
-// ad agency integration; for now it's a placeholder.
+// AdBanner is the homepage advertisement slot. When Enabled is false the
+// banner is hidden. Type is "direct" (styled banner) or "programmatic"
+// (raw ad-network snippet rendered via EmbedHTML).
 type AdBanner struct {
-	Title    string `json:"title"`
-	Subtitle string `json:"subtitle"`
-	CTAText  string `json:"cta_text"`
-	CTAHref  string `json:"cta_href"`
+	Enabled   bool   `json:"enabled"`
+	Type      string `json:"type"`
+	Title     string `json:"title"`
+	Subtitle  string `json:"subtitle"`
+	CTAText   string `json:"cta_text"`
+	CTAHref   string `json:"cta_href"`
+	ImageURL  string `json:"image_url"`
+	EmbedHTML string `json:"embed_html"`
 }
 
 // HomeResponse is the full homepage payload.
@@ -52,18 +59,33 @@ func GetHome(ctx context.Context) (*HomeResponse, error) {
 	}
 
 	return &HomeResponse{
-		Ad: AdBanner{
-			Title:    "Your story belongs here",
-			Subtitle: "Advertisement",
-			CTAText:  "Learn more",
-			CTAHref:  "#",
-		},
+		Ad:                loadAd(ctx),
 		Categories:        categories,
 		PopularByCategory: popular,
 		NewlyReleased:     newly,
 		DailySeries:       daily,
 		IndieSeries:       indie,
 	}, nil
+}
+
+// loadAd returns the configured homepage advertisement, empty (hidden) when
+// advertising is disabled or unset.
+func loadAd(ctx context.Context) AdBanner {
+	ad := AdBanner{}
+	cfg, err := myauth.GetAppConfig(ctx)
+	if err != nil || !cfg.AdEnabled {
+		return ad
+	}
+	return AdBanner{
+		Enabled:   true,
+		Type:      cfg.AdType,
+		Title:     cfg.AdTitle,
+		Subtitle:  cfg.AdSubtitle,
+		CTAText:   cfg.AdCTAText,
+		CTAHref:   cfg.AdCTAHref,
+		ImageURL:  cfg.AdImageURL,
+		EmbedHTML: cfg.AdEmbedHTML,
+	}
 }
 
 // listCategories returns the distinct non-empty category values.

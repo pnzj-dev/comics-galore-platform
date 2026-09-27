@@ -37,11 +37,11 @@ export default class Client {
     public readonly comics: comics.ServiceClient
     public readonly dashboard: dashboard.ServiceClient
     public readonly jobs: jobs.ServiceClient
+    public readonly mcp: mcp.ServiceClient
     public readonly reading: reading.ServiceClient
     public readonly social: social.ServiceClient
     public readonly tiers: tiers.ServiceClient
     public readonly upload: upload.ServiceClient
-    public readonly mcp: mcp.ServiceClient
     private readonly options: ClientOptions
     private readonly target: string
 
@@ -61,11 +61,11 @@ export default class Client {
         this.comics = new comics.ServiceClient(base)
         this.dashboard = new dashboard.ServiceClient(base)
         this.jobs = new jobs.ServiceClient(base)
+        this.mcp = new mcp.ServiceClient(base)
         this.reading = new reading.ServiceClient(base)
         this.social = new social.ServiceClient(base)
         this.tiers = new tiers.ServiceClient(base)
         this.upload = new upload.ServiceClient(base)
-        this.mcp = new mcp.ServiceClient(base)
     }
 
     /**
@@ -104,20 +104,6 @@ export interface ClientOptions {
 }
 
 export namespace auth {
-    /**
-     * AccountInfo describes one linked authentication method.
-     */
-    export interface AccountInfo {
-        id: string
-        provider: string
-        email: string
-        "created_at": string
-    }
-
-    export interface AccountsResponse {
-        accounts: AccountInfo[]
-    }
-
     export interface AdminListUsersParams {
         Page: number
         Limit: number
@@ -174,6 +160,19 @@ export namespace auth {
         "enable_comments": boolean
         "default_meta_description": string
         /**
+         * Advertisement banner (homepage). AdEnabled is the master toggle;
+         * AdType is "direct" (styled banner) or "programmatic" (raw ad-network snippet).
+         */
+        "ad_enabled": boolean
+
+        "ad_type": string
+        "ad_title": string
+        "ad_subtitle": string
+        "ad_cta_text": string
+        "ad_cta_href": string
+        "ad_image_url": string
+        "ad_embed_html": string
+        /**
          * AI moderation (ADR 0018)
          */
         "ai_moderation_enabled": boolean
@@ -222,13 +221,6 @@ export namespace auth {
         Authorization: string
     }
 
-    export interface AuthResponse {
-        token: string
-        user: User
-        "requires_totp": boolean
-        "mfa_token": string
-    }
-
     export interface BanUserParams {
         reason: string
     }
@@ -236,20 +228,10 @@ export namespace auth {
     export interface BootstrapAdminParams {
         token: string
         email: string
-        password: string
     }
 
     export interface BootstrapAdminResponse {
         user: User
-    }
-
-    export interface ConfirmTOTPParams {
-        secret: string
-        code: string
-    }
-
-    export interface ConfirmTOTPResponse {
-        enabled: boolean
     }
 
     export interface DashboardStats {
@@ -257,27 +239,23 @@ export namespace auth {
         "new_users_this_month": number
     }
 
-    export interface DisableTOTPParams {
-        code: string
-    }
-
-    export interface ImpersonateResponse {
-        token: string
-        user: User
-    }
-
-    export interface LoginParams {
-        email: string
-        password: string
-        "turnstile_token": string
-    }
-
     /**
-     * LogoutParams carries the session token being terminated. The frontend sends
-     * the same bearer token it uses for API calls.
+     * DevLinkLogtoParams links pre-seeded internal users (by email) to their Logto
+     * identity, so the first sign-in resolves to the seeded role regardless of
+     * whether Logto emits the email claim.
      */
-    export interface LogoutParams {
+    export interface DevLinkLogtoParams {
         token: string
+        users: DevLinkLogtoUser[]
+    }
+
+    export interface DevLinkLogtoResponse {
+        linked: number
+    }
+
+    export interface DevLinkLogtoUser {
+        email: string
+        "logto_id": string
     }
 
     export interface NotificationPrefs {
@@ -285,62 +263,6 @@ export namespace auth {
         "email_support_replies": boolean
         "email_marketing": boolean
         "in_app_enabled": boolean
-    }
-
-    export interface OAuthExchangeParams {
-        code: string
-    }
-
-    export interface PasskeyInfo {
-        id: string
-        name: string
-        "created_at": string
-        "last_used_at": string
-    }
-
-    export interface PasskeyListResponse {
-        passkeys: PasskeyInfo[]
-    }
-
-    export interface PasskeyLoginVerifyParams {
-        response: JSONValue
-    }
-
-    export interface PasskeyRegisterOptionsParams {
-        name: string
-    }
-
-    export interface PasskeyRegisterOptionsResponse {
-        options: JSONValue
-    }
-
-    export interface PasskeyRegisterVerifyParams {
-        name: string
-        response: JSONValue
-    }
-
-    export interface PasswordResetConfirm {
-        token: string
-        password: string
-    }
-
-    export interface PasswordResetRequest {
-        email: string
-        "turnstile_token": string
-    }
-
-    export interface RegisterParams {
-        email: string
-        password: string
-        username: string
-        "turnstile_token": string
-    }
-
-    /**
-     * RevokeSessionParams revokes one session by id (logout of another device).
-     */
-    export interface RevokeSessionParams {
-        "session_id": string
     }
 
     export interface SeedParams {
@@ -351,23 +273,6 @@ export namespace auth {
         created: number
         skipped: number
         message: string
-    }
-
-    export interface SessionInfo {
-        id: string
-        "created_at": string
-        "last_seen_at": string
-        "expires_at": string
-    }
-
-    export interface SessionsResponse {
-        sessions: SessionInfo[]
-    }
-
-    export interface SetupTOTPResponse {
-        secret: string
-        "otpauth_url": string
-        "qr_image": string
     }
 
     export interface SignupTrendPoint {
@@ -389,10 +294,6 @@ export namespace auth {
         "page_preview_threshold": number
         "upload_part_size_mb": number
         "upload_concurrency": number
-    }
-
-    export interface TOTPStatusResponse {
-        enabled: boolean
     }
 
     export interface UpdateAvatarParams {
@@ -449,33 +350,20 @@ export namespace auth {
         message: string
     }
 
-    export interface VerifyEmailParams {
-        token: string
-    }
-
-    export interface VerifyTOTPLoginParams {
-        "mfa_token": string
-        code: string
-    }
-
     export class ServiceClient {
         private baseClient: BaseClient
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
             this.AdminBanUser = this.AdminBanUser.bind(this)
-            this.AdminImpersonateUser = this.AdminImpersonateUser.bind(this)
             this.AdminListUsers = this.AdminListUsers.bind(this)
             this.AdminSuspendUser = this.AdminSuspendUser.bind(this)
             this.AdminUnbanUser = this.AdminUnbanUser.bind(this)
             this.AdminUnsuspendUser = this.AdminUnsuspendUser.bind(this)
             this.AdminUpdateUserRole = this.AdminUpdateUserRole.bind(this)
             this.BootstrapAdmin = this.BootstrapAdmin.bind(this)
-            this.ConfirmPasswordReset = this.ConfirmPasswordReset.bind(this)
-            this.ConfirmTOTP = this.ConfirmTOTP.bind(this)
-            this.DeletePasskey = this.DeletePasskey.bind(this)
+            this.DevLinkLogto = this.DevLinkLogto.bind(this)
             this.DevSeedUsers = this.DevSeedUsers.bind(this)
-            this.DisableTOTP = this.DisableTOTP.bind(this)
             this.ExportCSV = this.ExportCSV.bind(this)
             this.GetAdminSettings = this.GetAdminSettings.bind(this)
             this.GetAvatar = this.GetAvatar.bind(this)
@@ -483,46 +371,17 @@ export namespace auth {
             this.GetPreferences = this.GetPreferences.bind(this)
             this.GetProfile = this.GetProfile.bind(this)
             this.GetSiteConfig = this.GetSiteConfig.bind(this)
-            this.ListAccounts = this.ListAccounts.bind(this)
-            this.ListPasskeys = this.ListPasskeys.bind(this)
-            this.ListSessions = this.ListSessions.bind(this)
-            this.Login = this.Login.bind(this)
-            this.Logout = this.Logout.bind(this)
-            this.LogoutAll = this.LogoutAll.bind(this)
             this.Me = this.Me.bind(this)
-            this.OAuthCallback = this.OAuthCallback.bind(this)
-            this.OAuthExchange = this.OAuthExchange.bind(this)
-            this.OAuthStart = this.OAuthStart.bind(this)
-            this.PasskeyLoginOptions = this.PasskeyLoginOptions.bind(this)
-            this.PasskeyLoginVerify = this.PasskeyLoginVerify.bind(this)
-            this.PasskeyRegisterOptions = this.PasskeyRegisterOptions.bind(this)
-            this.PasskeyRegisterVerify = this.PasskeyRegisterVerify.bind(this)
-            this.Register = this.Register.bind(this)
-            this.RenewToken = this.RenewToken.bind(this)
-            this.RequestPasswordReset = this.RequestPasswordReset.bind(this)
-            this.ResendVerification = this.ResendVerification.bind(this)
-            this.RevokeSession = this.RevokeSession.bind(this)
             this.SaveAdminSettings = this.SaveAdminSettings.bind(this)
             this.SavePreferences = this.SavePreferences.bind(this)
-            this.SetupTOTP = this.SetupTOTP.bind(this)
-            this.TOTPStatus = this.TOTPStatus.bind(this)
-            this.UnlinkAccount = this.UnlinkAccount.bind(this)
             this.UpdateAvatar = this.UpdateAvatar.bind(this)
             this.UpdateNotificationPrefs = this.UpdateNotificationPrefs.bind(this)
             this.UpdateUsername = this.UpdateUsername.bind(this)
             this.UsernameAvailable = this.UsernameAvailable.bind(this)
-            this.VerifyEmail = this.VerifyEmail.bind(this)
-            this.VerifyTOTPLogin = this.VerifyTOTPLogin.bind(this)
         }
 
         public async AdminBanUser(id: string, params: BanUserParams): Promise<void> {
             await this.baseClient.callTypedAPI("POST", `/admin/users/${encodeURIComponent(id)}/ban`, JSON.stringify(params))
-        }
-
-        public async AdminImpersonateUser(id: string): Promise<ImpersonateResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/admin/users/${encodeURIComponent(id)}/impersonate`)
-            return await resp.json() as ImpersonateResponse
         }
 
         public async AdminListUsers(params: AdminListUsersParams): Promise<AdminUserListResponse> {
@@ -565,28 +424,16 @@ export namespace auth {
             return await resp.json() as BootstrapAdminResponse
         }
 
-        public async ConfirmPasswordReset(params: PasswordResetConfirm): Promise<void> {
-            await this.baseClient.callTypedAPI("POST", `/auth/password-reset/confirm`, JSON.stringify(params))
-        }
-
-        public async ConfirmTOTP(params: ConfirmTOTPParams): Promise<ConfirmTOTPResponse> {
+        public async DevLinkLogto(params: DevLinkLogtoParams): Promise<DevLinkLogtoResponse> {
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/me/totp/confirm`, JSON.stringify(params))
-            return await resp.json() as ConfirmTOTPResponse
-        }
-
-        public async DeletePasskey(id: string): Promise<void> {
-            await this.baseClient.callTypedAPI("DELETE", `/auth/passkeys/${encodeURIComponent(id)}`)
+            const resp = await this.baseClient.callTypedAPI("POST", `/dev/link-logto`, JSON.stringify(params))
+            return await resp.json() as DevLinkLogtoResponse
         }
 
         public async DevSeedUsers(params: SeedParams): Promise<SeedUsersResponse> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("POST", `/dev/seed-users`, JSON.stringify(params))
             return await resp.json() as SeedUsersResponse
-        }
-
-        public async DisableTOTP(params: DisableTOTPParams): Promise<void> {
-            await this.baseClient.callTypedAPI("POST", `/me/totp/disable`, JSON.stringify(params))
         }
 
         public async ExportCSV(method: "GET", resource: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
@@ -629,104 +476,10 @@ export namespace auth {
             return await resp.json() as SiteConfig
         }
 
-        public async ListAccounts(): Promise<AccountsResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/auth/accounts`)
-            return await resp.json() as AccountsResponse
-        }
-
-        public async ListPasskeys(): Promise<PasskeyListResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/auth/passkeys`)
-            return await resp.json() as PasskeyListResponse
-        }
-
-        public async ListSessions(): Promise<SessionsResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/auth/sessions`)
-            return await resp.json() as SessionsResponse
-        }
-
-        public async Login(params: LoginParams): Promise<AuthResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/auth/login`, JSON.stringify(params))
-            return await resp.json() as AuthResponse
-        }
-
-        public async Logout(params: LogoutParams): Promise<void> {
-            await this.baseClient.callTypedAPI("POST", `/auth/logout`, JSON.stringify(params))
-        }
-
-        public async LogoutAll(): Promise<void> {
-            await this.baseClient.callTypedAPI("POST", `/auth/logout-all`)
-        }
-
         public async Me(): Promise<User> {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/auth/me`)
             return await resp.json() as User
-        }
-
-        public async OAuthCallback(method: "GET", provider: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
-            return this.baseClient.callAPI(method, `/auth/oauth/${encodeURIComponent(provider)}/callback`, body, options)
-        }
-
-        public async OAuthExchange(params: OAuthExchangeParams): Promise<AuthResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/auth/oauth/exchange`, JSON.stringify(params))
-            return await resp.json() as AuthResponse
-        }
-
-        public async OAuthStart(method: "GET", provider: string, body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
-            return this.baseClient.callAPI(method, `/auth/oauth/${encodeURIComponent(provider)}`, body, options)
-        }
-
-        public async PasskeyLoginOptions(): Promise<PasskeyRegisterOptionsResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/auth/passkey/login/options`)
-            return await resp.json() as PasskeyRegisterOptionsResponse
-        }
-
-        public async PasskeyLoginVerify(params: PasskeyLoginVerifyParams): Promise<AuthResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/auth/passkey/login/verify`, JSON.stringify(params))
-            return await resp.json() as AuthResponse
-        }
-
-        public async PasskeyRegisterOptions(params: PasskeyRegisterOptionsParams): Promise<PasskeyRegisterOptionsResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/auth/passkey/register/options`, JSON.stringify(params))
-            return await resp.json() as PasskeyRegisterOptionsResponse
-        }
-
-        public async PasskeyRegisterVerify(params: PasskeyRegisterVerifyParams): Promise<PasskeyListResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/auth/passkey/register/verify`, JSON.stringify(params))
-            return await resp.json() as PasskeyListResponse
-        }
-
-        public async Register(params: RegisterParams): Promise<AuthResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/auth/register`, JSON.stringify(params))
-            return await resp.json() as AuthResponse
-        }
-
-        public async RenewToken(): Promise<AuthResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/auth/renew`)
-            return await resp.json() as AuthResponse
-        }
-
-        public async RequestPasswordReset(params: PasswordResetRequest): Promise<void> {
-            await this.baseClient.callTypedAPI("POST", `/auth/password-reset/request`, JSON.stringify(params))
-        }
-
-        public async ResendVerification(): Promise<void> {
-            await this.baseClient.callTypedAPI("POST", `/auth/resend-verification`)
-        }
-
-        public async RevokeSession(params: RevokeSessionParams): Promise<void> {
-            await this.baseClient.callTypedAPI("POST", `/auth/sessions/revoke`, JSON.stringify(params))
         }
 
         public async SaveAdminSettings(params: AppSettings): Promise<AppSettings> {
@@ -739,22 +492,6 @@ export namespace auth {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("PATCH", `/me/preferences`, JSON.stringify(params))
             return await resp.json() as UserPreferences
-        }
-
-        public async SetupTOTP(): Promise<SetupTOTPResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/me/totp/setup`)
-            return await resp.json() as SetupTOTPResponse
-        }
-
-        public async TOTPStatus(): Promise<TOTPStatusResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/me/totp`)
-            return await resp.json() as TOTPStatusResponse
-        }
-
-        public async UnlinkAccount(id: string): Promise<void> {
-            await this.baseClient.callTypedAPI("DELETE", `/auth/accounts/${encodeURIComponent(id)}`)
         }
 
         public async UpdateAvatar(params: UpdateAvatarParams): Promise<UpdateAvatarResponse> {
@@ -784,16 +521,6 @@ export namespace auth {
             // Now make the actual call to the API
             const resp = await this.baseClient.callTypedAPI("GET", `/auth/username-available`, undefined, {query})
             return await resp.json() as UsernameAvailableResponse
-        }
-
-        public async VerifyEmail(params: VerifyEmailParams): Promise<void> {
-            await this.baseClient.callTypedAPI("POST", `/auth/verify-email`, JSON.stringify(params))
-        }
-
-        public async VerifyTOTPLogin(params: VerifyTOTPLoginParams): Promise<AuthResponse> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("POST", `/auth/login/totp`, JSON.stringify(params))
-            return await resp.json() as AuthResponse
         }
     }
 }
@@ -1358,14 +1085,19 @@ export namespace comics {
     }
 
     /**
-     * AdBanner is a reserved advertising slot. Real ad content is provided by an
-     * ad agency integration; for now it's a placeholder.
+     * AdBanner is the homepage advertisement slot. When Enabled is false the
+     * banner is hidden. Type is "direct" (styled banner) or "programmatic"
+     * (raw ad-network snippet rendered via EmbedHTML).
      */
     export interface AdBanner {
+        enabled: boolean
+        type: string
         title: string
         subtitle: string
         "cta_text": string
         "cta_href": string
+        "image_url": string
+        "embed_html": string
     }
 
     export interface AddStaffPickParams {
@@ -2561,6 +2293,126 @@ export namespace jobs {
     }
 }
 
+export namespace mcp {
+    export interface CreateMcpKeyParams {
+        label: string
+        "user_id": string
+    }
+
+    export interface CreateMcpKeyResponse {
+        key: string
+        info: McpKeyInfo
+    }
+
+    export interface ListTicketsParams {
+        status: string
+    }
+
+    /**
+     * McpKeyInfo is the admin-facing view of an MCP key (never the raw key).
+     */
+    export interface McpKeyInfo {
+        id: string
+        label: string
+        "key_suffix": string
+        "user_id": string
+        username: string
+        "created_at": string
+        "revoked_at": string
+    }
+
+    export interface McpKeyListResponse {
+        keys: McpKeyInfo[]
+    }
+
+    export interface ModerateComicParams {
+        action: string
+        "comic_id": string
+        reason: string
+    }
+
+    export interface ReplyTicketParams {
+        "ticket_id": string
+        body: string
+    }
+
+    export interface ResolveFlagParams {
+        "flag_id": string
+    }
+
+    export interface ResolveTicketParams {
+        "ticket_id": string
+    }
+
+    export interface WriteCommentParams {
+        "comic_id": string
+        body: string
+    }
+
+    export class ServiceClient {
+        private baseClient: BaseClient
+
+        constructor(baseClient: BaseClient) {
+            this.baseClient = baseClient
+            this.AdminCreateMcpKey = this.AdminCreateMcpKey.bind(this)
+            this.AdminListMcpKeys = this.AdminListMcpKeys.bind(this)
+            this.AdminRevokeMcpKey = this.AdminRevokeMcpKey.bind(this)
+            this.ListSupportTickets = this.ListSupportTickets.bind(this)
+            this.ModerateComic = this.ModerateComic.bind(this)
+            this.ReplySupportTicket = this.ReplySupportTicket.bind(this)
+            this.ResolveCommentFlag = this.ResolveCommentFlag.bind(this)
+            this.ResolveSupportTicket = this.ResolveSupportTicket.bind(this)
+            this.WriteComment = this.WriteComment.bind(this)
+        }
+
+        public async AdminCreateMcpKey(params: CreateMcpKeyParams): Promise<CreateMcpKeyResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/admin/mcp/keys`, JSON.stringify(params))
+            return await resp.json() as CreateMcpKeyResponse
+        }
+
+        public async AdminListMcpKeys(): Promise<McpKeyListResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/admin/mcp/keys`)
+            return await resp.json() as McpKeyListResponse
+        }
+
+        public async AdminRevokeMcpKey(id: string): Promise<void> {
+            await this.baseClient.callTypedAPI("DELETE", `/admin/mcp/keys/${encodeURIComponent(id)}`)
+        }
+
+        public async ListSupportTickets(params: ListTicketsParams): Promise<social.ListTicketsResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/mcp/list-support-tickets`, JSON.stringify(params))
+            return await resp.json() as social.ListTicketsResponse
+        }
+
+        public async ModerateComic(params: ModerateComicParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/mcp/moderate-comic`, JSON.stringify(params))
+        }
+
+        public async ReplySupportTicket(params: ReplyTicketParams): Promise<social.SupportMessage> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/mcp/reply-support-ticket`, JSON.stringify(params))
+            return await resp.json() as social.SupportMessage
+        }
+
+        public async ResolveCommentFlag(params: ResolveFlagParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/mcp/resolve-comment-flag`, JSON.stringify(params))
+        }
+
+        public async ResolveSupportTicket(params: ResolveTicketParams): Promise<void> {
+            await this.baseClient.callTypedAPI("POST", `/mcp/resolve-support-ticket`, JSON.stringify(params))
+        }
+
+        public async WriteComment(params: WriteCommentParams): Promise<comics.CommentData> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/mcp/write-comment`, JSON.stringify(params))
+            return await resp.json() as comics.CommentData
+        }
+    }
+}
+
 export namespace reading {
     export interface ContinueReadingItem {
         "comic_id": string
@@ -3257,66 +3109,6 @@ export namespace upload {
          */
         public async UploadImage(method: "POST", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
             return this.baseClient.callAPI(method, `/upload/image`, body, options)
-        }
-    }
-}
-
-export namespace mcp {
-    export interface McpKeyInfo {
-        id: string
-        label: string
-        "key_suffix": string
-        "user_id": string
-        username: string
-        "created_at": string
-        "revoked_at": string
-    }
-
-    export interface McpKeyListResponse {
-        keys: McpKeyInfo[]
-    }
-
-    export interface CreateMcpKeyParams {
-        label: string
-        "user_id": string
-    }
-
-    export interface CreateMcpKeyResponse {
-        key: string
-        info: McpKeyInfo
-    }
-
-    export class ServiceClient {
-        private baseClient: BaseClient
-
-        constructor(baseClient: BaseClient) {
-            this.baseClient = baseClient
-            this.AdminListMcpKeys = this.AdminListMcpKeys.bind(this)
-            this.AdminCreateMcpKey = this.AdminCreateMcpKey.bind(this)
-            this.AdminRevokeMcpKey = this.AdminRevokeMcpKey.bind(this)
-        }
-
-        /**
-         * AdminListMcpKeys lists all MCP keys (masked — never the raw key).
-         */
-        public async AdminListMcpKeys(): Promise<McpKeyListResponse> {
-            const resp = await this.baseClient.callTypedAPI("GET", `/admin/mcp/keys`)
-            return await resp.json() as McpKeyListResponse
-        }
-
-        /**
-         * AdminCreateMcpKey issues a new MCP key and returns the raw key once.
-         */
-        public async AdminCreateMcpKey(params: CreateMcpKeyParams): Promise<CreateMcpKeyResponse> {
-            const resp = await this.baseClient.callTypedAPI("POST", `/admin/mcp/keys`, JSON.stringify(params))
-            return await resp.json() as CreateMcpKeyResponse
-        }
-
-        /**
-         * AdminRevokeMcpKey revokes an MCP key.
-         */
-        public async AdminRevokeMcpKey(id: string): Promise<void> {
-            await this.baseClient.callTypedAPI("DELETE", `/admin/mcp/keys/${encodeURIComponent(id)}`)
         }
     }
 }
