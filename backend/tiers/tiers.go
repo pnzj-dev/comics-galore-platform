@@ -106,6 +106,33 @@ func GetTier(ctx context.Context, id string) (*Tier, error) {
 
 // ----- Tier download quota -----
 
+type ResolveTierIDParams struct {
+	Name string `json:"name"`
+}
+
+type ResolveTierIDResponse struct {
+	ID string `json:"id"`
+}
+
+// ResolveTierID resolves a tier name (case-insensitive, e.g. "gold") to its ID.
+// Used by other services that must set min_tier_id without reading tiersdb.
+//encore:api private method=POST path=/internal/tiers/resolve
+func ResolveTierID(ctx context.Context, p *ResolveTierIDParams) (*ResolveTierIDResponse, error) {
+	name := strings.ToLower(strings.TrimSpace(p.Name))
+	if name == "" {
+		return nil, &errs.Error{Code: errs.InvalidArgument, Message: "name is required"}
+	}
+	var id string
+	err := db.QueryRow(ctx, `SELECT id FROM tiers WHERE LOWER(name) = $1`, name).Scan(&id)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, &errs.Error{Code: errs.NotFound, Message: "tier not found"}
+		}
+		return nil, err
+	}
+	return &ResolveTierIDResponse{ID: id}, nil
+}
+
 type TierQuota struct {
 	Name  string `json:"name"`
 	Quota int    `json:"quota_downloads"`

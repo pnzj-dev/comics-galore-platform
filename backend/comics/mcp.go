@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"comics-galore/backend/tiers"
+
 	"encore.dev/beta/errs"
 )
 
@@ -98,6 +100,8 @@ type InternalCreateComicParams struct {
 	ReadingDirection string   `json:"reading_direction"`
 	CoverKey         string   `json:"cover_key"`
 	PageKeys         []string `json:"page_keys"`
+	FileKey          string   `json:"file_key"`
+	MinTier          string   `json:"min_tier"`
 	Publish          bool     `json:"publish"`
 	SeriesTitle      string   `json:"series_title"`
 }
@@ -170,6 +174,19 @@ func InternalCreateComic(ctx context.Context, p *InternalCreateComicParams) (*In
 		publishedAt = time.Now()
 	}
 
+	fileKey := strings.TrimSpace(p.FileKey)
+	if fileKey == "" {
+		fileKey = "seed/" + slug + "/archive"
+	}
+
+	// Resolve min_tier (name, e.g. "gold") to a tier ID for gallery/reader gating.
+	var minTierID interface{}
+	if mt := strings.TrimSpace(p.MinTier); mt != "" {
+		if resp, err := tiers.ResolveTierID(ctx, &tiers.ResolveTierIDParams{Name: mt}); err == nil {
+			minTierID = resp.ID
+		}
+	}
+
 	pageKeysJSON, _ := marshalStringSlice(pageKeys)
 	pageDimsJSON, _ := marshalPageDimensions(seedPageDims(len(pageKeys)))
 	tagsJSON, _ := marshalStringSlice(p.Tags)
@@ -178,13 +195,13 @@ func InternalCreateComic(ctx context.Context, p *InternalCreateComicParams) (*In
 	err := db.QueryRow(ctx, `
 		INSERT INTO comics (uploader_id, title, author, slug, description, content_language, status,
 			category, genre, cover_key, file_key, page_keys, page_dimensions, page_count, reading_direction,
-			file_size_bytes, age_rating, is_premium, tags, archive_mimetype, published_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, now(), now())
+			file_size_bytes, min_tier_id, age_rating, is_premium, tags, archive_mimetype, published_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, now(), now())
 		RETURNING id, slug, status, title
 	`, p.ActorID, title, p.Author, slug, p.Description, lang, status,
-		category, genre, coverKey, "seed/"+slug+"/archive",
+		category, genre, coverKey, fileKey,
 		pageKeysJSON, pageDimsJSON, len(pageKeys), readingDirection,
-		1234567, ageRating, p.IsPremium, tagsJSON, "application/vnd.comicbook+zip", publishedAt).Scan(
+		1234567, minTierID, ageRating, p.IsPremium, tagsJSON, "application/vnd.comicbook+zip", publishedAt).Scan(
 		&out.ID, &out.Slug, &out.Status, &out.Title)
 	if err != nil {
 		return nil, err

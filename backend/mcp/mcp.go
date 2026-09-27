@@ -9,6 +9,7 @@ import (
 	"comics-galore/backend/auth"
 	"comics-galore/backend/comics"
 	"comics-galore/backend/social"
+	"comics-galore/backend/upload"
 
 	"encore.dev"
 	"encore.dev/beta/errs"
@@ -63,6 +64,9 @@ var (
 	}
 	suspendUser = func(ctx context.Context, p *auth.InternalUserActionParams) error {
 		return auth.InternalSuspendUser(ctx, p)
+	}
+	presignUpload = func(ctx context.Context, p *upload.InternalPresignUploadParams) (*upload.InternalPresignUploadResponse, error) {
+		return upload.InternalPresignUpload(ctx, p)
 	}
 )
 
@@ -254,6 +258,8 @@ type CreateComicParams struct {
 	ReadingDirection string   `json:"reading_direction"`
 	CoverKey         string   `json:"cover_key"`
 	PageKeys         []string `json:"page_keys"`
+	FileKey          string   `json:"file_key"`
+	MinTier          string   `json:"min_tier"`
 	Publish          bool     `json:"publish"`
 	SeriesTitle      string   `json:"series_title"`
 }
@@ -285,6 +291,8 @@ func doCreateComic(ctx context.Context, token string, p *CreateComicParams) (*co
 		ReadingDirection: p.ReadingDirection,
 		CoverKey:         p.CoverKey,
 		PageKeys:         p.PageKeys,
+		FileKey:          p.FileKey,
+		MinTier:          p.MinTier,
 		Publish:          p.Publish,
 		SeriesTitle:      p.SeriesTitle,
 	})
@@ -382,4 +390,25 @@ func doSuspendUser(ctx context.Context, token string, p *UserActionParams) error
 		return err
 	}
 	return suspendUser(ctx, &auth.InternalUserActionParams{ActorID: actor, UserID: p.UserID, Reason: p.Reason})
+}
+
+type PresignUploadParams struct {
+	Kind     string `json:"kind"`
+	Filename string `json:"filename"`
+}
+
+//encore:api public method=POST path=/mcp/presign-upload
+func PresignUpload(ctx context.Context, p *PresignUploadParams) (*upload.InternalPresignUploadResponse, error) {
+	return doPresignUpload(ctx, bearerToken(), p)
+}
+
+func doPresignUpload(ctx context.Context, token string, p *PresignUploadParams) (*upload.InternalPresignUploadResponse, error) {
+	actor, role, err := resolveMcpKey(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	if err := requireUploader(role); err != nil {
+		return nil, err
+	}
+	return presignUpload(ctx, &upload.InternalPresignUploadParams{ActorID: actor, Kind: p.Kind, Filename: p.Filename})
 }

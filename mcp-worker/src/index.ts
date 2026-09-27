@@ -99,7 +99,7 @@ function registerTools(server: McpServer, backendUrl: string, auth: string) {
 
 	server.tool(
 		'create_comic',
-		'Create a comic. Requires an uploader/admin MCP key. Uses placeholder art when cover_key/page_keys are omitted; pass publish=true to publish immediately (otherwise pending_review); pass series_title to attach to (or create) a series.',
+		'Create a comic. Requires an uploader/admin MCP key. Use presign_upload to get cover_key/page_keys/file_key for real media; omit them to use placeholder art. Pass publish=true to publish immediately (otherwise pending_review); pass series_title to attach to (or create) a series; pass min_tier (e.g. "gold") to gate the gallery/reader by subscription tier.',
 		{
 			title: z.string(),
 			author: z.string().optional(),
@@ -113,6 +113,8 @@ function registerTools(server: McpServer, backendUrl: string, auth: string) {
 			reading_direction: z.string().optional(),
 			cover_key: z.string().optional(),
 			page_keys: z.array(z.string()).optional(),
+			file_key: z.string().optional(),
+			min_tier: z.string().optional(),
 			publish: z.boolean().optional(),
 			series_title: z.string().optional(),
 		},
@@ -134,11 +136,23 @@ function registerTools(server: McpServer, backendUrl: string, auth: string) {
 						reading_direction: args.reading_direction ?? '',
 						cover_key: args.cover_key ?? '',
 						page_keys: args.page_keys ?? [],
+						file_key: args.file_key ?? '',
+						min_tier: args.min_tier ?? '',
 						publish: args.publish ?? false,
 						series_title: args.series_title ?? '',
 					},
 					auth,
 				),
+			),
+	);
+
+	server.tool(
+		'presign_upload',
+		'Get a signed upload URL to upload a cover, preview, or archive file directly to object storage. Upload the bytes with an HTTP PUT to upload_url, then pass the returned key to create_comic (cover_key / page_keys / file_key). Requires an uploader/admin MCP key.',
+		{ kind: z.enum(['cover', 'preview', 'archive']), filename: z.string().optional() },
+		async ({ kind, filename }) =>
+			textResult(
+				await callBackend(backendUrl, '/mcp/presign-upload', { kind, filename: filename ?? '' }, auth),
 			),
 	);
 

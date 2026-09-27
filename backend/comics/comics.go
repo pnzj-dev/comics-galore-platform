@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"encore.dev"
 	"encore.dev/beta/auth"
 	myauth "comics-galore/backend/auth"
 	"comics-galore/backend/turnstile"
@@ -881,7 +882,7 @@ func resolveCoverURL(key string) string {
 	if uuidLike.MatchString(key) {
 		return fmt.Sprintf("https://imagedelivery.net/%s/%s/public", cfDeliveryHash, key)
 	}
-	return fmt.Sprintf("http://localhost:4000/media/%s", key)
+	return fmt.Sprintf("%s/media/%s", encore.Meta().APIBaseURL.String(), key)
 }
 
 func resolvePageURLs(keys []string) []string {

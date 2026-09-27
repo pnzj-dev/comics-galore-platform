@@ -9,6 +9,7 @@ import (
 
 	"comics-galore/backend/auth"
 	"comics-galore/backend/comics"
+	"comics-galore/backend/upload"
 
 	"encore.dev/beta/errs"
 	"encore.dev/et"
@@ -260,5 +261,47 @@ func TestBanUser_Admin(t *testing.T) {
 	}
 	if !called {
 		t.Error("expected banUser to be called")
+	}
+}
+
+func TestPresignUpload_NonUploaderDenied(t *testing.T) {
+	ctx := context.Background()
+	restore := isolateMcpDB(t)
+	defer restore()
+	mockRole(t, "user")
+
+	insertKey(t, ctx, "user-key", testUserID)
+
+	if _, err := doPresignUpload(ctx, "user-key", &PresignUploadParams{Kind: "cover"}); err == nil {
+		t.Fatal("expected error for non-uploader")
+	} else {
+		assertCode(t, err, errs.PermissionDenied)
+	}
+}
+
+func TestPresignUpload_Uploader(t *testing.T) {
+	ctx := context.Background()
+	restore := isolateMcpDB(t)
+	defer restore()
+	mockRole(t, "uploader")
+
+	var called bool
+	og := presignUpload
+	presignUpload = func(ctx context.Context, p *upload.InternalPresignUploadParams) (*upload.InternalPresignUploadResponse, error) {
+		called = true
+		if p.ActorID != testUserID || p.Kind != "cover" {
+			t.Errorf("unexpected params: %+v", p)
+		}
+		return &upload.InternalPresignUploadResponse{Key: "covers/x.jpg", UploadURL: "https://example.com"}, nil
+	}
+	t.Cleanup(func() { presignUpload = og })
+
+	insertKey(t, ctx, "up-key", testUserID)
+
+	if _, err := doPresignUpload(ctx, "up-key", &PresignUploadParams{Kind: "cover", Filename: "cover.jpg"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("expected presignUpload to be called")
 	}
 }
